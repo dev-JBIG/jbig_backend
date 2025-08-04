@@ -3,10 +3,11 @@ from .models import User
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, help_text="사용자 비밀번호")
+    semester = serializers.IntegerField(help_text="학기 정보")
 
     class Meta:
         model = User
-        fields = ('email', 'username', 'password')
+        fields = ('email', 'username', 'password', 'semester')
         extra_kwargs = {
             'email': {'help_text': "사용자 이메일 주소"},
             'username': {'help_text': "사용자 이름"}
@@ -16,7 +17,8 @@ class UserSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(
             email=validated_data['email'],
             username=validated_data['username'],
-            password=validated_data['password']
+            password=validated_data['password'],
+            semester=validated_data['semester']
         )
         return user
 

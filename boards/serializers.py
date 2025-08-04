@@ -18,24 +18,36 @@ class BoardSerializer(serializers.ModelSerializer):
         model = Board
         fields = ['id', 'name', 'category']
 
+class BoardIdNameSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Board
+        fields = ['id', 'name']
+
+class CategoryWithBoardsSerializer(serializers.ModelSerializer):
+    category = serializers.CharField(source='name')
+    boards = BoardIdNameSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Category
+        fields = ['category', 'boards']
+
+
 class CommentSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     children = RecursiveField(many=True, read_only=True)
-    post_id = serializers.IntegerField(write_only=True)
 
     class Meta:
         model = Comment
-        fields = ['id', 'post_id', 'author', 'content', 'created_at', 'parent', 'children']
-        read_only_fields = ['author', 'created_at', 'children']
+        fields = ['id', 'author', 'content', 'created_at', 'parent', 'children']
+        read_only_fields = ('author', 'created_at', 'children')
 
-    def create(self, validated_data):
-        validated_data['author'] = self.context['request'].user
-        return super().create(validated_data)
 
 class AttachmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Attachment
         fields = ['id', 'file', 'filename']
+        read_only_fields = ('filename',)
+
 
 class PostListSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
@@ -44,6 +56,13 @@ class PostListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = ['id', 'title', 'author', 'created_at', 'views', 'likes_count']
+
+
+class PostCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Post
+        fields = ['title', 'content']
+
 
 class PostDetailSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
@@ -56,12 +75,11 @@ class PostDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = [
-            'id', 'title', 'content', 'author', 'created_at', 'updated_at', 
+            'id', 'title', 'content', 'author', 'created_at', 'updated_at',
             'views', 'board', 'comments', 'attachments', 'likes_count', 'is_liked'
         ]
 
     def get_comments(self, obj):
-        # 최상위 댓글만 필터링
         top_level_comments = obj.comments.filter(parent__isnull=True)
         serializer = CommentSerializer(top_level_comments, many=True, context=self.context)
         return serializer.data
