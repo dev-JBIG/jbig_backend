@@ -1,71 +1,98 @@
-from rest_framework import viewsets, status
+from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated, AllowAny
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
-from .models import Category, Board, Post, Comment, Attachment
+from .models import Board, Post, Comment, Category, Attachment
 from .serializers import (
-    CategorySerializer, BoardSerializer, PostListSerializer, PostDetailSerializer,
-    CommentSerializer, AttachmentSerializer
+    BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
+    CommentSerializer, CategoryWithBoardsSerializer, AttachmentSerializer
 )
-from .schemas import (
-    category_viewset_schema, board_viewset_schema, post_viewset_schema,
-    comment_viewset_schema, attachment_viewset_schema
+from .permissions import IsOwnerOrReadOnly
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="카테고리별 게시판 목록 조회",
+        description="모든 카테고리와 해당 카테고리에 속한 게시판 목록을 조회합니다.",
+        tags=['categories']
+    )
 )
+class BoardListViewSet(viewsets.ViewSet):
+    permission_classes = [AllowAny]
 
-@extend_schema_view(**category_viewset_schema)
-class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = Category.objects.all()
-    serializer_class = CategorySerializer
-    permission_classes = [IsAdminUser]
-
-    def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
-            self.permission_classes = [IsAuthenticatedOrReadOnly]
-        return super().get_permissions()
-
-@extend_schema_view(**board_viewset_schema)
-class BoardViewSet(viewsets.ModelViewSet):
-    queryset = Board.objects.all()
-    serializer_class = BoardSerializer
-    
-    def get_permissions(self):
-        if self.action in ['list', 'retrieve', 'list_posts']:
-            self.permission_classes = [IsAuthenticatedOrReadOnly]
-        else:
-            self.permission_classes = [IsAdminUser]
-        return super().get_permissions()
-
-    @action(detail=True, methods=['get'], url_path='posts')
-    def list_posts(self, request, pk=None):
-        board = self.get_object()
-        posts = Post.objects.filter(board=board).order_by('-created_at')
-        
-        page = self.paginate_queryset(posts)
-        if page is not None:
-            serializer = PostListSerializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-
-        serializer = PostListSerializer(posts, many=True, context={'request': request})
+    def list(self, request, *args, **kwargs):
+        categories = Category.objects.prefetch_related('boards').all()
+        serializer = CategoryWithBoardsSerializer(categories, many=True)
         return Response(serializer.data)
 
-@extend_schema_view(**post_viewset_schema)
-class PostViewSet(viewsets.ModelViewSet):
-    queryset = Post.objects.all().order_by('-created_at')
+@extend_schema_view(
+    get=extend_schema(
+        summary="전체 게시판 목록 조회",
+        description="사이트의 모든 게시판 목록을 조회합니다.",
+        tags=['boards']
+    )
+)
+class BoardListAPIView(generics.ListAPIView):
+    queryset = Board.objects.all()
+    serializer_class = BoardSerializer
+    permission_classes = [AllowAny]
+
+@extend_schema_view(
+    get=extend_schema(
+        summary="게시글 목록 조회",
+        description="특정 게시판에 속한 모든 게시글 목록을 조회합니다.",
+        tags=['boards']
+    ),
+    post=extend_schema(
+        summary="게시글 생성",
+        description="특정 게시판에 새로운 게시글을 작성합니다.",
+        tags=['boards']
+    )
+)
+class PostListCreateAPIView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_serializer_class(self):
-        if self.action == 'list':
-            return PostListSerializer
-        return PostDetailSerializer
+        if self.request.method == 'POST':
+            return PostCreateUpdateSerializer
+        return PostListSerializer
 
-    def get_serializer_context(self):
-        return {'request': self.request}
+    def get_queryset(self):
+        board_id = self.kwargs.get('board_id')
+        return Post.objects.filter(board_id=board_id).order_by('-created_at')
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        board = get_object_or_404(Board, pk=self.kwargs.get('board_id'))
+        serializer.save(author=self.request.user, board=board)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        instance = serializer.instance
+        list_serializer = PostListSerializer(instance)
+        
+        headers = self.get_success_headers(list_serializer.data)
+        return Response(list_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+@extend_schema_view(
+    get=extend_schema(summary="게시글 상세 조회", tags=['boards']),
+    put=extend_schema(summary="게시글 수정", tags=['boards']),
+    patch=extend_schema(summary="게시글 부분 수정", tags=['boards']),
+    delete=extend_schema(summary="게시글 삭제", tags=['boards'])
+)
+class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Post.objects.all()
+    permission_classes = [IsOwnerOrReadOnly]
+    lookup_url_kwarg = 'post_id'
+
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return PostCreateUpdateSerializer
+        return PostDetailSerializer
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -74,60 +101,45 @@ class PostViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def like(self, request, pk=None):
-        post = self.get_object()
-        user = request.user
-
-        if user in post.likes.all():
-            post.likes.remove(user)
-            liked = False
-        else:
-            post.likes.add(user)
-            liked = True
-        
-        return Response({'liked': liked, 'likes_count': post.likes.count()})
-
-@extend_schema_view(**comment_viewset_schema)
-class CommentViewSet(viewsets.ModelViewSet):
-    queryset = Comment.objects.all()
+@extend_schema_view(
+    get=extend_schema(summary="댓글 목록 조회", tags=['comments']),
+    post=extend_schema(summary="댓글 생성", tags=['comments'])
+)
+class CommentListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = CommentSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
+    def get_queryset(self):
+        post_id = self.kwargs.get('post_id')
+        return Comment.objects.filter(post_id=post_id, parent__isnull=True).order_by('created_at')
 
     def perform_create(self, serializer):
-        post_id = self.request.data.get('post_id')
-        post = get_object_or_404(Post, pk=post_id)
-        parent_id = self.request.data.get('parent')
-        parent = None
-        if parent_id:
-            parent = get_object_or_404(Comment, pk=parent_id)
-        
-        serializer.save(author=self.request.user, post=post, parent=parent)
+        post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
+        serializer.save(author=self.request.user, post=post)
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        post_id = self.request.query_params.get('post_id')
-        if post_id:
-            return qs.filter(post_id=post_id, parent__isnull=True).order_by('created_at')
-        return qs
+@extend_schema_view(
+    put=extend_schema(summary="댓글 수정", tags=['comments']),
+    patch=extend_schema(summary="댓글 부분 수정", tags=['comments']),
+    delete=extend_schema(summary="댓글 삭제", tags=['comments'])
+)
+class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    permission_classes = [IsOwnerOrReadOnly]
+    lookup_url_kwarg = 'comment_id'
 
-@extend_schema_view(**attachment_viewset_schema)
-class AttachmentViewSet(viewsets.ModelViewSet):
+@extend_schema_view(
+    post=extend_schema(
+        summary="파일 첨부",
+        description="새로운 파일을 서버에 업로드합니다. 업로드 성공 시 첨부파일의 ID와 URL을 반환합니다.",
+        tags=['attachments']
+    )
+)
+class AttachmentCreateAPIView(generics.CreateAPIView):
     queryset = Attachment.objects.all()
     serializer_class = AttachmentSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
-    def create(self, request, *args, **kwargs):
-        files = request.FILES.getlist('file')
-        attachments = []
-        for file in files:
-            attachment = Attachment.objects.create(file=file, filename=file.name)
-            attachments.append(attachment)
-        
-        serializer = self.get_serializer(attachments, many=True)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    def perform_create(self, serializer):
+        serializer.save(filename=self.request.data.get('file').name)

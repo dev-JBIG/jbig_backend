@@ -81,6 +81,29 @@ board_viewset_schema = {
     ),
 }
 
+board_list_schema = extend_schema(
+    summary="[Category] 전체 목록 조회 (게시판 포함)",
+    description="모든 카테고리와 각 카테고리에 속한 게시판 목록을 반환합니다.",
+    tags=["Category"],
+    responses={
+        200: {
+            'description': '성공',
+            'examples': {
+                'application/json': [
+                    {
+                        "category": "공지",
+                        "boards": ["공지사항", "이벤트 안내"]
+                    },
+                    {
+                        "category": "커뮤니티",
+                        "boards": ["자유게시판", "질문게시판", "정보공유", "유머��시판"]
+                    }
+                ]
+            }
+        }
+    }
+)
+
 # ===================================================================
 # Post Schemas
 # ===================================================================

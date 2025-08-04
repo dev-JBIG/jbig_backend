@@ -26,7 +26,11 @@ class SignUpView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
-        return Response({"isSuccess": True}, status=status.HTTP_201_CREATED, headers=headers)
+        
+        return Response({
+            "isSuccess": True,
+            "created_user": serializer.data
+        }, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class SignInView(TokenObtainPairView):
@@ -38,6 +42,8 @@ class SignInView(TokenObtainPairView):
         if response.status_code == 200:
             user = User.objects.get(email=request.data['email'])
             response.data['username'] = user.username
+            response.data['email'] = user.email
+            response.data['semeseter'] = user.semester
         return response
 
 

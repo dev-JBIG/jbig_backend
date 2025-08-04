@@ -1,3 +1,8 @@
 from django.contrib import admin
+from .models import Notion
 
-# Register your models here.
+@admin.register(Notion)
+class NotionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'type', 'created_at', 'updated_at')
+    list_filter = ('type',)
+    search_fields = ('title',)

@@ -19,12 +19,10 @@ class UserManager(BaseUserManager):
             raise ValueError('The Email field must be set')
         email = self.normalize_email(email)
         
-        # Ensure the role is set, default to 'user' if not provided
         role_name = extra_fields.pop('role', 'user')
         try:
             role = Role.objects.get(name=role_name)
         except Role.DoesNotExist:
-            # This is a fallback, ideally roles should be created beforehand
             role = Role.objects.create(name=role_name)
 
         user = self.model(email=email, username=username, role=role, **extra_fields)
@@ -41,7 +39,6 @@ class UserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
 
-        # Superuser should have the 'admin' role
         extra_fields['role'] = 'admin'
         
         return self.create_user(email, username, password, **extra_fields)
@@ -50,8 +47,13 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=150, unique=True)
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, related_name='users')
+    semester = models.PositiveIntegerField(
+        verbose_name='기수',
+        null=True,
+        blank=True,
+        help_text='예 : 1기면 1'
+    )
 
-    # Remove groups and user_permissions to simplify
     groups = None
     user_permissions = None
 
