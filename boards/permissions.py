@@ -1,5 +1,12 @@
 from rest_framework import permissions
 
+class IsVerified(permissions.BasePermission):
+    """
+    Allows access only to verified users.
+    """
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and request.user.is_verified
+
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
     객체의 소유자에게만 쓰기 권한을 부여하는 커스텀 권한.

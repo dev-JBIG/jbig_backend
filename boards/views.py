@@ -10,13 +10,13 @@ from .serializers import (
     BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
     CommentSerializer, CategoryWithBoardsSerializer, AttachmentSerializer
 )
-from .permissions import IsOwnerOrReadOnly
+from .permissions import IsOwnerOrReadOnly, IsVerified
 
+@extend_schema(tags=['Categories'])
 @extend_schema_view(
     list=extend_schema(
         summary="카테고리별 게시판 목록 조회",
         description="모든 카테고리와 해당 카테고리에 속한 게시판 목록을 조회합니다.",
-        tags=['categories']
     )
 )
 class BoardListViewSet(viewsets.ViewSet):
@@ -27,11 +27,11 @@ class BoardListViewSet(viewsets.ViewSet):
         serializer = CategoryWithBoardsSerializer(categories, many=True)
         return Response(serializer.data)
 
+@extend_schema(tags=['Boards'])
 @extend_schema_view(
     get=extend_schema(
         summary="전체 게시판 목록 조회",
         description="사이트의 모든 게시판 목록을 조회합니다.",
-        tags=['boards']
     )
 )
 class BoardListAPIView(generics.ListAPIView):
@@ -39,16 +39,15 @@ class BoardListAPIView(generics.ListAPIView):
     serializer_class = BoardSerializer
     permission_classes = [AllowAny]
 
+@extend_schema(tags=['Posts'])
 @extend_schema_view(
     get=extend_schema(
         summary="게시글 목록 조회",
         description="특정 게시판에 속한 모든 게시글 목록을 조회합니다.",
-        tags=['boards']
     ),
     post=extend_schema(
         summary="게시글 생성",
         description="특정 게시판에 새로운 게시글을 작성합니다.",
-        tags=['boards']
     )
 )
 class PostListCreateAPIView(generics.ListCreateAPIView):
@@ -78,15 +77,16 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         headers = self.get_success_headers(list_serializer.data)
         return Response(list_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+@extend_schema(tags=['Posts'])
 @extend_schema_view(
-    get=extend_schema(summary="게시글 상세 조회", tags=['boards']),
-    put=extend_schema(summary="게시글 수정", tags=['boards']),
-    patch=extend_schema(summary="게시글 부분 수정", tags=['boards']),
-    delete=extend_schema(summary="게시글 삭제", tags=['boards'])
+    get=extend_schema(summary="게시글 상세 조회"),
+    put=extend_schema(summary="게시글 수정"),
+    patch=extend_schema(summary="게시글 부분 수정"),
+    delete=extend_schema(summary="게시글 삭제")
 )
 class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Post.objects.all()
-    permission_classes = [IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     lookup_url_kwarg = 'post_id'
 
     def get_serializer_class(self):
@@ -98,12 +98,28 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         instance.views += 1
         instance.save(update_fields=['views'])
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        
+        post_serializer = self.get_serializer(instance)
+        user = request.user
 
+        is_admin = False
+        if user.is_authenticated and hasattr(user, 'role') and user.role:
+            is_admin = user.role.name == 'admin'
+
+        response_data = {
+            "post_data": post_serializer.data,
+            "isTokenValid": user.is_authenticated,
+            "isAdmin": is_admin if user.is_authenticated else False,
+            "username": user.username if user.is_authenticated else None,
+            "email": user.email if user.is_authenticated else None,
+        }
+        
+        return Response(response_data)
+
+@extend_schema(tags=['Comments'])
 @extend_schema_view(
-    get=extend_schema(summary="댓글 목록 조회", tags=['comments']),
-    post=extend_schema(summary="댓글 생성", tags=['comments'])
+    get=extend_schema(summary="댓글 목록 조회"),
+    post=extend_schema(summary="댓글 생성")
 )
 class CommentListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = CommentSerializer
@@ -117,10 +133,11 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
         post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
         serializer.save(author=self.request.user, post=post)
 
+@extend_schema(tags=['Comments'])
 @extend_schema_view(
-    put=extend_schema(summary="댓글 수정", tags=['comments']),
-    patch=extend_schema(summary="댓글 부분 수정", tags=['comments']),
-    delete=extend_schema(summary="댓글 삭제", tags=['comments'])
+    put=extend_schema(summary="댓글 수정"),
+    patch=extend_schema(summary="댓글 부분 수정"),
+    delete=extend_schema(summary="댓글 삭제")
 )
 class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Comment.objects.all()
@@ -128,11 +145,11 @@ class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsOwnerOrReadOnly]
     lookup_url_kwarg = 'comment_id'
 
+@extend_schema(tags=['Attachments'])
 @extend_schema_view(
     post=extend_schema(
-        summary="파일 첨부",
+        summary="File 첨부",
         description="새로운 파일을 서버에 업로드합니다. 업로드 성공 시 첨부파일의 ID와 URL을 반환합니다.",
-        tags=['attachments']
     )
 )
 class AttachmentCreateAPIView(generics.CreateAPIView):

@@ -25,6 +25,7 @@ class UserManager(BaseUserManager):
         except Role.DoesNotExist:
             role = Role.objects.create(name=role_name)
 
+        extra_fields.setdefault('is_active', False)
         user = self.model(email=email, username=username, role=role, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -33,6 +34,7 @@ class UserManager(BaseUserManager):
     def create_superuser(self, email, username, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
         
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True.')
@@ -53,6 +55,7 @@ class User(AbstractUser):
         blank=True,
         help_text='예 : 1기면 1'
     )
+    is_verified = models.BooleanField(default=False)
 
     groups = None
     user_permissions = None
@@ -70,3 +73,13 @@ class User(AbstractUser):
     def __str__(self):
         return self.email
 
+class UserRefreshToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    refresh_token = models.CharField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'user_refresh_token'
+        verbose_name = '사용자 리프레시 토큰'
+        verbose_name_plural = '사용자 리프레시 토큰 목록'
+        unique_together = ('user', 'refresh_token')

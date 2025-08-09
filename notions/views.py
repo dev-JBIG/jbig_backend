@@ -1,8 +1,10 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from .models import Notion
 from .serializers import NotionSerializer, NotionListSerializer
 
+@extend_schema(tags=['Notions'])
 class NotionViewSet(viewsets.ModelViewSet):
     """
     Notion 콘텐츠를 관리하는 ViewSet
