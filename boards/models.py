@@ -1,5 +1,10 @@
+import uuid
 from django.db import models
 from django.conf import settings
+
+def post_upload_path(instance, filename):
+    # e.g. boards/1/a1b2c3d4.html
+    return f'boards/{instance.board.id}/{uuid.uuid4()}.html'
 
 class Category(models.Model):
     name = models.CharField(max_length=50)
@@ -28,7 +33,7 @@ class Post(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
-    content = models.TextField()
+    content_html = models.FileField(upload_to=post_upload_path, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     views = models.PositiveIntegerField(default=0)

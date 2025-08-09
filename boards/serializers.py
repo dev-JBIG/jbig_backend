@@ -1,5 +1,21 @@
+import bleach
+import uuid
+from django.core.files.base import ContentFile
 from rest_framework import serializers
 from .models import Category, Board, Post, Comment, Attachment
+
+# Bleach를 사용하여 허용할 HTML 태그 및 속성 정의
+ALLOWED_TAGS = [
+    'p', 'b', 'i', 'u', 's', 'strike', 'strong', 'em', 'span', 'br', 'hr',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote',
+    'a', 'img', 'pre', 'code', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+]
+ALLOWED_ATTRIBUTES = {
+    '*': ['style', 'class'],
+    'a': ['href', 'title', 'target'],
+    'img': ['src', 'alt', 'title', 'width', 'height'],
+}
+
 
 class RecursiveField(serializers.Serializer):
     def to_representation(self, value):
@@ -59,9 +75,68 @@ class PostListSerializer(serializers.ModelSerializer):
 
 
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
+    attachment_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text="첨부파일 ID 목록"
+    )
+    content_html = serializers.CharField(write_only=True, help_text="게시글 HTML 내용")
+
     class Meta:
         model = Post
-        fields = ['title', 'content']
+        fields = ['title', 'content_html', 'attachment_ids']
+
+    def _save_html_content(self, instance, html_string):
+        """HTML 문자열을 소독하고 파일로 저장합니다."""
+        sanitized_html = bleach.clean(html_string, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES)
+        file_name = f"{uuid.uuid4()}.html"
+        instance.content_html.save(file_name, ContentFile(sanitized_html))
+
+    def validate(self, data):
+        attachment_ids = data.get('attachment_ids', [])
+
+        # 파일 개수 검증
+        if len(attachment_ids) > 3:
+            raise serializers.ValidationError("최대 3개의 파일만 첨부할 수 있습니다.")
+
+        # 총 용량 검증
+        attachments = Attachment.objects.filter(id__in=attachment_ids)
+        total_size = sum(att.file.size for att in attachments)
+        if total_size > 20 * 1024 * 1024:  # 20MB
+            raise serializers.ValidationError("첨부파일의 총 용량은 20MB를 초과할 수 없습니다.")
+        
+        # 모든 attachment_ids가 유효한지 확인
+        if len(attachment_ids) != attachments.count():
+            raise serializers.ValidationError("존재하지 않는 첨부파일 ID가 포함되어 있습니다.")
+
+        return data
+
+    def create(self, validated_data):
+        attachment_ids = validated_data.pop('attachment_ids', [])
+        html_content = validated_data.pop('content_html')
+        
+        post = Post.objects.create(**validated_data)
+        self._save_html_content(post, html_content)
+
+        if attachment_ids:
+            attachments = Attachment.objects.filter(id__in=attachment_ids)
+            post.attachments.set(attachments)
+        return post
+
+    def update(self, instance, validated_data):
+        attachment_ids = validated_data.pop('attachment_ids', None)
+        html_content = validated_data.pop('content_html', None)
+
+        instance = super().update(instance, validated_data)
+
+        if html_content is not None:
+            self._save_html_content(instance, html_content)
+
+        if attachment_ids is not None:
+            attachments = Attachment.objects.filter(id__in=attachment_ids)
+            instance.attachments.set(attachments)
+        return instance
 
 
 class PostDetailSerializer(serializers.ModelSerializer):
@@ -71,11 +146,12 @@ class PostDetailSerializer(serializers.ModelSerializer):
     attachments = AttachmentSerializer(many=True, read_only=True)
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
+    content_html_url = serializers.URLField(source='content_html.url', read_only=True)
 
     class Meta:
         model = Post
         fields = [
-            'id', 'title', 'content', 'author', 'created_at', 'updated_at',
+            'id', 'title', 'content_html_url', 'author', 'created_at', 'updated_at',
             'views', 'board', 'comments', 'attachments', 'likes_count', 'is_liked'
         ]
 
@@ -89,3 +165,17 @@ class PostDetailSerializer(serializers.ModelSerializer):
         if user.is_authenticated:
             return obj.likes.filter(pk=user.pk).exists()
         return False
+
+
+class PostDetailResponseSerializer(serializers.Serializer):
+    """Serializer for the response of the post detail view."""
+    post_data = PostDetailSerializer()
+    isTokenValid = serializers.BooleanField()
+    isAdmin = serializers.BooleanField()
+    username = serializers.CharField()
+    email = serializers.EmailField()
+
+
+class CategoryListResponseSerializer(serializers.Serializer):
+    total_post_count = serializers.IntegerField()
+    categories = CategoryWithBoardsSerializer(many=True)
