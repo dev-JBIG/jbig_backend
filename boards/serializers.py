@@ -88,10 +88,17 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         fields = ['title', 'content_html', 'attachment_ids']
 
     def _save_html_content(self, instance, html_string):
-        """HTML 문자열을 소독하고 파일로 저장합니다."""
+        """HTML 문자열을 소독하고 파일로 저장 또는 덮어씁니다."""
         sanitized_html = bleach.clean(html_string, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES)
-        file_name = f"{uuid.uuid4()}.html"
-        instance.content_html.save(file_name, ContentFile(sanitized_html))
+        
+        # 수정이고 기존 파일이 있는 경우, 해당 파일에 덮어쓰기
+        if instance.pk and instance.content_html and instance.content_html.name:
+            file_name = os.path.basename(instance.content_html.name)
+        else:
+            # 생성의 경우, 새 UUID로 파일 이름 생성
+            file_name = f"{uuid.uuid4()}.html"
+            
+        instance.content_html.save(file_name, ContentFile(sanitized_html), save=False)
 
     def validate(self, data):
         attachment_ids = data.get('attachment_ids', [])
@@ -116,9 +123,16 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         attachment_ids = validated_data.pop('attachment_ids', [])
         html_content = validated_data.pop('content_html')
         
-        post = Post.objects.create(**validated_data)
+        # Post 인스턴스는 생성하지만 아직 DB에 저장하지 않음
+        post = Post(**validated_data)
+        
+        # HTML 내용을 파일로 만들어 Post 인스턴스에 연결
         self._save_html_content(post, html_content)
+        
+        # 모든 필드가 준비된 후 Post 저장
+        post.save()
 
+        # 첨부파일 연결
         if attachment_ids:
             attachments = Attachment.objects.filter(id__in=attachment_ids)
             post.attachments.set(attachments)
@@ -128,14 +142,19 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         attachment_ids = validated_data.pop('attachment_ids', None)
         html_content = validated_data.pop('content_html', None)
 
-        instance = super().update(instance, validated_data)
-
+        # HTML 내용이 있으면 파일 덮어쓰기
         if html_content is not None:
             self._save_html_content(instance, html_content)
 
+        # 나머지 필드 업데이트
+        # super().update()는 save()를 호출하므로, HTML 파일 처리 후에 호출
+        instance = super().update(instance, validated_data)
+
+        # 첨부파일 연결
         if attachment_ids is not None:
             attachments = Attachment.objects.filter(id__in=attachment_ids)
             instance.attachments.set(attachments)
+            
         return instance
 
 
