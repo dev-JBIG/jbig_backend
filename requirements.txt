@@ -5,3 +5,4 @@ drf-spectacular
 django-cors-headers
 python-dotenv
 psycopg2-binary
+bleach

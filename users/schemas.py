@@ -54,7 +54,25 @@ signin_schema = extend_schema(
                 )
             ]
         ),
-        401: OpenApiResponse(description="잘못된 인증 정보"),
+        401: OpenApiResponse(
+            description="잘못된 인증 정보 또는 비활성 사용자",
+            examples=[
+                OpenApiExample(
+                    "Inactive User Error",
+                    value={
+                        "detail": "User account is not active."
+                    },
+                    response_only=True
+                ),
+                OpenApiExample(
+                    "Invalid Credentials Error",
+                    value={
+                        "detail": "No active account found with the given credentials"
+                    },
+                    response_only=True
+                )
+            ]
+        ),
         400: OpenApiResponse(description="잘못된 요청 데이터")
     },
     tags=["Authentication"]
@@ -62,8 +80,8 @@ signin_schema = extend_schema(
 
 # 이메일 인증 스키마
 email_verify_schema = extend_schema(
-    summary="이메일 인증코드 확인",
-    description="전송된 인증코드를 확인하여 이메일을 인증합니다.",
+    summary="이메일 인증 토큰 확인",
+    description="전송된 인증 토큰을 확인하여 이메일을 인증합니다. 성공 시 is_verified가 True로 설정됩니다. is_active는 관리자가 수동으로 활성화합니다.",
     request=EmailVerificationSerializer,
     responses={
         200: OpenApiResponse(
@@ -71,19 +89,30 @@ email_verify_schema = extend_schema(
             examples=[
                 OpenApiExample(
                     "Success",
-                    value={"isVerified": True},
+                    value={"success verify"},
                     response_only=True
                 )
             ]
         ),
         400: OpenApiResponse(
-            description="잘못된 인증코드 또는 요청 데이터",
+            description="잘못된 인증 번호 또는 요청 데이터",
             examples=[
                 OpenApiExample(
                     "Error",
                     value={
-                        "isVerified": False,
-                        "error": "Invalid verification code"
+                        "error": "Invalid verification verifyCode."
+                    },
+                    response_only=True
+                )
+            ]
+        ),
+        404: OpenApiResponse(
+            description="사용자를 찾을 수 없음",
+            examples=[
+                OpenApiExample(
+                    "User Not Found",
+                    value={
+                        "error": "User not found"
                     },
                     response_only=True
                 )
