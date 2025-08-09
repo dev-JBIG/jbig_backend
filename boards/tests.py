@@ -80,3 +80,39 @@ class PostAPITestCase(APITestCase):
         url = reverse('post-list') # boardID 없이 요청
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_post_detail_view(self):
+        """
+        게시글 상세 조회 API (GET /api/posts/{post_id}/) 테스트
+        """
+        # 테스트용 게시글 생성
+        post = Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='Detail Test Post',
+            content='Content for detail test post'
+        )
+        
+        url = reverse('post-detail', kwargs={'post_id': post.id})
+
+        # 1. 인증된 사용자로 상세 조회
+        response = self.client.get(url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['post_data']['id'], post.id)
+        self.assertEqual(response.data['isTokenValid'], True)
+        self.assertEqual(response.data['isAdmin'], False) # testuser는 admin이 아님
+        self.assertEqual(response.data['username'], self.user.username)
+        self.assertEqual(response.data['email'], self.user.email)
+        
+        # 조회수 증가 확인
+        post.refresh_from_db()
+        self.assertEqual(post.views, 1)
+
+        # 2. 비인증된 사용자로 상세 조회 (조회수 증가 안됨, 401 에러)
+        self.client.credentials() # 토큰 제거
+        response = self.client.get(url, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        
+        # 조회수 증가 안됐는지 다시 확인
+        post.refresh_from_db()
+        self.assertEqual(post.views, 1) # 여전히 1이어야 함
