@@ -9,6 +9,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.urls import reverse
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer, TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
 from .models import User, EmailVerificationCode
 
@@ -28,15 +29,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
-        
-        # self.context['request'].user는 토큰 검증 후 인증된 사용자 객체입니다.
-        user = self.context['request'].user
-        
-        # 응답 데이터에 사용자 정보 추가
+
+        refresh = RefreshToken(attrs['refresh'])
+        user_id = refresh.get('user_id')
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            raise AuthenticationFailed('User not found', code='user_not_found')
+
         data['username'] = user.username
         data['semester'] = user.semester
         data['email'] = user.email
-        
+
         return data
 
 
