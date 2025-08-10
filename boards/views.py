@@ -12,13 +12,83 @@ from .serializers import (
     CommentSerializer, CategoryWithBoardsSerializer, AttachmentSerializer, PostDetailResponseSerializer,
     CategoryListResponseSerializer
 )
+from django.db.models import Q
+from bs4 import BeautifulSoup
 from .permissions import IsOwnerOrReadOnly, IsVerified
+
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+
+@extend_schema(
+    tags=['Posts'],
+    summary="게시글 검색",
+    description="제목, 작성자, 내용(HTML)을 기준으로 게시글을 검색합니다.",
+    parameters=[
+        OpenApiParameter(
+            name='q',
+            description='검색할 키워드',
+            required=True,
+            type=str,
+            location=OpenApiParameter.QUERY
+        ),
+    ]
+)
+class PostSearchView(generics.ListAPIView):
+    serializer_class = PostListSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        query = self.request.query_params.get('q', None)
+        board_id = self.kwargs.get('board_id', None)
+
+        if not query:
+            # 검색어가 없으면 빈 쿼리셋 반환
+            return Post.objects.none()
+
+        # 1. DB 검색 (제목, 작성자)
+        db_search_filter = Q(title__icontains=query) | Q(author__username__icontains=query)
+        
+        base_queryset = Post.objects.all()
+        if board_id:
+            base_queryset = base_queryset.filter(board_id=board_id)
+            
+        db_results = base_queryset.filter(db_search_filter)
+        db_result_ids = set(db_results.values_list('id', flat=True))
+
+        # 2. HTML 내용 검색
+        content_match_ids = set()
+        # HTML 검색은 전체 게시글 또는 특정 게시판의 모든 글을 대상으로 함
+        posts_to_scan = base_queryset
+        
+        for post in posts_to_scan:
+            if post.content_html and hasattr(post.content_html, 'path'):
+                try:
+                    with open(post.content_html.path, 'r', encoding='utf-8') as f:
+                        soup = BeautifulSoup(f, 'html.parser')
+                        content_text = soup.get_text()
+                        if query.lower() in content_text.lower():
+                            content_match_ids.add(post.id)
+                except FileNotFoundError:
+                    # 파일이 없는 경우 무시
+                    continue
+                except Exception as e:
+                    # 기타 오류 발생 시 로그를 남기는 것이 좋음
+                    print(f"Error processing file for post {post.id}: {e}")
+                    continue
+        
+        # 3. 결과 통합
+        final_ids = db_result_ids.union(content_match_ids)
+        
+        if not final_ids:
+            return Post.objects.none()
+
+        # 최종 ID 목록으로 쿼리셋 생성
+        return Post.objects.filter(id__in=final_ids).order_by('-created_at')
 
 @extend_schema(tags=['Categories'])
 @extend_schema_view(
     list=extend_schema(
         summary="카테고리별 게시판 목록 조회",
-        description="모든 카테고리와 해당 카테고리에 속한 게시판 목록을 조회합니다. 응답의 최상단에는 전체 게시글의 수가 포함됩니다.",
+        description="모든 카테고리와 해당 카테고리에 속한 게시판 목록을 조회합니다. 응답의 최상단에는 전체 게시글의 수가 포함���니다.",
         responses={200: CategoryListResponseSerializer}
     )
 )

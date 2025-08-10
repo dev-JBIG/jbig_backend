@@ -11,6 +11,7 @@ from .serializers import (
     EmailResendSerializer,
     CustomTokenRefreshSerializer,
     CustomTokenObtainPairSerializer,
+    UserSerializer,
 )
 from .models import User, EmailVerificationCode
 from django.utils.http import urlsafe_base64_decode
@@ -75,155 +76,102 @@ class SignInView(TokenObtainPairView):
     
     @signin_schema
     def post(self, request, *args, **kwargs):
-        try:
-            # 입력 데이터 검증
-            validation_error = self.validate_request_data(request.data)
-            if validation_error:
-                return validation_error
-
-            # 사용자 인증 시도
-            response = super().post(request, *args, **kwargs)
-            
-            # 로그인 성공 시 사용자 정보 추가
-            if response.status_code == 200:
-                return self.add_user_info_to_response(response, request.data)
-            else:
-                # 토큰 생성 실패 시 구체적인 오류 메시지
-                return self.handle_authentication_error(response)
-                
-        except Exception as e:
-            return Response({
-                "isSuccess": False,
-                "errorCode": "LOGIN_UNEXPECTED_ERROR",
-                "message": "로그인 처리 중 예상치 못한 오류가 발생했습니다.",
-                "detail": str(e) if settings.DEBUG else None
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def validate_request_data(self, data):
-        """요청 데이터 검증"""
-        email = data.get('email', '').strip()
-        password = data.get('password', '')
-
-        # 이메일 필수 확인
-        if not email:
-            return Response({
-                "isSuccess": False,
-                "errorCode": "EMAIL_REQUIRED",
-                "message": "이메일을 입력해주세요.",
-                "field": "email"
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # 패스워드 필수 확인
-        if not password:
-            return Response({
-                "isSuccess": False,
-                "errorCode": "PASSWORD_REQUIRED",
-                "message": "비밀번호를 입력해주세요.",
-                "field": "password"
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # 이메일 형식 검증
-        import re
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_pattern, email):
-            return Response({
-                "isSuccess": False,
-                "errorCode": "INVALID_EMAIL_FORMAT",
-                "message": "올바른 이메일 형식이 아닙니다.",
-                "field": "email"
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        return None
-
-    def add_user_info_to_response(self, response, request_data):
-        """로그인 성공 시 사용자 정보 추가"""
-        try:
-            user = User.objects.get(email=request_data['email'])
-            response.data.update({
-                'isSuccess': True,
-                'username': user.username,
-                'email': user.email,
-                'semester': getattr(user, 'semester', None),
-                'message': '로그인에 성공했습니다.'
-            })
-            return response
-        except User.DoesNotExist:
-            return Response({
-                "isSuccess": False,
-                "errorCode": "USER_NOT_FOUND_AFTER_AUTH",
-                "message": "인증 후 사용자 정보를 찾을 수 없습니다."
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def handle_authentication_error(self, response):
-        """인증 실패 시 구체적인 오류 처리"""
-        # serializer의 오류 내용 분석
-        if hasattr(response, 'data') and response.data:
-            error_detail = response.data
-            
-            # non_field_errors가 있는 경우 (일반적인 인증 실패)
-            if 'non_field_errors' in error_detail:
-                error_messages = error_detail['non_field_errors']
-                if any('credentials' in str(msg).lower() for msg in error_messages):
-                    return Response({
-                        "isSuccess": False,
-                        "errorCode": "INVALID_CREDENTIALS",
-                        "message": "이메일 또는 비밀번호가 올바르지 않습니다.",
-                        "detail": "입력하신 계정 정보를 다시 확인해주세요."
-                    }, status=status.HTTP_401_UNAUTHORIZED)
-            
-            # 개별 필드 오류 처리
-            if 'email' in error_detail:
-                return Response({
-                    "isSuccess": False,
-                    "errorCode": "INVALID_EMAIL",
-                    "message": "올바르지 않은 이메일입니다.",
-                    "field": "email",
-                    "detail": error_detail['email']
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            if 'password' in error_detail:
-                return Response({
-                    "isSuccess": False,
-                    "errorCode": "INVALID_PASSWORD",
-                    "message": "올바르지 않은 비밀번호입니다.",
-                    "field": "password",
-                    "detail": error_detail['password']
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-        # 기본 인증 실패 응답
-        return Response({
-            "isSuccess": False,
-            "errorCode": "AUTHENTICATION_FAILED",
-            "message": "로그인에 실패했습니다. 계정 정보를 확인해주세요.",
-            "statusCode": response.status_code
-        }, status=status.HTTP_401_UNAUTHORIZED)
+        return super().post(request, *args, **kwargs)
 
 
-class CustomTokenRefreshView(TokenRefreshView):
-    serializer_class = CustomTokenRefreshSerializer
-
+class CustomTokenRefreshView(APIView):
     @extend_schema(
         tags=["Authentication"],
         summary="JWT 토큰 재발급",
-        description="Refresh 토큰을 사용하여 새로운 Access 토큰을 발급받습니다.",
-        examples=[
-            OpenApiExample(
+        description="""**Refresh 토큰을 사용하여 새로운 Access 토큰과 Refresh 토큰을 발급받습니다.** 
+        
+- 요청 본문에 유효한 `refresh` 토큰을 포함해야 합니다.
+- 성공 시, 새로운 `access` 토큰, 새로운 `refresh` 토큰, 그리고 사용자 정보가 반환됩니다.
+- 보안을 위해 한 번 사용된 리프레시 토큰은 만료 처리되고 새로운 리프레시 토큰이 발급됩니다. 클라이언트는 이 새로운 리프레시 토큰을 저장하여 사용해야 합니다.""",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "refresh": {
+                        "type": "string",
+                        "description": "The refresh token."
+                    }
+                },
+                "required": ["refresh"]
+            }
+        },
+        responses={
+            200: OpenApiExample(
                 'Successful Response',
                 summary='A successful response.',
-                description='A successful response.',
+                description='새로운 토큰과 사용자 정보가 성공적으로 반환되었습니다.',
                 value={
-                    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                    "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                    "username": "testuser",
-                    "semester": 1,
-                    "email": "test@example.com"
-                },
-                response_only=True,
+                    "isSuccess": True,
+                    "message": "토큰이 성공적으로 재발급되었습니다.",
+                    "access": "new_access_token",
+                    "refresh": "new_refresh_token",
+                    "user": {
+                        "username": "testuser",
+                        "email": "test@example.com",
+                        "semester": 1
+                    }
+                }
             ),
-        ]
+            400: {"description": "Bad Request - refresh 토큰이 제공되지 않음"},
+            401: {"description": "Unauthorized - 제공된 토큰이 유효하지 않거나 만료됨"}
+        }
     )
     def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        refresh_token = request.data.get("refresh")
+
+        if not refresh_token:
+            return Response({"error": "Refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            old_token = RefreshToken(refresh_token)
+            user_id = old_token.get('user_id')
+            
+            # 사용자 정보 가져오기
+            try:
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # 새로운 리프레시 토큰 생성
+            new_refresh_token = RefreshToken.for_user(user)
+            
+            # 기존 토큰을 블랙리스트에 추가
+            try:
+                old_token.blacklist()
+            except AttributeError:
+                # simple-jwt < 5.2.0 에서는 blacklist()가 없을 수 있음
+                pass
+
+            # 사용자 정보 직렬화
+            user_serializer = UserSerializer(user)
+            user_email = user.email
+            user_name = user.username
+            user_semester = user.semester
+
+            response_data = {
+                "isSuccess": True,
+                "message": "토큰이 성공적으로 재발급되었습니다.",
+                'access': str(new_refresh_token.access_token),
+                'refresh': str(new_refresh_token),
+                'email': user_email,
+                'username': user_name,
+                'semester': user_semester,
+                'is_staff': user.is_staff,
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except TokenError as e:
+            # TokenError는 simple-jwt에서 발생하는 대부분의 토큰 관련 오류를 포함합니다.
+            # (예: Token is blacklisted, Token is invalid or expired)
+            return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"error": "An unexpected error occurred.", "detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class EmailVerifyView(APIView):
