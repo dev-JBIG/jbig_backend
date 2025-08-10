@@ -1,43 +1,37 @@
 import random
+import uuid
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from users.models import User, Role
+from django.core.files.base import ContentFile
+from users.models import User
 from boards.models import Category, Board, Post, Comment
 
 class Command(BaseCommand):
-    help = 'DB에 초기 데이터를 생성합니다. (Roles, Users, Categories, Boards, Posts, Comments)'
+    help = 'DB에 초기 데이터를 생성합니다. (Users, Categories, Boards, Posts, Comments)'
 
     @transaction.atomic
     def handle(self, *args, **options):
         self.stdout.write('기존 데이터를 삭제합니다...')
-        # 순서 중요: 외래 키 제약조건 때문에 참조하는 모델부터 삭제
         Comment.objects.all().delete()
         Post.objects.all().delete()
         Board.objects.all().delete()
         Category.objects.all().delete()
         User.objects.all().delete()
-        Role.objects.all().delete()
 
         self.stdout.write('새로운 데이터를 생성합니다...')
 
-        # 1. 역할 생성
-        Role.objects.create(name='admin')
-        Role.objects.create(name='staff')
-        Role.objects.create(name='member')
-        self.stdout.write(self.style.SUCCESS('-> 역할 (admin, staff, member) 생성 완료'))
+        # 1. 사용자 생성
+        users = [
+            User.objects.create_user(email='user1@test.com', username='김철수', password='password123', semester=1),
+            User.objects.create_user(email='user2@test.com', username='이영희', password='password123', semester=2),
+            User.objects.create_superuser(email='admin@test.com', username='관리자', password='password123', semester=3)
+        ]
+        self.stdout.write(self.style.SUCCESS('-> 사용자 3명 생성 완료'))
 
-        # 2. 사용자 생성
-        admin_user = User.objects.create_superuser(email='admin@test.com', username='admin_user', password='password123', role='admin')
-        staff_user = User.objects.create_user(email='staff@test.com', username='staff_user', password='password123', role='staff')
-        member_user = User.objects.create_user(email='member@test.com', username='member_user', password='password123', role='member')
-        users = [admin_user, staff_user, member_user]
-        self.stdout.write(self.style.SUCCESS('-> 사용자 (admin, staff, member) 생성 완료'))
-
-        # 3. 카테고리 및 게시판 생성
+        # 2. 카테고리 및 게시판 생성
         board_data = {
-            "공지": ["공지사항", "이벤트 안내"],
-            "커뮤니티": ["자유게시판", "질문게시판", "정보공유", "유머게시판"],
-            "자료실": ["이미지 자료", "문서 자료", "코드 스니펫"]
+            "공지": ["공지사항"],
+            "커뮤니티": ["자유게시판", "질문게시판"],
         }
         for cat_name, board_names in board_data.items():
             category = Category.objects.create(name=cat_name)
@@ -45,34 +39,40 @@ class Command(BaseCommand):
                 Board.objects.create(name=board_name, category=category)
         self.stdout.write(self.style.SUCCESS('-> 카테고리 및 게시판 생성 완료'))
 
-        # 4. 게시글, 댓글, 대댓글 대량 생성
+        # 3. 게시글 및 댓글 생성
         boards = Board.objects.all()
         for board in boards:
-            self.stdout.write(f'-- "{board.category.name} > {board.name}" 게��판에 데이터 생성 중...')
-            for i in range(10): # 게시글 10개
-                post = Post.objects.create(
-                    author=random.choice(users),
-                    board=board,
-                    title=f'{board.name}의 {i+1}번째 테스트 게시글',
-                    content=f'이것은 {board.name}에 자동으로 생성된 게시글입니다. 내용은 중요하지 않습니다.'
-                )
+            self.stdout.write(f'-- "{board.name}" 게시판에 데이터 생성 중...')
+            for i in range(5):
+                author = random.choice(users)
+                title = f'{board.name}의 {i+1}번째 테스트 게시글'
                 
-                for j in range(2): # 댓글 2개
-                    comment = Comment.objects.create(
+                # HTML 내용 생성
+                html_content_str = f"""
+                <h1>{title}</h1>
+                <p>이것은 <b>{author.username}</b>님이 작성한 테스트용 HTML 콘텐츠입니다.</p>
+                <p>HTML 검색 기능을 테스트하기 위한 특별한 키워드: <b>QuantumLeap</b></p>
+                """
+                
+                # Post 인스턴스 생성 (DB 저장 전)
+                post = Post(author=author, board=board, title=title)
+                
+                # HTML 내용을 ContentFile로 변환하여 저장
+                file_name = f"{uuid.uuid4()}.html"
+                post.content_html.save(file_name, ContentFile(html_content_str), save=False)
+                
+                # Post 인스턴스를 DB에 저장
+                post.save()
+
+                # 댓글 생성
+                for j in range(2):
+                    Comment.objects.create(
                         post=post,
                         author=random.choice(users),
                         content=f'{post.title}의 {j+1}번째 댓글입니다.'
                     )
-
-                    for k in range(4): # 대댓글 4개
-                        Comment.objects.create(
-                            post=post,
-                            author=random.choice(users),
-                            content=f'{comment.content}에 대한 {k+1}번째 대댓글입니다.',
-                            parent=comment
-                        )
         
-        self.stdout.write(self.style.SUCCESS('-> 게시글, 댓글, 대댓글 대량 생성 완료'))
+        self.stdout.write(self.style.SUCCESS('-> 게시글 및 댓글 생성 완료'))
         self.stdout.write(self.style.SUCCESS('===================================='))
         self.stdout.write(self.style.SUCCESS('모든 데이터 생성이 성공적으로 완료되었습니다.'))
         self.stdout.write(self.style.SUCCESS('===================================='))

@@ -67,11 +67,13 @@ class AttachmentSerializer(serializers.ModelSerializer):
 
 class PostListSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
+    author_id = serializers.ReadOnlyField(source='author.id')
+    author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
 
     class Meta:
         model = Post
-        fields = ['id', 'title', 'author', 'created_at', 'views', 'likes_count']
+        fields = ['id', 'title', 'author', 'author_id', 'author_semester', 'created_at', 'views', 'likes_count']
 
 
 class PostCreateUpdateSerializer(serializers.ModelSerializer):

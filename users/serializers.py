@@ -13,17 +13,65 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
 from .models import User, EmailVerificationCode
 
+from django.contrib.auth import get_user_model
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+
     def validate(self, attrs):
-        data = super().validate(attrs)
-        
-        user = self.user
+        email = attrs.get('email')
+        password = attrs.get('password')
+        User = get_user_model()
+
+        # 1. 이메일 존재 여부 확인 (대소문자 무시)
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            raise AuthenticationFailed({
+                "isSuccess": False,
+                "errorCode": "USER_NOT_FOUND",
+                "message": "존재하지 않는 이메일입니다."
+            }, code='authentication')
+
+        # 2. 비밀번호 확인
+        if not user.check_password(password):
+            raise AuthenticationFailed({
+                "isSuccess": False,
+                "errorCode": "INVALID_PASSWORD",
+                "message": "비밀번호가 올바르지 않습니다."
+            }, code='authentication')
+
+        # 3. 이메일 인증 여부 확인
+        if not user.is_verified:
+            raise AuthenticationFailed({
+                "isSuccess": False,
+                "errorCode": "ACCOUNT_NOT_VERIFIED",
+                "message": "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요."
+            }, code='authentication')
+
+        # 4. 계정 활성 상태 확인
         if not user.is_active:
-            raise AuthenticationFailed("User account is not active.", code="user_not_active")
-        
+            raise AuthenticationFailed({
+                "isSuccess": False,
+                "errorCode": "ACCOUNT_INACTIVE",
+                "message": "계정이 비활성화 상태입니다. 관리자에게 문의해주세요."
+            }, code='authentication')
+
+        # 모든 검증을 통과한 후, 수동으로 토큰 생성
+        refresh = RefreshToken.for_user(user)
+
+        data = {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }
+
+        # 응답 데이터에 사용자 정보 추가
+        data['isSuccess'] = True
+        data['message'] = '로그인에 성공했습니다.'
         data['username'] = user.username
         data['email'] = user.email
         data['semester'] = user.semester
+        data['is_staff'] = user.is_staff
+        
         return data
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
