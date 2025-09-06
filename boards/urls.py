@@ -10,6 +10,7 @@ from .views import (
     AttachmentCreateAPIView,
     AllPostListAPIView,
     PostSearchView,
+    PostLikeAPIView,
 )
 
 router = DefaultRouter()
@@ -23,6 +24,7 @@ urlpatterns = [
     path('posts/all/', AllPostListAPIView.as_view(), name='all-posts-list'),
     path('posts/all/search/', PostSearchView.as_view(), name='post-search-all'),
     path('posts/<int:post_id>/', PostRetrieveUpdateDestroyAPIView.as_view(), name='post-detail'),
+    path('posts/<int:post_id>/like/', PostLikeAPIView.as_view(), name='post-like'),
     path('posts/<int:post_id>/comments/', CommentListCreateAPIView.as_view(), name='comment-list-create'),
     path('comments/<int:comment_id>/', CommentUpdateDestroyAPIView.as_view(), name='comment-detail'),
     path('attachment/', AttachmentCreateAPIView.as_view(), name='attachment-create'),

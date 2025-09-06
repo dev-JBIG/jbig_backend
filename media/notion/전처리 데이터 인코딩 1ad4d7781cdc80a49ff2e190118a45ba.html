@@ -1,0 +1,721 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>전처리 : 데이터 인코딩</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 3px;
+	padding: 1rem;
+}
+
+figure {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.column-list {
+	display: flex;
+	justify-content: space-between;
+}
+
+.column {
+	padding: 0 1em;
+}
+
+.column:first-child {
+	padding-left: 0;
+}
+
+.column:last-child {
+	padding-right: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding: 0.125rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+	border-collapse: collapse;
+}
+
+table {
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.page-description {
+	margin-bottom: 2em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-block;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	transform: scale(1.5);
+	margin-right: 0.6em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1.25em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(50, 48, 44, 1);
+}
+.highlight-gray {
+	color: rgba(115, 114, 110, 1);
+	fill: rgba(115, 114, 110, 1);
+}
+.highlight-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.highlight-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.highlight-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.highlight-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.highlight-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.highlight-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.highlight-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.highlight-red {
+	color: rgba(205, 60, 58, 1);
+	fill: rgba(205, 60, 58, 1);
+}
+.highlight-default_background {
+	color: rgba(50, 48, 44, 1);
+}
+.highlight-gray_background {
+	background: rgba(248, 248, 247, 1);
+}
+.highlight-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.highlight-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.highlight-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.highlight-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.highlight-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.highlight-purple_background {
+	background: rgba(248, 243, 252, 1);
+}
+.highlight-pink_background {
+	background: rgba(252, 241, 246, 1);
+}
+.highlight-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(115, 114, 110, 1);
+	fill: rgba(115, 114, 110, 1);
+}
+.block-color-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.block-color-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.block-color-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.block-color-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.block-color-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.block-color-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.block-color-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.block-color-red {
+	color: rgba(205, 60, 58, 1);
+	fill: rgba(205, 60, 58, 1);
+}
+.block-color-default_background {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray_background {
+	background: rgba(248, 248, 247, 1);
+}
+.block-color-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.block-color-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.block-color-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.block-color-purple_background {
+	background: rgba(248, 243, 252, 1);
+}
+.block-color-pink_background {
+	background: rgba(252, 241, 246, 1);
+}
+.block-color-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.select-value-color-default { background-color: rgba(84, 72, 49, 0.08); }
+.select-value-color-gray { background-color: rgba(84, 72, 49, 0.15); }
+.select-value-color-brown { background-color: rgba(210, 162, 141, 0.35); }
+.select-value-color-orange { background-color: rgba(224, 124, 57, 0.27); }
+.select-value-color-yellow { background-color: rgba(236, 191, 66, 0.39); }
+.select-value-color-green { background-color: rgba(123, 183, 129, 0.27); }
+.select-value-color-blue { background-color: rgba(93, 165, 206, 0.27); }
+.select-value-color-purple { background-color: rgba(168, 129, 197, 0.27); }
+.select-value-color-pink { background-color: rgba(225, 136, 179, 0.27); }
+.select-value-color-red { background-color: rgba(244, 171, 159, 0.4); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style></head><body><article id="1ad4d778-1cdc-80a4-9ff2-e190118a45ba" class="page sans"><header><h1 class="page-title">전처리 : 데이터 인코딩</h1><p class="page-description"></p></header><div class="page-body"><h1 id="1ad4d778-1cdc-802a-b837-d520632ccd9a" class="">데이터 인코딩</h1><ul id="1ad4d778-1cdc-800f-8d45-efb2a9a51685" class="bulleted-list"><li style="list-style-type:disc">개념<p id="1ad4d778-1cdc-80e6-9951-cd1b82f2a0af" class="">데이터 인코딩은 데이터를 특정 형식으로 변환하는 과정을 의미한다.컴퓨터는 숫자만 이해할 수 있기 때문에 자연어로 이뤄진 데이터는 숫자로 변환하는 과정이 필요하다. 이를 Encoding이라고 한다</p></li></ul><p id="1ad4d778-1cdc-804f-b962-d1c1836d85ec" class="">
+</p><ul id="1ad4d778-1cdc-800b-8a30-c0b4b25a1599" class="bulleted-list"><li style="list-style-type:disc">종류<ul id="1ad4d778-1cdc-809d-8086-c1c326876cc4" class="bulleted-list"><li style="list-style-type:circle">Label Encoding<p id="1ad4d778-1cdc-8056-a873-de22fd173ec0" class="">Label Encoding은 범주형(Categorical) 변수를 숫자로 변환하는 방법 중 하나로, 각 Category를 고유한 정수로 대응시킨다. <br/>예컨대 &#x27;봄&#x27;, &#x27;여름&#x27;, &#x27;가을&#x27;, &#x27;겨울&#x27; 로 이뤄진 계절 Category를 Label Encoding하면 &#x27;봄&#x27;은 0, &#x27;여름&#x27;은 1, &#x27;가을&#x27;은 2, &#x27;겨울&#x27;은 3으로 변환된다. <br/>이 방법은 범주형 변수를 편리하게 숫자로 변환할 수 있으나, 특정 머신러닝 모델에서는 변환된 정수를 Category 간의 우열로 판단하거나 가중치 등으로 확대 해석 할 여지가 있다.<br/></p><ul id="1ad4d778-1cdc-808a-8108-db515cd9f924" class="bulleted-list"><li style="list-style-type:square">코드</li></ul><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1ad4d778-1cdc-8036-b205-fd1a3731814f" class="code"><code class="language-Python">from sklearn.preprocessing import LabelEncoder
+items=[&#x27;TV&#x27;,&#x27;냉장고&#x27;,&#x27;전자레인지&#x27;,&#x27;컴퓨터&#x27;,&#x27;선풍기&#x27;,&#x27;선풍기&#x27;,&#x27;믹서&#x27;,&#x27;믹서&#x27;]
+# LabelEncoder를 객체로 생성한 후 , fit( ) 과 transform( ) 으로 label 인코딩 수행.
+encoder = LabelEncoder()
+encoder.fit(items)
+labels = encoder.transform(items)
+print(&#x27;인코딩 변환값:&#x27;,labels)</code></pre><figure id="1ad4d778-1cdc-8082-a486-d6c8185e3c63" class="image"><a href="1000004752.png"><img style="width:672.0000610351562px" src="1000004752.png"/></a></figure></li></ul><p id="1ad4d778-1cdc-806a-a927-c206578cec85" class="">
+</p><ul id="1ad4d778-1cdc-8056-ad59-ebca9fa0179a" class="bulleted-list"><li style="list-style-type:circle">One-Hot Encoding<p id="1ad4d778-1cdc-8055-ade8-ed1ae2adf5cd" class="">One-Hot Encoding도 범주형(Categorical) 변수를 숫자로 변환하는 방법 중 하나로, Label Encoding과 달리 각 Category를 같은 크기의 벡터로 변환한다.</p><p id="1ad4d778-1cdc-8008-8395-ffe7b465bdab" class="">예를 들어, &#x27;봄&#x27;, &#x27;여름&#x27;, &#x27;가을&#x27;, &#x27;겨울&#x27;로 이뤄진 계절 Category를 OneHot Encoding하면 &#x27;봄&#x27;은 [1, 0, 0, 0], &#x27;여름&#x27;은 [0, 1, 0, 0], &#x27;가을&#x27;은 [0, 0, 1, 0], &#x27;겨울&#x27;은 [0, 0, 0, 1]으로 변환된다.</p><p id="1ad4d778-1cdc-8099-a928-df01281c2caa" class="">이 방식은 각 Category가 같은 크기의 독립적인 벡터로 변환되기 때문에, 순서나 우열, 중요도 등으로 확대 해석될 여지가 없다.</p><p id="1ad4d778-1cdc-8087-be03-c308085d0319" class="">One-Hot Encoding은 Category의 개수 만큼의 크기를 갖는 벡터를 생성하게 되므로 많은 메모리를 차지한다는 문제가 있다. 예를 들어 100가지 종류의 메뚜기로 이뤄진 categorical column을 One-Hot Encoding 한다면, 크기가 100인 벡터가 row의 수 만큼 메모리에 존재하게 된다. 이는 매우 비효율적이다.</p><ul id="1ad4d778-1cdc-8098-91c6-e616473c78f5" class="bulleted-list"><li style="list-style-type:square">코드<p id="1ad4d778-1cdc-8044-ac29-e274a8d39cc8" class="">아래 두개의 코드 결과는 같습니다. fit, transform을 따로 적용해야하는 상황을 제외하고는 보통 get_dummies를 많이 사용합니다.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1ad4d778-1cdc-8062-8f00-d1e6b386f9ee" class="code"><code class="language-Python">from sklearn.preprocessing
+import OneHotEncoder
+import numpy as np
+
+items=[&#x27;TV&#x27;,&#x27;냉장고&#x27;,&#x27;전자레인지&#x27;,&#x27;컴퓨터&#x27;,&#x27;선풍기&#x27;,&#x27;선풍기&#x27;,&#x27;믹서&#x27;,&#x27;믹서&#x27;]
+
+# 2차원 ndarray로 변환합니다.
+items = np.array(items).reshape(-1, 1)
+
+# 원-핫 인코딩을 적용합니다.
+oh_encoder = OneHotEncoder()
+oh_encoder.fit(items)
+oh_labels = oh_encoder.transform(items)
+
+# OneHotEncoder로 변환한 결과는 희소행렬이므로 toarray()를 이용해 밀집 행렬로 변환.
+print(&#x27;원-핫 인코딩 데이터&#x27;)
+print(oh_labels.toarray())
+print(&#x27;원-핫 인코딩 데이터 차원&#x27;)print(oh_labels.shape)</code></pre><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1ad4d778-1cdc-80e6-964a-d468b8033df7" class="code"><code class="language-Python">import pandas as pd
+
+df = pd.DataFrame({&#x27;item&#x27;:[&#x27;TV&#x27;,&#x27;냉장고&#x27;,&#x27;전자레인지&#x27;,&#x27;컴퓨터&#x27;,&#x27;선풍기&#x27;,&#x27;선풍기&#x27;,&#x27;믹서&#x27;,&#x27;믹서&#x27;] })
+pd.get_dummies(df)</code></pre><figure id="1ad4d778-1cdc-801f-9af1-e0b91a1b3cee" class="image"><a href="1000004757.png"><img style="width:745.5000610351562px" src="1000004757.png"/></a></figure></li></ul></li></ul><p id="1ad4d778-1cdc-8055-b534-c039961bed82" class="">
+</p></li></ul><ul id="1ad4d778-1cdc-802a-b83c-fe2259ba86f5" class="bulleted-list"><li style="list-style-type:disc">(Scikit-learn) fit / transform<p id="1ad4d778-1cdc-8051-bc13-d5c138e5a192" class="">전처리에 주로 사용되는 라이브러리 Scikit-learn으로 데이터를 변환하는 과정은 fit과 transform으로 이뤄진다.</p><p id="1ad4d778-1cdc-8032-b0f5-e4aec3a4574a" class="">우선 Encoder의 선언을 통해 어떤 Encoding 방식을 사용할 것인지 정한다.</p><ol type="1" id="1ad4d778-1cdc-801f-a5d4-c1c70949a99c" class="numbered-list" start="1"><li>fit<p id="1ad4d778-1cdc-8039-9e12-d36351768bd2" class="">Encoder에 원본 데이터와 변환 후 데이터의 대응 관계를 학습시킨다.</p><p id="1ad4d778-1cdc-805c-a8fc-c9a01a61cd95" class="">여기서 &#x27;학습&#x27;이란, 데이터의 구조를 이해하고, 이를 바탕으로 데이터를 변환하기 위한 초기 설정을 마련하는 과정을 말한다.</p><p id="1ad4d778-1cdc-805a-8011-e9c51c78ec13" class="">LabelEncoder하는 과정을 예로 들어보자.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1ad4d778-1cdc-808c-b12f-c80f21f6e887" class="code"><code class="language-Python">from sklearn.preprocessing import LabelEncoder
+
+items=[&#x27;TV&#x27;,&#x27;냉장고&#x27;,&#x27;전자레인지&#x27;,&#x27;컴퓨터&#x27;,&#x27;선풍기&#x27;,&#x27;선풍기&#x27;,&#x27;믹서&#x27;,&#x27;믹서&#x27;]
+
+# LabelEncoder를 객체로 생성한 후 , fit( ) 과 transform( ) 으로 label 인코딩 수행.
+encoder = LabelEncoder()
+encoder.fit(items)</code></pre><p id="1ad4d778-1cdc-80f9-a517-f6fd78b0a26b" class="">위 코드를 실행하면 LabelEncoder 방식을 사용하는 encoder에, ‘TV&#x27;는 0, &#x27;냉장고&#x27;는 1, &#x27;전자레인지&#x27;는 2, &#x27;컴퓨터&#x27;은 3 등으로 변환한다는 규칙이 담긴다.</p><p id="1ad4d778-1cdc-806b-9ac3-c749d9c13104" class="">
+</p></li></ol><ol type="1" id="1ad4d778-1cdc-8085-88ba-f7f8e4d77506" class="numbered-list" start="2"><li>transform<p id="1ad4d778-1cdc-8036-9471-cebd93ff49c1" class="">fit 메소드를 통해 학습된 규칙을 기반으로 실제 데이터를 변환한다.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1ad4d778-1cdc-8066-9786-fe6051aa78fb" class="code"><code class="language-Python">labels = encoder.
+transform(items)print(&#x27;인코딩 변환값:&#x27;,labels)</code></pre><p id="1ad4d778-1cdc-80d5-aeb6-feb3f46aa439" class="">위 코드를 실행하면 fit 메소드를 통해 학습된 규칙에 따라 data가 변환된다.</p><p id="1ad4d778-1cdc-8022-9b36-f649378645f8" class="">실행 결과는 다음과 같다.</p><figure id="1ad4d778-1cdc-8095-a3cf-d0afe2a1eceb" class="image"><a href="1000004758.png"><img style="width:275px" src="1000004758.png"/></a></figure><p id="1ad4d778-1cdc-800c-8196-ce41b56c82ca" class="">
+</p></li></ol><ol type="1" id="1ad4d778-1cdc-804c-9473-d4845b2d8b16" class="numbered-list" start="3"><li>fit_transform<p id="1ad4d778-1cdc-80a4-851e-e6936c6a94ba" class="">fit과 transform을 한번에 진행해줍니다.</p><p id="1ad4d778-1cdc-80b3-abee-f73477b5543d" class="">필요한 매개변수를 학습하고 데이터에 즉시 변환을 적용합니다.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1ad4d778-1cdc-80c5-b7a8-c0cadb586373" class="code"><code class="language-Python"># Initialize the LabelEncoder
+label_encoder = LabelEncoder()
+
+df[&#x27;Category_encoded&#x27;] = label_encoder.fit_transform(df[&#x27;Category&#x27;])</code></pre><p id="1ad4d778-1cdc-80c5-8fcb-d6958eaaa6ea" class="">Scikit-learn의 fit / transform은 Encoding 뿐만 아니라 후술할 Scaling에도 같은 방식으로 사용되니 잘 알아두자.</p></li></ol></li></ul></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>

@@ -1,0 +1,785 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>JBIG 교안 (New)</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 3px;
+	padding: 1rem;
+}
+
+figure {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.column-list {
+	display: flex;
+	justify-content: space-between;
+}
+
+.column {
+	padding: 0 1em;
+}
+
+.column:first-child {
+	padding-left: 0;
+}
+
+.column:last-child {
+	padding-right: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding: 0.125rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+	border-collapse: collapse;
+}
+
+table {
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.page-description {
+	margin-bottom: 2em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-block;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	transform: scale(1.5);
+	margin-right: 0.6em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1.25em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(50, 48, 44, 1);
+}
+.highlight-gray {
+	color: rgba(115, 114, 110, 1);
+	fill: rgba(115, 114, 110, 1);
+}
+.highlight-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.highlight-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.highlight-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.highlight-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.highlight-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.highlight-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.highlight-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.highlight-red {
+	color: rgba(205, 60, 58, 1);
+	fill: rgba(205, 60, 58, 1);
+}
+.highlight-default_background {
+	color: rgba(50, 48, 44, 1);
+}
+.highlight-gray_background {
+	background: rgba(248, 248, 247, 1);
+}
+.highlight-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.highlight-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.highlight-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.highlight-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.highlight-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.highlight-purple_background {
+	background: rgba(248, 243, 252, 1);
+}
+.highlight-pink_background {
+	background: rgba(252, 241, 246, 1);
+}
+.highlight-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(115, 114, 110, 1);
+	fill: rgba(115, 114, 110, 1);
+}
+.block-color-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.block-color-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.block-color-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.block-color-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.block-color-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.block-color-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.block-color-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.block-color-red {
+	color: rgba(205, 60, 58, 1);
+	fill: rgba(205, 60, 58, 1);
+}
+.block-color-default_background {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray_background {
+	background: rgba(248, 248, 247, 1);
+}
+.block-color-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.block-color-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.block-color-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.block-color-purple_background {
+	background: rgba(248, 243, 252, 1);
+}
+.block-color-pink_background {
+	background: rgba(252, 241, 246, 1);
+}
+.block-color-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.select-value-color-default { background-color: rgba(84, 72, 49, 0.08); }
+.select-value-color-gray { background-color: rgba(84, 72, 49, 0.15); }
+.select-value-color-brown { background-color: rgba(210, 162, 141, 0.35); }
+.select-value-color-orange { background-color: rgba(224, 124, 57, 0.27); }
+.select-value-color-yellow { background-color: rgba(236, 191, 66, 0.39); }
+.select-value-color-green { background-color: rgba(123, 183, 129, 0.27); }
+.select-value-color-blue { background-color: rgba(93, 165, 206, 0.27); }
+.select-value-color-purple { background-color: rgba(168, 129, 197, 0.27); }
+.select-value-color-pink { background-color: rgba(225, 136, 179, 0.27); }
+.select-value-color-red { background-color: rgba(244, 171, 159, 0.4); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style></head><body><article id="1ad4d778-1cdc-803a-9a5e-f553af7782fe" class="page sans"><header><img class="page-cover-image" src="https://www.notion.so/images/page-cover/gradients_3.png" style="object-position:center 60%"/><div class="page-header-icon page-header-icon-with-cover"><img class="icon" src="KakaoTalk_20250304_194023389_01.png"/></div><h1 class="page-title">JBIG 교안 (New)</h1><p class="page-description"></p></header><div class="page-body"><p id="1af4d778-1cdc-8037-b9be-e208898ece17" class="block-color-gray">오류 혹은 설명 추가를 원하시면 운영진에게 문의해주세요.</p><hr id="1ae4d778-1cdc-801f-8f51-ce27dba2049d"/><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">1주차</summary><div class="indented"><figure id="1ad4d778-1cdc-80bc-8137-c7b611a1af58" class="link-to-page"><a href="머신러닝%20개요%201ad4d7781cdc80bc8137c7b611a1af58.html">머신러닝 개요</a></figure><p id="1b44d778-1cdc-804d-b791-db1f2cab466d" class=""><mark class="highlight-yellow_background"><strong>데이터 불러오기 및 확인</strong></mark></p><figure id="1ae4d778-1cdc-8070-a915-c58ab6ae33b1" class="link-to-page"><a href="데이터%20불러오기%20및%20확인%201ae4d7781cdc8070a915c58ab6ae33b1.html">데이터 불러오기 및 확인</a></figure><p id="1b44d778-1cdc-8010-9dce-c38e717259a2" class=""><mark class="highlight-yellow_background"><strong>시각화</strong></mark></p><figure id="1ad4d778-1cdc-80c3-8021-e644cc7d97c6" class="link-to-page"><a href="시각화%201ad4d7781cdc80c38021e644cc7d97c6.html">시각화</a></figure><p id="1b44d778-1cdc-80c4-8da0-cad0e7dbc9cf" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><figure id="1ad4d778-1cdc-80c5-abd7-e1f24821344b" class="link-to-page"><a href="전처리%20데이터%20세트%20분리%201ad4d7781cdc80c5abd7e1f24821344b.html">전처리 : 데이터 세트 분리</a></figure><figure id="1ad4d778-1cdc-80a4-9ff2-e190118a45ba" class="link-to-page"><a href="전처리%20데이터%20인코딩%201ad4d7781cdc80a49ff2e190118a45ba.html">전처리 : 데이터 인코딩</a></figure><p id="1b44d778-1cdc-8021-99ee-c10c89ab2e5e" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1ad4d778-1cdc-8032-9c53-f194fd8bea6d" class="link-to-page"><a href="회귀%20분석(Regression%20Analysis)%201ad4d7781cdc80329c53f194fd8bea6d.html">회귀 분석(Regression Analysis)</a></figure><p id="1b44d778-1cdc-809c-ad87-cce0874cc464" class=""><mark class="highlight-default_background"><strong>모델 평가</strong></mark></p><p id="1b44d778-1cdc-8058-925a-ef88676c132f" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1ae4d778-1cdc-804b-a7de-da8a9d50ed36" class="link-to-page"><a href="Hyperparameters%20vs%20Parameters%201ae4d7781cdc804ba7deda8a9d50ed36.html">Hyperparameters vs Parameters</a></figure><p id="1b44d778-1cdc-80e8-9bb7-dbeca2abf6c1" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">2주차</summary><div class="indented"><p id="1b54d778-1cdc-80ef-a882-f1b30c2fdb86" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1b54d778-1cdc-80b4-b9f3-f8a700e0da58" class=""><mark class="highlight-default_background"><strong>시각화</strong></mark></p><p id="1b54d778-1cdc-80f0-b6be-ce4767f860cb" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><figure id="1b44d778-1cdc-80c4-a995-e211c9ac80e7" class="link-to-page"><a href="데이터%20전처리%201b44d7781cdc80c4a995e211c9ac80e7.html">데이터 전처리</a></figure><p id="1b54d778-1cdc-8083-befe-d510db95a628" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1b44d778-1cdc-80d6-89c4-ca3511d3065d" class="link-to-page"><a href="분류%20모델%20정의%20및%20학습%201b44d7781cdc80d689c4ca3511d3065d.html">분류 모델 정의 및 학습</a></figure><p id="1b54d778-1cdc-8060-9fef-e6b26dd06a67" class=""><mark class="highlight-default_background"><strong>모델 평가</strong></mark></p><p id="1b54d778-1cdc-80e9-87d5-e090ed9dead9" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1b44d778-1cdc-800c-a100-c6f56332c308" class="link-to-page"><a href="하이퍼%20파라미터%20튜닝%201b44d7781cdc800ca100c6f56332c308.html">하이퍼 파라미터 튜닝</a></figure><figure id="1b44d778-1cdc-8056-980f-d7f5b3de526f" class="link-to-page"><a href="앙상블%201b44d7781cdc8056980fd7f5b3de526f.html">앙상블</a></figure><p id="1b44d778-1cdc-805a-a470-ddb5850cc9e9" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><p id="1b54d778-1cdc-8028-878d-e3c7da729005" class="">
+</p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">3주차</summary><div class="indented"><p id="1ba4d778-1cdc-816b-b319-f09efbe00be9" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1ba4d778-1cdc-810c-8917-d0348103eb12" class=""><mark class="highlight-yellow_background"><strong>시각화</strong></mark></p><figure id="1ba4d778-1cdc-805e-a52a-f3bb878f2da2" class="link-to-page"><a href="Seaborn%201ba4d7781cdc805ea52af3bb878f2da2.html">Seaborn</a></figure><p id="1ba4d778-1cdc-8112-be1d-f29df36ce502" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><figure id="1ba4d778-1cdc-81f8-a879-c6e25c55ad52" class="link-to-page"><a href="교차%20검증%201ba4d7781cdc81f8a879c6e25c55ad52.html">교차 검증</a></figure><figure id="1ba4d778-1cdc-811d-ade8-ec1b6a95763c" class="link-to-page"><a href="GBM%20계열%201ba4d7781cdc811dade8ec1b6a95763c.html">GBM 계열</a></figure><p id="1ba4d778-1cdc-81e3-a898-db199a95a629" class=""><mark class="highlight-yellow_background"><strong>모델 평가</strong></mark></p><figure id="1ba4d778-1cdc-80fc-97b3-dd2c1646062c" class="link-to-page"><a href="회귀%20모델%20평가%20분류%20모델%20평가%201ba4d7781cdc80fc97b3dd2c1646062c.html">회귀 모델 평가 / 분류 모델 평가</a></figure><p id="1ba4d778-1cdc-8163-b837-e7b93d5ac2ae" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><p id="1ba4d778-1cdc-8114-a241-e30ea3b62bc5" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1ba4d778-1cdc-81bb-ac35-d040e4145a84" class="link-to-page"><a href="하이퍼%20파라미터%20튜닝%201ba4d7781cdc81bbac35d040e4145a84.html">하이퍼 파라미터 튜닝</a></figure><figure id="1ba4d778-1cdc-804d-b5fe-d9397228195a" class="link-to-page"><a href="AutoML%201ba4d7781cdc804db5fed9397228195a.html">AutoML</a></figure><figure id="1ba4d778-1cdc-815a-9d27-ffe4a7158e2b" class="link-to-page"><a href="앙상블%201ba4d7781cdc815a9d27ffe4a7158e2b.html">앙상블</a></figure><p id="1ba4d778-1cdc-81da-a2de-f24f4d0bcd30" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">4주차</summary><div class="indented"><p id="1c14d778-1cdc-8128-b967-eb29b5627906" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1c14d778-1cdc-81bc-863b-d1b0c13316f9" class=""><mark class="highlight-yellow_background"><strong>시각화</strong></mark></p><figure id="1c14d778-1cdc-81b7-8248-c2d730a3fcc9" class="link-to-page"><a href="PyGWalker%201c14d7781cdc81b78248c2d730a3fcc9.html">PyGWalker</a></figure><figure id="1c44d778-1cdc-8072-8ad1-e18ed69f24a7" class="link-to-page"><a href="Plotly%201c44d7781cdc80728ad1e18ed69f24a7.html">Plotly</a></figure><p id="1c14d778-1cdc-81af-8a48-cbd304c743b3" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><p id="1c14d778-1cdc-81a2-8931-d107b31359d3" class=""><mark class="highlight-yellow_background"><strong>모델 평가</strong></mark></p><p id="1c14d778-1cdc-81f5-a6ce-e18926b59c55" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1c14d778-1cdc-8157-824b-ca39450233e4" class="link-to-page"><a href="정규화(Regularization)%201c14d7781cdc8157824bca39450233e4.html">정규화(Regularization)</a></figure><p id="1c14d778-1cdc-81a0-8810-f1fc34afe5ad" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1c14d778-1cdc-818e-9c45-f198a94b8e92" class="link-to-page"><a href="AutoGluon%201c14d7781cdc818e9c45f198a94b8e92.html">AutoGluon</a></figure><figure id="1c14d778-1cdc-81c2-9658-c64a5737a687" class="link-to-page"><a href="HyperOpt%201c14d7781cdc81c29658c64a5737a687.html">HyperOpt</a></figure><p id="1c14d778-1cdc-8173-b8c1-e2ffd2add3a0" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><figure id="1c14d778-1cdc-8123-951c-cdd955c4a109" class="link-to-page"><a href="앙상블%201c14d7781cdc8123951ccdd955c4a109.html">앙상블</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">6주차</summary><div class="indented"><p id="1e94d778-1cdc-8044-9ebb-d985a524ca62" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1e94d778-1cdc-8057-be9d-dfb6c3b1ed3c" class="block-color-default"><strong>시각화</strong></p><p id="1e94d778-1cdc-8096-8a7c-f678d01f0026" class="block-color-default"><strong>데이터 전처리</strong></p><p id="1e94d778-1cdc-804b-bb70-c6cda30620cc" class="block-color-default"><strong>모델 평가</strong></p><p id="1e94d778-1cdc-8038-b1ad-dfaab96e80f7" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1ec4d778-1cdc-806d-852c-fca7d168f2c8" class="link-to-page"><a href="퍼셉트론(Perceptron)%201ec4d7781cdc806d852cfca7d168f2c8.html">퍼셉트론(Perceptron)</a></figure><figure id="1ec4d778-1cdc-807f-a2bf-f7a5a9330ab4" class="link-to-page"><a href="다층%20퍼셉트론(MLP)%201ec4d7781cdc807fa2bff7a5a9330ab4.html">다층 퍼셉트론(MLP)</a></figure><figure id="1ec4d778-1cdc-804e-a6dc-fc23765c919a" class="link-to-page"><a href="활성화%20함수%20(Activation%20Function)%201ec4d7781cdc804ea6dcfc23765c919a.html">활성화 함수 (Activation Function)</a></figure><figure id="1ec4d778-1cdc-804c-ab10-e1ad053a0169" class="link-to-page"><a href="드롭아웃(Dropout)%201ec4d7781cdc804cab10e1ad053a0169.html">드롭아웃(Dropout)</a></figure><figure id="1ec4d778-1cdc-80fb-a583-ddcfc6a91754" class="link-to-page"><a href="배치%20정규화%20(Batch%20Normalization)%201ec4d7781cdc80fba583ddcfc6a91754.html">배치 정규화 (Batch Normalization)</a></figure><figure id="1ec4d778-1cdc-80b0-8fbc-c89610f953b4" class="link-to-page"><a href="def%20&amp;%20Class%201ec4d7781cdc80b08fbcc89610f953b4.html"><span class="icon">🤮</span>def &amp; Class</a></figure><figure id="1e94d778-1cdc-804e-9e62-e7a033c25b2e" class="link-to-page"><a href="PyTorch%20코드%20기본%20구조%201e94d7781cdc804e9e62e7a033c25b2e.html">PyTorch 코드 기본 구조</a></figure><p id="1e94d778-1cdc-80d5-8d32-d3f4861724f3" class="block-color-default"><strong>성능 개선</strong></p><p id="1e94d778-1cdc-8077-8231-f01697c01a8b" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">7주차</summary><div class="indented"><p id="1ec4d778-1cdc-80c6-b611-ecda37d0a5c7" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1ec4d778-1cdc-80d1-bf42-ea38c87e5ec9" class="block-color-default"><strong>시각화</strong></p><p id="1ec4d778-1cdc-8076-b8dd-d04f435432ad" class="block-color-default"><strong>데이터 전처리</strong></p><p id="1ec4d778-1cdc-802b-a968-c31fe49b55f3" class="block-color-default"><strong>모델 평가</strong></p><p id="1ec4d778-1cdc-80e8-a03a-ef6b35eb4ef6" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1ec4d778-1cdc-80c3-ab5b-f56da28e11c9" class="link-to-page"><a href="퍼셉트론(Perceptron)%201ec4d7781cdc80c3ab5bf56da28e11c9.html">퍼셉트론(Perceptron)</a></figure><figure id="1ec4d778-1cdc-8000-8640-db28f4277c95" class="link-to-page"><a href="다층%20퍼셉트론(MLP)%201ec4d7781cdc80008640db28f4277c95.html">다층 퍼셉트론(MLP)</a></figure><figure id="1ec4d778-1cdc-8072-99b1-c5c0845e116f" class="link-to-page"><a href="활성화%20함수%20(Activation%20Function)%201ec4d7781cdc807299b1c5c0845e116f.html">활성화 함수 (Activation Function)</a></figure><figure id="1ec4d778-1cdc-80b5-982b-c2d1823cdc77" class="link-to-page"><a href="드롭아웃(Dropout)%201ec4d7781cdc80b5982bc2d1823cdc77.html">드롭아웃(Dropout)</a></figure><figure id="1ec4d778-1cdc-8002-8ff5-db61a51747cb" class="link-to-page"><a href="배치%20정규화%20(Batch%20Normalization)%201ec4d7781cdc80028ff5db61a51747cb.html">배치 정규화 (Batch Normalization)</a></figure><figure id="1ec4d778-1cdc-80cb-a2c5-ed1bfc6c2e77" class="link-to-page"><a href="Computer%20Vision%20개요%201ec4d7781cdc80cba2c5ed1bfc6c2e77.html">Computer Vision 개요</a></figure><figure id="1ec4d778-1cdc-80cf-bab8-c8f159c083dd" class="link-to-page"><a href="CNN%201ec4d7781cdc80cfbab8c8f159c083dd.html">CNN</a></figure><p id="1ec4d778-1cdc-808e-a006-c34e23d6c985" class="block-color-default"><strong>성능 개선</strong></p><p id="1ec4d778-1cdc-80bc-aafd-e4273ed5d4ad" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><h3 id="1f44d778-1cdc-802f-abf7-db2469f2550f" class="block-color-blue_background">추가 자료</h3><figure id="1f44d778-1cdc-80a5-ad79-dcd15ea30572" class="link-to-page"><a href="고전%20컴퓨터%20비전%201f44d7781cdc80a5ad79dcd15ea30572.html">고전 컴퓨터 비전</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">8주차</summary><div class="indented"><p id="1f54d778-1cdc-816a-bac4-f7e3962bb212" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1f54d778-1cdc-81ba-b5f5-f844380af34d" class="block-color-default"><strong>시각화</strong></p><p id="1f54d778-1cdc-817b-9aea-ea894cdcdc41" class="block-color-default"><mark class="highlight-orange_background"><strong>데이터 전처리</strong></mark></p><figure id="1f54d778-1cdc-80de-9356-de8fadfb7c15" class="link-to-page"><a href="NLP(Natural%20Language%20Processing,%20자연어%20처리)%20전%201f54d7781cdc80de9356de8fadfb7c15.html">NLP(Natural Language Processing, 자연어 처리) 전처리</a></figure><p id="1f54d778-1cdc-8170-8830-da8f8f9ac2a5" class="block-color-default"><strong>모델 평가</strong></p><p id="1f54d778-1cdc-81ec-bc68-ebd7e7adf7fd" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1f64d778-1cdc-807f-b8e7-d6cb7415704f" class="link-to-page"><a href="전이학습(Transfer%20Learning)%201f64d7781cdc807fb8e7d6cb7415704f.html">전이학습(Transfer Learning)</a></figure><figure id="1f64d778-1cdc-809c-b87c-da41c476e24a" class="link-to-page"><a href="Pre-Trained%20Model(사전%20학습%20모델)%201f64d7781cdc809cb87cda41c476e24a.html">Pre-Trained Model(사전 학습 모델)</a></figure><figure id="1f64d778-1cdc-80be-8a75-dd7a95e8eb05" class="link-to-page"><a href="AlexNet%201f64d7781cdc80be8a75dd7a95e8eb05.html">AlexNet</a></figure><figure id="1f64d778-1cdc-80d0-9c83-ee52b7d6ac2b" class="link-to-page"><a href="VGG%201f64d7781cdc80d09c83ee52b7d6ac2b.html">VGG</a></figure><figure id="1f64d778-1cdc-8076-890e-ddf6fe389a6d" class="link-to-page"><a href="ResNet%20(Residual%20Network)%201f64d7781cdc8076890eddf6fe389a6d.html">ResNet (Residual Network)</a></figure><figure id="1f64d778-1cdc-806e-a392-d9694d22d667" class="link-to-page"><a href="U-Net%201f64d7781cdc806ea392d9694d22d667.html">U-Net</a></figure><p id="1f54d778-1cdc-8112-8377-d54cd78fdf0a" class="block-color-default"><strong>성능 개선</strong></p><p id="1f54d778-1cdc-8102-9419-e6d2c271571c" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><figure id="1f64d778-1cdc-809c-9ea6-dfde6b605714" class="link-to-page"><a href="허깅페이스%201f64d7781cdc809c9ea6dfde6b605714.html">허깅페이스</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">9주차</summary><div class="indented"><p id="1fc4d778-1cdc-803e-b27a-f0bb5b141861" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1fc4d778-1cdc-808b-ac46-cc2a8a5e731d" class="block-color-default"><strong>시각화</strong></p><p id="1fc4d778-1cdc-8037-a956-d66a4fc7c854" class="block-color-default"><mark class="highlight-default"><mark class="highlight-default_background"><strong>데이터 전처리</strong></mark></mark></p><p id="1fc4d778-1cdc-80b7-ab81-de3ff57d2a8f" class="block-color-default"><strong>모델 평가</strong></p><p id="1fc4d778-1cdc-80ed-9540-d76cd6557dd9" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1fc4d778-1cdc-805f-b889-dbab517adff3" class="link-to-page"><a href="RNN%201fc4d7781cdc805fb889dbab517adff3.html">RNN</a></figure><figure id="1fc4d778-1cdc-8011-b259-e298ac74ef7a" class="link-to-page"><a href="LSTM%201fc4d7781cdc8011b259e298ac74ef7a.html">LSTM</a></figure><figure id="1fd4d778-1cdc-8007-9223-d6c487ad2264" class="link-to-page"><a href="GRU%201fd4d7781cdc80079223d6c487ad2264.html">GRU</a></figure><figure id="1fd4d778-1cdc-80e5-86ec-e4d5eceb7112" class="link-to-page"><a href="Seq2Seq%201fd4d7781cdc80e586ece4d5eceb7112.html">Seq2Seq</a></figure><figure id="1fd4d778-1cdc-8008-b540-d163db8b745f" class="link-to-page"><a href="Attention%201fd4d7781cdc8008b540d163db8b745f.html">Attention </a></figure><p id="1fc4d778-1cdc-805e-9254-fc3a0ca9f4d8" class="block-color-default"><strong>성능 개선</strong></p><ul id="1fc4d778-1cdc-8044-b251-ceb0042ef163" class="toggle"><li><details open=""><summary><strong>PyTorch 코드 기본 구조</strong></summary><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1fc4d778-1cdc-8025-927c-c0a780daee02" class="code"><code class="language-Python">import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+
+# 1. Dataset 정의
+class MyDataset(Dataset):
+    def __init__(self, length=1000):
+        &quot;&quot;&quot;
+        length: 데이터셋 크기.
+        이 예제는 단순히 랜덤으로 데이터를 생성합니다.
+        &quot;&quot;&quot;
+        super().__init__()
+        # 예: 특징(feature)은 10차원, 라벨은 이진 분류(0 또는 1)
+        self.x = torch.randn(length, 10)
+        self.y = torch.randint(0, 2, (length,))  # 0 또는 1
+
+    def __len__(self):
+        # 데이터셋의 총 샘플 수
+        return len(self.x)
+
+    def __getitem__(self, index):
+        # 인덱스를 받아 해당 위치의 (데이터, 라벨) 반환
+        return self.x[index], self.y[index]
+
+# 2. DataLoader
+# 훈련용/테스트용 데이터셋을 별도로 준비
+train_dataset = MyDataset(length=800)
+test_dataset  = MyDataset(length=200)
+
+# 미니배치의 크기(batch_size)를 지정하고, 훈련용은 셔플을 켜서(random=True) 데이터 순서를 섞습니다.
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+test_loader  = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+# 3. 모델 정의
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super(SimpleModel, self).__init__()
+        # 단순 완전연결 레이어 2개로 구성된 예시
+        self.fc1 = nn.Linear(10, 50)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(50, 2)  # 이진 분류를 위한 출력 2
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        return x
+
+# 모델 인스턴스 생성
+model = SimpleModel()
+
+# 4. 손실 함수와 옵티마이저 정의
+criterion = nn.CrossEntropyLoss()  # 이진 분류이지만 출력 차원이 2개이므로 CrossEntropyLoss 사용
+optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adam 옵티마이저 사용
+
+# 5. 학습(Training)
+epochs = 5
+for epoch in range(epochs):
+    model.train()  # 학습 모드로 전환(드롭아웃, 배치정규화 등)
+    running_loss = 0.0
+
+    for data, labels in train_loader:
+        # 기존 계산 그래프(gradient) 초기화
+        optimizer.zero_grad()
+
+        # 모델 예측
+        outputs = model(data)
+
+        # 손실(loss) 계산
+        loss = criterion(outputs, labels)
+
+        # 역전파(backpropagation)
+        loss.backward()
+
+        # 가중치 업데이트
+        optimizer.step()
+
+        running_loss += loss.item()
+
+    # 에폭마다 평균 손실값 출력
+    avg_loss = running_loss / len(train_loader)
+    print(f&quot;Epoch [{epoch+1}/{epochs}], Loss: {avg_loss:.4f}&quot;)
+
+# 6. 평가(Evaluation)
+model.eval()  # 평가 모드로 전환
+correct = 0
+total = 0
+
+with torch.no_grad():  # 평가 시에는 그래디언트 계산 비활성화
+    for data, labels in test_loader:
+        outputs = model(data)
+        # 각 샘플별로 가장 높은 확률을 갖는 클래스 예측
+        _, predicted = torch.max(outputs, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+accuracy = correct / total * 100
+print(f&quot;Test Accuracy: {accuracy:.2f}%&quot;)</code></pre></details></li></ul><p id="8c8f6c7a-31a8-470e-baec-a976f06c9e13" class="">
+</p><p id="8473264b-b3a8-4b03-88e7-c29f2e41a43c" class="">
+</p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">10주차</summary><div class="indented"><h2 id="2024d778-1cdc-8030-9127-cc40b7c9ea5c" class="">Trasnformer 와 Bert fine-tuning</h2><figure id="2024d778-1cdc-80d1-b8db-fccf7431f2b8" class="link-to-page"><a href="Transformer%202024d7781cdc80d1b8dbfccf7431f2b8.html">Transformer</a></figure><figure id="2024d778-1cdc-8069-ac5c-e66dfb83703f" class="link-to-page"><a href="transformer%20이론%20공부%5Bappendix%5D%202024d7781cdc8069ac5ce66dfb83703f.html">transformer 이론 공부[appendix]</a></figure><figure id="2024d778-1cdc-8032-8c54-d437dc809f5a" class="link-to-page"><a href="Transformer%20코드%202024d7781cdc80328c54d437dc809f5a.html">Transformer 코드</a></figure><figure id="2024d778-1cdc-803b-91de-c6cbf0551477" class="link-to-page"><a href="BERT%20와%20fine-tuning%202024d7781cdc803b91dec6cbf0551477.html">BERT 와 fine-tuning</a></figure><figure id="2024d778-1cdc-8063-8348-d47cb8384bad" class="link-to-page"><a href="BERT%20코드%202024d7781cdc80638348d47cb8384bad.html">BERT 코드</a></figure><p id="2024d778-1cdc-8082-91dc-c9c57ab88684" class="">
+</p><p id="2024d778-1cdc-808c-8215-d4c9b6c70fa0" class="">
+</p><p id="2024d778-1cdc-80ed-b956-ca071729744c" class="">
+</p><p id="2024d778-1cdc-8098-bf27-d587d15441bc" class="">
+</p></div></details></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>

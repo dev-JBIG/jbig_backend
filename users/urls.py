@@ -5,7 +5,14 @@ from .views import (
     EmailVerifyView,
     CustomTokenRefreshView,
     ResendVerificationEmailView,
-    LogoutView
+    LogoutView,
+    UserPostListView,
+    UserCommentListView,
+    PasswordResetRequestView,
+    VerifyPasswordCodeView,
+    PasswordResetView,
+    UserProfileView,
+    PasswordChangeView,
 )
 
 urlpatterns = [
@@ -15,4 +22,11 @@ urlpatterns = [
     path('resend-verify-email/', ResendVerificationEmailView.as_view(), name='resend-verify-email'),
     path('token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     path('logout/', LogoutView.as_view(), name='logout'),
+    path('<str:user_id>/posts/', UserPostListView.as_view(), name='user-posts'),
+    path('<str:user_id>/comments/', UserCommentListView.as_view(), name='user-comments'),
+    path('password/reset/request/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('password/reset/verify/', VerifyPasswordCodeView.as_view(), name='password-reset-verify'),
+    path('password/reset/', PasswordResetView.as_view(), name='password-reset'),
+    path('password/change/', PasswordChangeView.as_view(), name='password-change'),
+    path('<str:user_id>/', UserProfileView.as_view(), name='user-profile'),
 ]

@@ -56,6 +56,7 @@ class User(AbstractUser):
         help_text='예 : 1기면 1'
     )
     is_verified = models.BooleanField(default=False)
+    password_changed_at = models.DateTimeField(null=True, blank=True)
 
     groups = None
     user_permissions = None

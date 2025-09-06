@@ -20,7 +20,7 @@ signup_schema = extend_schema(
         ),
         400: OpenApiResponse(description="잘못된 요청 데이터 (유효성 검사 실패)"),
     },
-    tags=["Authentication"]
+    tags=["인증"]
 )
 
 # 로그인 스키마
@@ -75,7 +75,7 @@ signin_schema = extend_schema(
         ),
         400: OpenApiResponse(description="잘못된 요청 데이터")
     },
-    tags=["Authentication"]
+    tags=["인증"]
 )
 
 # 이메일 인증 스키마
@@ -119,7 +119,7 @@ email_verify_schema = extend_schema(
             ]
         )
     },
-    tags=["Authentication"]
+    tags=["인증"]
 )
 
 # 이메일 인증코드 전송 스키마
@@ -140,5 +140,5 @@ email_send_schema = extend_schema(
         ),
         400: OpenApiResponse(description="잘못된 요청 데이터"),
     },
-    tags=["Authentication"]
+    tags=["인증"]
 )

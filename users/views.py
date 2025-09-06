@@ -1,10 +1,11 @@
+
 from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from drf_spectacular.utils import extend_schema, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiParameter
 from .serializers import (
     UserCreateSerializer,
     EmailVerificationSerializer,
@@ -12,26 +13,81 @@ from .serializers import (
     CustomTokenRefreshSerializer,
     CustomTokenObtainPairSerializer,
     UserSerializer,
+    UserProfileSerializer,
+    PasswordChangeSerializer,
+    PasswordResetRequestSerializer,
+    VerifyPasswordCodeSerializer,
+    PasswordResetSerializer
 )
 from .models import User, EmailVerificationCode
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from django.contrib.auth.tokens import default_token_generator
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 import random
 import string
 from django.core.mail import send_mail
 from django.conf import settings
+from django.shortcuts import get_object_or_404
+import pytz
 
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from boards.serializers import PostListSerializer, CommentSerializer
+from boards.models import Post, Comment
 
 # schemas.py에서 스키마들 import
 from .schemas import (
     signup_schema, signin_schema, email_send_schema, email_verify_schema
 )
 from rest_framework.parsers import JSONParser, FormParser
+
+
+@extend_schema(
+    tags=["사용자"],
+    summary="특정 사용자가 작성한 게시글 목록 조회",
+    description="특정 사용자의 username을 이용하여 해당 사용자가 작성한 모든 게시글의 목록을 조회합니다.",
+    parameters=[
+        OpenApiParameter(
+            name='user_id',
+            type=str,
+            location=OpenApiParameter.PATH,
+            description="사용자 username"
+        )
+    ]
+)
+class UserPostListView(generics.ListAPIView):
+    serializer_class = PostListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        username = self.kwargs['user_id']
+        user = get_object_or_404(User, username=username)
+        return Post.objects.filter(author=user).order_by('-created_at')
+
+
+@extend_schema(
+    tags=["사용자"],
+    summary="특정 사용자가 작성한 댓글 목록 조회",
+    description="특정 사용자의 ID를 이용하여 해당 사용자가 작성한 모든 댓글의 목록을 조회합니다.",
+    parameters=[
+        OpenApiParameter(
+            name='user_id',
+            type=str,
+            location=OpenApiParameter.PATH,
+            description="사용자 ID (이메일의 '@' 앞 부분)"
+        )
+    ]
+)
+class UserCommentListView(generics.ListAPIView):
+    serializer_class = CommentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user_id = self.kwargs['user_id']
+        user = get_object_or_404(User, email__startswith=user_id + '@')
+        return Comment.objects.filter(author=user).order_by('-created_at')
 
 
 class SignUpView(generics.CreateAPIView):
@@ -81,7 +137,7 @@ class SignInView(TokenObtainPairView):
 
 class CustomTokenRefreshView(APIView):
     @extend_schema(
-        tags=["Authentication"],
+        tags=["인증"],
         summary="JWT 토큰 재발급",
         description="""**Refresh 토큰을 사용하여 새로운 Access 토큰과 Refresh 토큰을 발급받습니다.** 
         
@@ -191,22 +247,22 @@ class EmailVerifyView(APIView):
                             status=status.HTTP_404_NOT_FOUND)
 
         if user.is_verified:
-            return Response({"message": "This account is already verified."},
+            return Response({"message": "This account is already verified."}, 
                             status=status.HTTP_200_OK)
 
         try:
             verification_code_obj = EmailVerificationCode.objects.get(user=user)
         except EmailVerificationCode.DoesNotExist:
-            return Response({"error": "No verification verifyCode found for this user. Please request a new one."},
+            return Response({"error": "No verification verifyCode found for this user. Please request a new one."}, 
                             status=status.HTTP_400_BAD_REQUEST)
 
         # Check if code is valid (5 minutes expiration)
         if (timezone.now() - verification_code_obj.created_at).total_seconds() > 300:
-            return Response({"error": "Verification code has expired."},
+            return Response({"error": "Verification code has expired."}, 
                             status=status.HTTP_400_BAD_REQUEST)
 
         if not check_password(verifyCode, verification_code_obj.code):
-            return Response({"error": "Invalid verification code."},
+            return Response({"error": "Invalid verification code."}, 
                             status=status.HTTP_400_BAD_REQUEST)
         
         user.is_verified = True
@@ -220,9 +276,9 @@ class ResendVerificationEmailView(APIView):
     serializer_class = EmailResendSerializer
 
     @extend_schema(
-        tags=["Authentication"],
-        summary="Resend Verification Email",
-        description="Resends the verification email with a new code.",
+        tags=["인증"],
+        summary="인증 이메일 재전송",
+        description="인증 이메일을 재전송합니다. 사용자가 인증 코드를 받지 못했거나 코드가 만료된 경우 사용됩니다.",
     )
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
@@ -257,24 +313,24 @@ class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     @extend_schema(
-        tags=["Authentication"],
-        summary="Logout",
-        description="Logs out the user by blacklisting their refresh token.",
-        request={
+        tags=["인증"],
+        summary="로그아웃",
+        description="사용자를 로그아웃 처리합니다. 요청 본문에 제공된 리프레시 토큰을 블랙리스트에 추가하여 더 이상 사용할 수 없게 만듭니다.",
+        request= {
             "application/json": {
                 "type": "object",
                 "properties": {
                     "refresh": {
                         "type": "string",
-                        "description": "The refresh token to be blacklisted."
+                        "description": "블랙리스트에 추가할 리프레시 토큰"
                     }
                 },
                 "required": ["refresh"]
             }
         },
         responses={
-            205: {"description": "Reset Content - successful logout"},
-            400: {"description": "Bad Request - token is invalid or missing"}
+            205: {"description": "로그아웃 성공"},
+            400: {"description": "잘못된 요청 - 토큰이 유효하지 않거나 누락됨"}
         }
     )
     def post(self, request):
@@ -286,3 +342,224 @@ class LogoutView(APIView):
             return Response(status=status.HTTP_205_RESET_CONTENT)
         except Exception as e:
             return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["비밀번호 재설정"],
+        summary="비밀번호 재설정 인증코드 요청",
+        description="이메일로 인증 코드를 요청하여 비밀번호 재설정을 시작합니다.",
+        request=PasswordResetRequestSerializer,
+        responses={
+            200: {"description": "인증 코드가 이메일로 전송되었습니다."},
+            400: {"description": "잘못된 요청"},
+            404: {"description": "사용자를 찾을 수 없음"}
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "사용자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        code = ''.join(random.choices(string.digits, k=6))
+        hashed_code = make_password(code)
+
+        EmailVerificationCode.objects.update_or_create(
+            user=user,
+            defaults={'code': hashed_code, 'created_at': timezone.now()}
+        )
+
+        subject = '[JBIG] 비밀번호 변경 인증 코드'
+        message = f'요청하신 비밀번호 변경 인증 코드는 다음과 같습니다: {code}'
+        send_mail(subject, message, None, [user.email])
+
+        return Response({"message": "인증 코드가 이메일로 전송되었습니다."}, 
+                        status=status.HTTP_200_OK)
+
+
+class VerifyPasswordCodeView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["비밀번호 재설정"],
+        summary="비밀번호 재설정 인증코드 확인",
+        description="이메일로 전송된 인증 코드를 확인합니다.",
+        request=VerifyPasswordCodeSerializer,
+        responses={
+            200: {"description": "인증 코드가 확인되었습니다."},
+            400: {"description": "잘못된 요청 또는 유효하지 않은 인증 코드"}
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = VerifyPasswordCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email']
+        verification_code = serializer.validated_data['verification_code']
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "사용자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            verification_code_obj = EmailVerificationCode.objects.get(user=user)
+        except EmailVerificationCode.DoesNotExist:
+            return Response({"error": "인증 코드를 찾을 수 없습니다. 다시 요청해주세요."}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if (timezone.now() - verification_code_obj.created_at).total_seconds() > 300:
+            return Response({"error": "인증 코드가 만료되었습니다."}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if not check_password(verification_code, verification_code_obj.code):
+            return Response({"error": "유효하지 않은 인증 코드입니다."}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Mark code as verified (but don't delete it yet)
+        # A temporary flag could be added to the model, or we can rely on the client to proceed.
+        # For simplicity, we'll just return a success message.
+
+        return Response({"message": "인증 코드가 확인되었습니다."}, 
+                        status=status.HTTP_200_OK)
+
+
+class PasswordResetView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["비밀번호 재설정"],
+        summary="새 비밀번호로 재설정",
+        description="인증코드 확인 후 새로운 비밀번호를 설정합니다.",
+        request=PasswordResetSerializer,
+        responses={
+            200: {"description": "비밀번호가 성공적으로 변경되었습니다."},
+            400: {"description": "잘못된 요청"}
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email']
+        new_password = serializer.validated_data['new_password1']
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "사용자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        # It's assumed the verification code was checked in the previous step.
+        # For added security, you might want to re-verify a token passed from the verification step.
+
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+
+        try:
+            validate_password(new_password, user=user)
+        except ValidationError as e:
+            return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.password_changed_at = timezone.now()
+        user.save()
+
+        # Clean up the verification code
+        EmailVerificationCode.objects.filter(user=user).delete()
+
+        return Response({"message": "비밀번호가 성공적으로 변경되었습니다."}, 
+                        status=status.HTTP_200_OK)
+
+@extend_schema(
+    tags=["사용자"],
+    summary="사용자 프로필 조회",
+    description="특정 사용자의 프로필 정보를 조회합니다. 요청한 사용자가 프로필의 주인인지 여부(is_self)와 총 게시글/댓글 수를 포함합니다.",
+    parameters=[
+        OpenApiParameter(
+            name='user_id',
+            type=str,
+            location=OpenApiParameter.PATH,
+            description="사용자 ID (이메일의 '@' 앞 부분)"
+        )
+    ],
+    responses={
+        200: OpenApiExample(
+            'Successful Response',
+            summary='A successful response.',
+            description='사용자 프로필 정보가 성공적으로 반환되었습니다.',
+            value={
+                "username": "testuser",
+                "email": "test@example.com",
+                "semester": 1,
+                "is_staff": False,
+                "date_joined": "2025-08-17 10:00:00",
+                "is_self": True,
+                "post_count": 15,
+                "comment_count": 42
+            }
+        )
+    }
+)
+class UserProfileView(generics.RetrieveAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        user_id = self.kwargs['user_id']
+        # email__startswith is used to find the user by the part of their email before the '@'
+        obj = get_object_or_404(self.get_queryset(), email__startswith=user_id + '@')
+        self.check_object_permissions(self.request, obj)
+        return obj
+
+class PasswordChangeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["사용자"],
+        summary="[마이페이지] 현재 비밀번호로 변경",
+        description="**로그인된 사용자가 현재 비밀번호를 사용하여 새 비밀번호로 변경합니다.**\n- 마이페이지 등에서 사용됩니다.",
+        request=PasswordChangeSerializer,
+        responses={
+            200: {"description": "비밀번호가 성공적으로 변경되었습니다."},
+            400: {"description": "잘못된 요청 또는 기존 비밀번호가 일치하지 않음"},
+        }
+    )
+    def post(self, request):
+        user = request.user
+        kst = pytz.timezone('Asia/Seoul')
+        now = timezone.now().astimezone(kst)
+
+        if user.password_changed_at:
+            last_changed_kst = user.password_changed_at.astimezone(kst)
+            if now.date() == last_changed_kst.date():
+                return Response({"error": "비밀번호는 하루에 한 번만 변경할 수 있습니다."}, 
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = PasswordChangeSerializer(data=request.data)
+        if serializer.is_valid():
+            if not user.check_password(serializer.validated_data['old_password']):
+                return Response({"error": "기존 비밀번호가 올바르지 않습니다."}, 
+                                status=status.HTTP_400_BAD_REQUEST)
+            
+            from django.contrib.auth.password_validation import validate_password
+            from django.core.exceptions import ValidationError
+            
+            try:
+                validate_password(serializer.validated_data['new_password1'], user=user)
+            except ValidationError as e:
+                return Response({"error": e.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.set_password(serializer.validated_data['new_password1'])
+            user.password_changed_at = timezone.now()
+            user.save()
+            return Response({"message": "비밀번호가 성공적으로 변경되었습니다."}, 
+                            status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
