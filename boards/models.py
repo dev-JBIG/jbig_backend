@@ -2,10 +2,16 @@ import uuid
 import os
 from django.db import models
 from django.conf import settings
+from django.db.models import Q
+from django.contrib.postgres.search import SearchVector
+from django.contrib.postgres.search import SearchVector, SearchVectorField
+from bs4 import BeautifulSoup
+
 
 def post_upload_path(instance, filename):
     # e.g. media/boards/1/a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6.html
     return f'boards/{instance.board.id}/{filename}'
+
 
 class Category(models.Model):
     name = models.CharField(max_length=50)
@@ -14,20 +20,20 @@ class Category(models.Model):
         db_table = 'category'
         verbose_name = '게시판 카테고리'
         verbose_name_plural = '게시판 카테고리 목록'
-    
+
     def __str__(self):
         return self.name
 
+
 class Board(models.Model):
+    class BoardType(models.IntegerChoices):
+        GENERAL = 1, 'General'
+        ADMIN = 2, 'Admin'
+        REASON = 3, 'Reason'
+
     name = models.CharField(max_length=50)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='boards')
-
-    BOARD_TYPE_CHOICES = (
-        (1, 'General'),
-        (2, 'Admin'),
-        (3, 'Reason'),
-    )
-    board_type = models.IntegerField(choices=BOARD_TYPE_CHOICES, default=1)
+    board_type = models.IntegerField(choices=BoardType.choices, default=BoardType.GENERAL)
 
     PERMISSION_CHOICES = (
         ('all', 'All'),
@@ -41,16 +47,60 @@ class Board(models.Model):
         db_table = 'board'
         verbose_name = '게시판'
         verbose_name_plural = '게시판 목록'
-        permissions = [
-            ("can_read_board", "Can read posts on this board"),
-            ("can_write_post", "Can write posts on this board"),
-            ("can_comment_post", "Can comment on posts on this board"),
-        ]
 
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        if self.board_type == self.BoardType.ADMIN:
+            self.read_permission = 'staff'
+            self.post_permission = 'staff'
+            self.comment_permission = 'staff'
+        elif self.board_type == self.BoardType.GENERAL:
+            self.read_permission = 'all'
+            self.post_permission = 'all'
+            self.comment_permission = 'all'
+        elif self.board_type == self.BoardType.REASON:
+            self.read_permission = 'all'
+            self.post_permission = 'all'
+            self.comment_permission = 'staff'
+        super().save(*args, **kwargs)
+
+
+class PostQuerySet(models.QuerySet):
+    def visible_for_user(self, user):
+        if user.is_authenticated and user.is_staff:
+            return self
+        
+        # Exclude staff-only posts for non-staff
+        queryset = self.exclude(post_type=Post.PostType.STAFF_ONLY)
+
+        if user.is_authenticated:
+            # Authenticated non-staff can see default posts and their own justification letters
+            queryset = queryset.filter(
+                Q(post_type=Post.PostType.DEFAULT) |
+                Q(post_type=Post.PostType.JUSTIFICATION_LETTER, author=user)
+            )
+        else:
+            # Anonymous users can only see default posts
+            queryset = queryset.filter(post_type=Post.PostType.DEFAULT)
+            
+        return queryset
+
+class PostManager(models.Manager):
+    def get_queryset(self):
+        return PostQuerySet(self.model, using=self._db)
+
+    def visible_for_user(self, user):
+        return self.get_queryset().visible_for_user(user)
+
+
 class Post(models.Model):
+    class PostType(models.IntegerChoices):
+        DEFAULT = 1, 'Default'
+        STAFF_ONLY = 2, 'Staff Only'
+        JUSTIFICATION_LETTER = 3, 'Justification Letter'
+
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
@@ -59,26 +109,55 @@ class Post(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     views = models.PositiveIntegerField(default=0)
     likes = models.ManyToManyField(
-        settings.AUTH_USER_MODEL, 
-        related_name='liked_posts', 
+        settings.AUTH_USER_MODEL,
+        related_name='liked_posts',
         blank=True,
         through='PostLike'
     )
+    post_type = models.IntegerField(choices=PostType.choices, default=PostType.DEFAULT)
+    search_vector = SearchVectorField(null=True, editable=False)
+    board_post_id = models.IntegerField(null=True, blank=True)
 
-    POST_TYPE_CHOICES = (
-        (1, 'Default'),
-        (2, 'Staff Only'),
-        (3, 'Justification Letter'),
-    )
-    post_type = models.IntegerField(choices=POST_TYPE_CHOICES, default=1)
+    objects = PostManager()
 
     class Meta:
         db_table = 'post'
         verbose_name = '게시글'
         verbose_name_plural = '게시글 목록'
+        indexes = [
+            models.Index(fields=['search_vector']),
+        ]
+        unique_together = ('board', 'board_post_id')
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        if not self.board_post_id:
+            max_id = Post.objects.filter(board=self.board).aggregate(models.Max('board_post_id'))['board_post_id__max']
+            self.board_post_id = (max_id or 0) + 1
+        super().save(*args, **kwargs)
+
+    def update_search_vector(self):
+        content_text = ''
+        if self.content_html and hasattr(self.content_html, 'path') and os.path.exists(self.content_html.path):
+            try:
+                with open(self.content_html.path, 'r', encoding='utf-8') as f:
+                    soup = BeautifulSoup(f, 'html.parser')
+                    content_text = soup.get_text()
+            except (FileNotFoundError, Exception):
+                content_text = '' # In case of error, proceed with empty content
+        
+        # We use 'config='ko'' if a Korean stemmer is installed in PostgreSQL.
+        # Otherwise, use the default.
+        self.search_vector = SearchVector('title', weight='A') + SearchVector(models.Value(content_text), weight='B')
+
+    def save(self, *args, **kwargs):
+        # We need to save the model first to get an ID for the file path,
+        # then save the file, then update the search vector.
+        # This logic is now handled in the serializer to ensure file is created before vectorization.
+        super().save(*args, **kwargs)
+
 
 class PostLike(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

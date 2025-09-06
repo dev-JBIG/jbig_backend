@@ -146,6 +146,14 @@ CORS_ALLOW_CREDENTIALS = True
 # 예: CORS_ALLOWED_ORIGINS = ['https://your-frontend-domain.com']
 CORS_ALLOW_ALL_ORIGINS = True
 
+CORS_ALLOW_HEADERS = [
+    'Accept',
+    'Accept-Language',
+    'Content-Language',
+    'Content-Type',
+    'Authorization',
+]
+
 # CORS_ALLOWED_ORIGIN_REGEXES = [
 #     r"^http://localhost:\d+$",
 #     r"^http://127\.0\.0\.1:\d+$",

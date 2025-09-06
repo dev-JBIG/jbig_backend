@@ -139,10 +139,10 @@ class CustomTokenRefreshView(APIView):
     @extend_schema(
         tags=["인증"],
         summary="JWT 토큰 재발급",
-        description="""**Refresh 토큰을 사용하여 새로운 Access 토큰과 Refresh 토큰을 발급받습니다.** 
+        description="""**Refresh 토큰을 사용하여 새로운 Access 토큰을 발급받습니다.** 
         
 - 요청 본문에 유효한 `refresh` 토큰을 포함해야 합니다.
-- 성공 시, 새로운 `access` 토큰, 새로운 `refresh` 토큰, 그리고 사용자 정보가 반환됩니다.
+- 성공 시, 새로운 `access` 토큰과 새로운 `refresh` 토큰이 반환됩니다.
 - 보안을 위해 한 번 사용된 리프레시 토큰은 만료 처리되고 새로운 리프레시 토큰이 발급됩니다. 클라이언트는 이 새로운 리프레시 토큰을 저장하여 사용해야 합니다.""",
         request={
             "application/json": {
@@ -160,17 +160,12 @@ class CustomTokenRefreshView(APIView):
             200: OpenApiExample(
                 'Successful Response',
                 summary='A successful response.',
-                description='새로운 토큰과 사용자 정보가 성공적으로 반환되었습니다.',
+                description='새로운 토큰이 성공적으로 반환되었습니다.',
                 value={
                     "isSuccess": True,
                     "message": "토큰이 성공적으로 재발급되었습니다.",
-                    "access": "new_access_token",
-                    "refresh": "new_refresh_token",
-                    "user": {
-                        "username": "testuser",
-                        "email": "test@example.com",
-                        "semester": 1
-                    }
+                    "access": "new_access_token_string",
+                    "refresh": "new_refresh_token_string",
                 }
             ),
             400: {"description": "Bad Request - refresh 토큰이 제공되지 않음"},
@@ -187,44 +182,29 @@ class CustomTokenRefreshView(APIView):
             old_token = RefreshToken(refresh_token)
             user_id = old_token.get('user_id')
             
-            # 사용자 정보 가져오기
             try:
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+                raise AuthenticationFailed('User not found', code='user_not_found')
 
             # 새로운 리프레시 토큰 생성
             new_refresh_token = RefreshToken.for_user(user)
             
-            # 기존 토큰을 블랙리스트에 추가
             try:
                 old_token.blacklist()
             except AttributeError:
-                # simple-jwt < 5.2.0 에서는 blacklist()가 없을 수 있음
                 pass
-
-            # 사용자 정보 직렬화
-            user_serializer = UserSerializer(user)
-            user_email = user.email
-            user_name = user.username
-            user_semester = user.semester
 
             response_data = {
                 "isSuccess": True,
                 "message": "토큰이 성공적으로 재발급되었습니다.",
                 'access': str(new_refresh_token.access_token),
                 'refresh': str(new_refresh_token),
-                'email': user_email,
-                'username': user_name,
-                'semester': user_semester,
-                'is_staff': user.is_staff,
             }
             
             return Response(response_data, status=status.HTTP_200_OK)
 
         except TokenError as e:
-            # TokenError는 simple-jwt에서 발생하는 대부분의 토큰 관련 오류를 포함합니다.
-            # (예: Token is blacklisted, Token is invalid or expired)
             return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             return Response({"error": "An unexpected error occurred.", "detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

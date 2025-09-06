@@ -68,7 +68,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['isSuccess'] = True
         data['message'] = '로그인에 성공했습니다.'
         data['username'] = user.username
-        data['email'] = user.email
         data['semester'] = user.semester
         data['is_staff'] = user.is_staff
         

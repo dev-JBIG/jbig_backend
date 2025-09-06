@@ -1,5 +1,15 @@
 from rest_framework import permissions
 from boards.models import Board, Post
+import logging
+
+logger = logging.getLogger(__name__)
+
+class DebugPermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        logger.warning(f"Request Headers: {request.headers}")
+        logger.warning(f"Request User: {request.user}")
+        logger.warning(f"Is Authenticated: {request.user.is_authenticated}")
+        return True
 
 class IsBoardReadable(permissions.BasePermission):
     """
@@ -64,31 +74,24 @@ class IsCommentWritable(permissions.BasePermission):
     - 'staff': Only staff members can comment.
     """
     def has_permission(self, request, view):
-        print(f"--- Inside IsCommentWritable ---")
         post_id = view.kwargs.get('post_id')
-        print(f"post_id: {post_id}")
         if not post_id:
             return False
         
         try:
             post = Post.objects.get(pk=post_id)
             board = post.board
-            print(f"board: {board.name}, comment_permission: {board.comment_permission}")
         except Post.DoesNotExist:
-            print("Post not found")
             return False
 
         comment_perm = getattr(board, 'comment_permission', 'staff')
 
         if not request.user.is_authenticated:
-            print("User not authenticated")
             return False
 
         if comment_perm == 'all':
-            print("Permission is 'all', returning True")
             return True
         
-        print(f"Permission is 'staff', checking if user is staff: {request.user.is_staff}")
         return request.user.is_staff
 
 class PostDetailPermission(permissions.BasePermission):
@@ -98,10 +101,10 @@ class PostDetailPermission(permissions.BasePermission):
     """
     def has_object_permission(self, request, view, obj):
         # obj is a Post instance
-        if obj.post_type == 2:  # Staff Only
+        if obj.post_type == Post.PostType.STAFF_ONLY:
             return request.user.is_authenticated and request.user.is_staff
         
-        if obj.post_type == 3:  # Justification Letter
+        if obj.post_type == Post.PostType.JUSTIFICATION_LETTER:
             return request.user.is_authenticated and (obj.author == request.user or request.user.is_staff)
 
         return True
