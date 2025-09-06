@@ -1,1 +1,4 @@
 jbig_env
+venv
+.env
+env
