@@ -34,7 +34,8 @@ INSTALLED_APPS = [
     # local apps
     'users',
     'boards',
-    'notions',
+    'jbig_backend',
+    'html_serving',
 ]
 
 MIDDLEWARE = [
@@ -114,9 +115,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ko-kr'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Seoul'
 
 USE_I18N = True
 
@@ -140,10 +141,15 @@ AUTH_USER_MODEL = 'users.User'
 
 # CORS settings
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://localhost:\d+$",
-    r"^http://127\.0\.0\.1:\d+$",
-]
+# 개발 환경에서는 모든 출처를 허용합니다.
+# 운영 환경에서는 보안을 위해 특정 도메인 목록을 사용하는 것이 좋습니다.
+# 예: CORS_ALLOWED_ORIGINS = ['https://your-frontend-domain.com']
+CORS_ALLOW_ALL_ORIGINS = True
+
+# CORS_ALLOWED_ORIGIN_REGEXES = [
+#     r"^http://localhost:\d+$",
+#     r"^http://127\.0\.0\.1:\d+$",
+# ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -156,7 +162,6 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'JBIG Backend API',
     'DESCRIPTION': 'JBIG 홈페이지 백엔드 입니다.',
-    'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
 

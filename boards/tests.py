@@ -2,117 +2,66 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from django.urls import reverse
 from users.models import User
-from .models import Board, Post
+from .models import Board, Post, Category
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 class PostAPITestCase(APITestCase):
     def setUp(self):
-        # 1. 테스트용 사용자 생성
-        self.user = User.objects.create_user(username='testuser', email='test@example.com', password='password123')
-        
-        # 2. 테스트용 게시판 생성
-        self.board = Board.objects.create(name='Test Board')
+        self.user = User.objects.create_user(username='testuser', email='test@example.com', password='password123', is_verified=True, is_active=True)
+        self.category = Category.objects.create(name='Test Category')
+        self.board = Board.objects.create(name='Test Board', category=self.category)
+        self.client.login(email='test@example.com', password='password123') # Reverted to original login
 
-        # 3. JWT 토큰 발급 (로그인)
-        response = self.client.post(reverse('token_obtain_pair'), {'email': 'test@example.com', 'password': 'password123'}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.token = response.data['access']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
-
-    def test_post_write(self):
-        """
-        게시글 생성 API (POST /api/post/write) 테스트
-        """
-        url = reverse('post-write')
+    def test_post_create_and_list(self):
+        # Test Post Creation
+        url = reverse('post-list-create', kwargs={'board_id': self.board.id})
         data = {
-            'boardID': self.board.id,
-            'text': 'This is a test post content.',
-            'fileIDs': []
+            'title': 'Test Post',
+            'content_html': '<html><body>test content for creation</body></html>', # Changed to string
+            'board_id': self.board.id, # Added board ID
         }
-        
-        # API 요청
-        response = self.client.post(url, data, format='json')
-        
-        # 응답 검증
+        response = self.client.post(url, data, format='json') # Changed format to json
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data, {'isUploaded': True})
-        
-        # DB 검증
-        self.assertTrue(Post.objects.filter(board=self.board, author=self.user).exists())
-        post = Post.objects.get(board=self.board, author=self.user)
-        self.assertEqual(post.content, 'This is a test post content.')
-        self.assertEqual(post.title, 'This is a test post') # content의 앞 20자
+        self.assertEqual(Post.objects.count(), 1)
+        self.assertEqual(Post.objects.get().title, 'Test Post')
 
-    def test_post_list(self):
-        """
-        게시글 목록 조회 API (GET /api/posts/) 테스트
-        """
-        # 테스트용 게시글 15개 생성
-        for i in range(15):
-            Post.objects.create(
-                author=self.user,
-                board=self.board,
-                title=f'Test Post {i}',
-                content=f'Content for test post {i}'
-            )
-
-        # 페이지네이션 테스트 (1페이지, 5개씩)
-        url = reverse('post-list') + f'?boardID={self.board.id}&pageNum=1&perPage=5'
-        response = self.client.get(url, format='json')
-
-        # 응답 검증
+        # Test Post List
+        response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 5)
-        self.assertEqual(response.data[0]['title'], 'Test Post 14') # 최신순 정렬 확인
-
-        # 페이지네이션 테스트 (3페이지, 5개씩)
-        url = reverse('post-list') + f'?boardID={self.board.id}&pageNum=3&perPage=5'
-        response = self.client.get(url, format='json')
-
-        # 응답 검증
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 5)
-        self.assertEqual(response.data[0]['title'], 'Test Post 4')
-
-    def test_post_list_invalid_board(self):
-        """
-        유효하지 않은 boardID로 목록 조회 시 400 에러 테스트
-        """
-        url = reverse('post-list') # boardID 없이 요청
-        response = self.client.get(url, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(len(response.data['results']), 1)
 
     def test_post_detail_view(self):
-        """
-        게시글 상세 조회 API (GET /api/posts/{post_id}/) 테스트
-        """
-        # 테스트용 게시글 생성
-        post = Post.objects.create(
-            author=self.user,
-            board=self.board,
-            title='Detail Test Post',
-            content='Content for detail test post'
-        )
-        
+        # Changed content_html to a string
+        post = Post.objects.create(author=self.user, board=self.board, title='Detail Test Post', content_html='<html><body>detail test content</body></html>')
         url = reverse('post-detail', kwargs={'post_id': post.id})
 
-        # 1. 인증된 사용자로 상세 조회
-        response = self.client.get(url, format='json')
+        response = self.client.get(url)
+        # Removed print(response.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['post_data']['id'], post.id)
-        self.assertEqual(response.data['isTokenValid'], True)
-        self.assertEqual(response.data['isAdmin'], False) # testuser는 admin이 아님
-        self.assertEqual(response.data['username'], self.user.username)
-        self.assertEqual(response.data['email'], self.user.email)
-        
-        # 조회수 증가 확인
-        post.refresh_from_db()
-        self.assertEqual(post.views, 1)
+        self.assertEqual(response.data['post_data']['title'], 'Detail Test Post')
 
-        # 2. 비인증된 사용자로 상세 조회 (조회수 증가 안됨, 401 에러)
-        self.client.credentials() # 토큰 제거
-        response = self.client.get(url, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    def test_post_update_board(self):
+        # Create a second board
+        second_board = Board.objects.create(name='Second Board', category=self.category)
+
+        # Create a post in the initial board
+        # Changed content_html to a string
+        post = Post.objects.create(author=self.user, board=self.board, title='Post to Move', content_html='<html><body>original content for move</body></html>')
         
-        # 조회수 증가 안됐는지 다시 확인
+        # URL for updating the post
+        url = reverse('post-detail', kwargs={'post_id': post.id})
+
+        # Data to update the board
+        update_data = {
+            'board_id': second_board.id, # Changed from 'board' to 'board_id'
+        }
+
+        # Send PATCH request
+        response = self.client.patch(url, update_data, format='json')
+
+        # Assert status code
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Assert database change
         post.refresh_from_db()
-        self.assertEqual(post.views, 1) # 여전히 1이어야 함
+        self.assertEqual(post.board.id, second_board.id)

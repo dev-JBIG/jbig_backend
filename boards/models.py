@@ -1,4 +1,5 @@
 import uuid
+import os
 from django.db import models
 from django.conf import settings
 
@@ -21,10 +22,30 @@ class Board(models.Model):
     name = models.CharField(max_length=50)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='boards')
 
+    BOARD_TYPE_CHOICES = (
+        (1, 'General'),
+        (2, 'Admin'),
+        (3, 'Reason'),
+    )
+    board_type = models.IntegerField(choices=BOARD_TYPE_CHOICES, default=1)
+
+    PERMISSION_CHOICES = (
+        ('all', 'All'),
+        ('staff', 'Staff'),
+    )
+    read_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
+    post_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
+    comment_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
+
     class Meta:
         db_table = 'board'
         verbose_name = '게시판'
         verbose_name_plural = '게시판 목록'
+        permissions = [
+            ("can_read_board", "Can read posts on this board"),
+            ("can_write_post", "Can write posts on this board"),
+            ("can_comment_post", "Can comment on posts on this board"),
+        ]
 
     def __str__(self):
         return self.name
@@ -43,6 +64,13 @@ class Post(models.Model):
         blank=True,
         through='PostLike'
     )
+
+    POST_TYPE_CHOICES = (
+        (1, 'Default'),
+        (2, 'Staff Only'),
+        (3, 'Justification Letter'),
+    )
+    post_type = models.IntegerField(choices=POST_TYPE_CHOICES, default=1)
 
     class Meta:
         db_table = 'post'
@@ -69,6 +97,7 @@ class Comment(models.Model):
         'self', null=True, blank=True, related_name='children', on_delete=models.CASCADE
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    is_deleted = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'comment'
@@ -90,3 +119,9 @@ class Attachment(models.Model):
     
     def __str__(self):
         return self.filename
+
+    def delete(self, *args, **kwargs):
+        # Delete the file from the filesystem
+        if self.file and os.path.exists(self.file.path):
+            os.remove(self.file.path) # Use os.remove directly
+        super().delete(*args, **kwargs)

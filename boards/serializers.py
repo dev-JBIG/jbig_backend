@@ -1,21 +1,9 @@
 import bleach
 import uuid
+import os
 from django.core.files.base import ContentFile
 from rest_framework import serializers
 from .models import Category, Board, Post, Comment, Attachment
-
-# Bleach를 사용하여 허용할 HTML 태그 및 속성 정의
-ALLOWED_TAGS = [
-    'p', 'b', 'i', 'u', 's', 'strike', 'strong', 'em', 'span', 'br', 'hr',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote',
-    'a', 'img', 'pre', 'code', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-]
-ALLOWED_ATTRIBUTES = {
-    '*': ['style', 'class'],
-    'a': ['href', 'title', 'target'],
-    'img': ['src', 'alt', 'title', 'width', 'height'],
-}
-
 
 class RecursiveField(serializers.Serializer):
     def to_representation(self, value):
@@ -29,10 +17,38 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class BoardSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
+    read_permission = serializers.SerializerMethodField()
+    post_permission = serializers.SerializerMethodField()
+    comment_permission = serializers.SerializerMethodField()
 
     class Meta:
         model = Board
-        fields = ['id', 'name', 'category']
+        fields = ['id', 'name', 'category', 'read_permission', 'post_permission', 'comment_permission']
+
+    def get_read_permission(self, instance):
+        user = self.context['request'].user
+        perm = getattr(instance, 'read_permission', 'staff')
+        if perm == 'all':
+            return True
+        return user.is_authenticated and user.is_staff
+
+    def get_post_permission(self, instance):
+        user = self.context['request'].user
+        if not user.is_authenticated:
+            return False
+        perm = getattr(instance, 'post_permission', 'staff')
+        if perm == 'all':
+            return True
+        return user.is_staff
+
+    def get_comment_permission(self, instance):
+        user = self.context['request'].user
+        if not user.is_authenticated:
+            return False
+        perm = getattr(instance, 'comment_permission', 'staff')
+        if perm == 'all':
+            return True
+        return user.is_staff
 
 class BoardIdNameSerializer(serializers.ModelSerializer):
     class Meta:
@@ -47,16 +63,39 @@ class CategoryWithBoardsSerializer(serializers.ModelSerializer):
         model = Category
         fields = ['category', 'boards']
 
-
 class CommentSerializer(serializers.ModelSerializer):
+    user_id = serializers.SerializerMethodField()
     author = serializers.CharField(source='author.username', read_only=True)
+    author_semester = serializers.ReadOnlyField(source='author.semester')
     children = RecursiveField(many=True, read_only=True)
+    is_owner = serializers.SerializerMethodField()
+    post_id = serializers.IntegerField(source='post.id', read_only=True)
+    post_title = serializers.CharField(source='post.title', read_only=True)
+    board_id = serializers.IntegerField(source='post.board.id', read_only=True)
 
     class Meta:
         model = Comment
-        fields = ['id', 'author', 'content', 'created_at', 'parent', 'children']
-        read_only_fields = ('author', 'created_at', 'children')
+        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id']
+        read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id')
 
+    def get_user_id(self, obj):
+        if obj.author:
+            return obj.author.email.split('@')[0]
+        return '알 수 없는 사용자'
+
+    def get_is_owner(self, obj):
+        user = self.context.get('request').user
+        if user and user.is_authenticated:
+            return obj.author == user or user.is_staff
+        return False
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if instance.is_deleted:
+            representation['content'] = '삭제된 댓글입니다.'
+            representation['author'] = '알 수 없는 사용자'
+            representation['user_id'] = '알 수 없는 사용자'
+        return representation
 
 class AttachmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -64,139 +103,115 @@ class AttachmentSerializer(serializers.ModelSerializer):
         fields = ['id', 'file', 'filename']
         read_only_fields = ('filename',)
 
-
 class PostListSerializer(serializers.ModelSerializer):
+    user_id = serializers.SerializerMethodField()
     author = serializers.CharField(source='author.username', read_only=True)
-    author_id = serializers.ReadOnlyField(source='author.id')
     author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
 
     class Meta:
         model = Post
-        fields = ['id', 'title', 'author', 'author_id', 'author_semester', 'created_at', 'views', 'likes_count']
+        fields = ['id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count']
 
+    def get_user_id(self, obj):
+        return obj.author.email.split('@')[0]
 
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
     attachment_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        write_only=True,
-        required=False,
-        help_text="첨부파일 ID 목록"
+        child=serializers.IntegerField(), write_only=True, required=False, help_text="첨부파일 ID 목록"
     )
     content_html = serializers.CharField(write_only=True, help_text="게시글 HTML 내용")
 
     class Meta:
         model = Post
-        fields = ['title', 'content_html', 'attachment_ids']
+        fields = ['title', 'content_html', 'attachment_ids', 'post_type']
 
     def _save_html_content(self, instance, html_string):
-        """HTML 문자열을 소독하고 파일로 저장 또는 덮어씁니다."""
-        sanitized_html = bleach.clean(html_string, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES)
-        
-        # 수정이고 기존 파일이 있는 경우, 해당 파일에 덮어쓰기
-        if instance.pk and instance.content_html and instance.content_html.name:
-            file_name = os.path.basename(instance.content_html.name)
-        else:
-            # 생성의 경우, 새 UUID로 파일 이름 생성
-            file_name = f"{uuid.uuid4()}.html"
-            
+        sanitized_html = html_string
+        file_name = f"{uuid.uuid4()}.html"
         instance.content_html.save(file_name, ContentFile(sanitized_html), save=False)
-
-    def validate(self, data):
-        attachment_ids = data.get('attachment_ids', [])
-
-        # 파일 개수 검증
-        if len(attachment_ids) > 3:
-            raise serializers.ValidationError("최대 3개의 파일만 첨부할 수 있습니다.")
-
-        # 총 용량 검증
-        attachments = Attachment.objects.filter(id__in=attachment_ids)
-        total_size = sum(att.file.size for att in attachments)
-        if total_size > 20 * 1024 * 1024:  # 20MB
-            raise serializers.ValidationError("첨부파일의 총 용량은 20MB를 초과할 수 없습니다.")
-        
-        # 모든 attachment_ids가 유효한지 확인
-        if len(attachment_ids) != attachments.count():
-            raise serializers.ValidationError("존재하지 않는 첨부파일 ID가 포함되어 있습니다.")
-
-        return data
 
     def create(self, validated_data):
         attachment_ids = validated_data.pop('attachment_ids', [])
         html_content = validated_data.pop('content_html')
-        
-        # Post 인스턴스는 생성하지만 아직 DB에 저장하지 않음
         post = Post(**validated_data)
-        
-        # HTML 내용을 파일로 만들어 Post 인스턴스에 연결
         self._save_html_content(post, html_content)
-        
-        # 모든 필드가 준비된 후 Post 저장
         post.save()
-
-        # 첨부파일 연결
         if attachment_ids:
-            attachments = Attachment.objects.filter(id__in=attachment_ids)
-            post.attachments.set(attachments)
+            post.attachments.set(attachment_ids)
         return post
 
     def update(self, instance, validated_data):
         attachment_ids = validated_data.pop('attachment_ids', None)
         html_content = validated_data.pop('content_html', None)
-
-        # HTML 내용이 있으면 파일 덮어쓰기
         if html_content is not None:
             self._save_html_content(instance, html_content)
-
-        # 나머지 필드 업데이트
-        # super().update()는 save()를 호출하므로, HTML 파일 처리 후에 호출
         instance = super().update(instance, validated_data)
-
-        # 첨부파일 연결
         if attachment_ids is not None:
-            attachments = Attachment.objects.filter(id__in=attachment_ids)
-            instance.attachments.set(attachments)
-            
+            instance.attachments.set(attachment_ids)
         return instance
 
-
 class PostDetailSerializer(serializers.ModelSerializer):
+    user_id = serializers.SerializerMethodField()
     author = serializers.CharField(source='author.username', read_only=True)
+    author_semester = serializers.ReadOnlyField(source='author.semester')
     board = BoardSerializer(read_only=True)
-    comments = serializers.SerializerMethodField()
+    comments = CommentSerializer(many=True, read_only=True)
     attachments = AttachmentSerializer(many=True, read_only=True)
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
+    comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
     content_html_url = serializers.URLField(source='content_html.url', read_only=True)
+    
+    user_can_edit = serializers.SerializerMethodField()
+    user_can_delete = serializers.SerializerMethodField()
+    user_can_comment = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
-            'id', 'title', 'content_html_url', 'author', 'created_at', 'updated_at',
-            'views', 'board', 'comments', 'attachments', 'likes_count', 'is_liked'
+            'id', 'title', 'content_html_url', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
+            'views', 'board', 'comments', 'attachments', 'likes_count', 'comments_count', 'is_liked', 'post_type',
+            'user_can_edit', 'user_can_delete', 'user_can_comment'
         ]
 
-    def get_comments(self, obj):
-        top_level_comments = obj.comments.filter(parent__isnull=True)
-        serializer = CommentSerializer(top_level_comments, many=True, context=self.context)
-        return serializer.data
+    def get_user_id(self, obj):
+        return obj.author.email.split('@')[0]
 
     def get_is_liked(self, obj):
         user = self.context['request'].user
-        if user.is_authenticated:
-            return obj.likes.filter(pk=user.pk).exists()
-        return False
+        return user.is_authenticated and obj.likes.filter(pk=user.pk).exists()
 
+    def get_user_can_edit(self, obj):
+        user = self.context['request'].user
+        return user.is_authenticated and (obj.author == user or user.is_staff)
+
+    def get_user_can_delete(self, obj):
+        user = self.context['request'].user
+        return user.is_authenticated and (obj.author == user or user.is_staff)
+
+    def get_user_can_comment(self, obj):
+        user = self.context['request'].user
+        if not user.is_authenticated:
+            return False
+        perm = getattr(obj.board, 'comment_permission', 'staff')
+        if perm == 'all':
+            return True
+        return user.is_staff
 
 class PostDetailResponseSerializer(serializers.Serializer):
-    """Serializer for the response of the post detail view."""
-    post_data = PostDetailSerializer()
-    isTokenValid = serializers.BooleanField()
-    isAdmin = serializers.BooleanField()
-    username = serializers.CharField()
-    email = serializers.EmailField()
+    post = PostDetailSerializer()
+    # Removed permissions field as it's now in PostDetailSerializer
 
+class PostListResponseSerializer(serializers.Serializer):
+    board = BoardSerializer()
+    posts = PostListSerializer(many=True)
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
 
 class CategoryListResponseSerializer(serializers.Serializer):
     total_post_count = serializers.IntegerField()
     categories = CategoryWithBoardsSerializer(many=True)
+
+

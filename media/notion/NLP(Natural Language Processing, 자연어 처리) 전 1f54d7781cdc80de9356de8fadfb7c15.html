@@ -1,0 +1,752 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>NLP(Natural Language Processing, 자연어 처리) 전처리</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 3px;
+	padding: 1rem;
+}
+
+figure {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.column-list {
+	display: flex;
+	justify-content: space-between;
+}
+
+.column {
+	padding: 0 1em;
+}
+
+.column:first-child {
+	padding-left: 0;
+}
+
+.column:last-child {
+	padding-right: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding: 0.125rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+	border-collapse: collapse;
+}
+
+table {
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.page-description {
+	margin-bottom: 2em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-block;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	transform: scale(1.5);
+	margin-right: 0.6em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1.25em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(50, 48, 44, 1);
+}
+.highlight-gray {
+	color: rgba(115, 114, 110, 1);
+	fill: rgba(115, 114, 110, 1);
+}
+.highlight-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.highlight-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.highlight-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.highlight-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.highlight-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.highlight-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.highlight-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.highlight-red {
+	color: rgba(205, 60, 58, 1);
+	fill: rgba(205, 60, 58, 1);
+}
+.highlight-default_background {
+	color: rgba(50, 48, 44, 1);
+}
+.highlight-gray_background {
+	background: rgba(248, 248, 247, 1);
+}
+.highlight-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.highlight-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.highlight-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.highlight-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.highlight-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.highlight-purple_background {
+	background: rgba(248, 243, 252, 1);
+}
+.highlight-pink_background {
+	background: rgba(252, 241, 246, 1);
+}
+.highlight-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(115, 114, 110, 1);
+	fill: rgba(115, 114, 110, 1);
+}
+.block-color-brown {
+	color: rgba(159, 107, 83, 1);
+	fill: rgba(159, 107, 83, 1);
+}
+.block-color-orange {
+	color: rgba(217, 115, 13, 1);
+	fill: rgba(217, 115, 13, 1);
+}
+.block-color-yellow {
+	color: rgba(203, 145, 47, 1);
+	fill: rgba(203, 145, 47, 1);
+}
+.block-color-teal {
+	color: rgba(68, 131, 97, 1);
+	fill: rgba(68, 131, 97, 1);
+}
+.block-color-blue {
+	color: rgba(51, 126, 169, 1);
+	fill: rgba(51, 126, 169, 1);
+}
+.block-color-purple {
+	color: rgba(144, 101, 176, 1);
+	fill: rgba(144, 101, 176, 1);
+}
+.block-color-pink {
+	color: rgba(193, 76, 138, 1);
+	fill: rgba(193, 76, 138, 1);
+}
+.block-color-red {
+	color: rgba(205, 60, 58, 1);
+	fill: rgba(205, 60, 58, 1);
+}
+.block-color-default_background {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray_background {
+	background: rgba(248, 248, 247, 1);
+}
+.block-color-brown_background {
+	background: rgba(244, 238, 238, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 236, 221, 1);
+}
+.block-color-yellow_background {
+	background: rgba(251, 243, 219, 1);
+}
+.block-color-teal_background {
+	background: rgba(237, 243, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(231, 243, 248, 1);
+}
+.block-color-purple_background {
+	background: rgba(248, 243, 252, 1);
+}
+.block-color-pink_background {
+	background: rgba(252, 241, 246, 1);
+}
+.block-color-red_background {
+	background: rgba(253, 235, 236, 1);
+}
+.select-value-color-default { background-color: rgba(84, 72, 49, 0.08); }
+.select-value-color-gray { background-color: rgba(84, 72, 49, 0.15); }
+.select-value-color-brown { background-color: rgba(210, 162, 141, 0.35); }
+.select-value-color-orange { background-color: rgba(224, 124, 57, 0.27); }
+.select-value-color-yellow { background-color: rgba(236, 191, 66, 0.39); }
+.select-value-color-green { background-color: rgba(123, 183, 129, 0.27); }
+.select-value-color-blue { background-color: rgba(93, 165, 206, 0.27); }
+.select-value-color-purple { background-color: rgba(168, 129, 197, 0.27); }
+.select-value-color-pink { background-color: rgba(225, 136, 179, 0.27); }
+.select-value-color-red { background-color: rgba(244, 171, 159, 0.4); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style></head><body><article id="1f54d778-1cdc-80de-9356-de8fadfb7c15" class="page sans"><header><h1 class="page-title"><mark class="highlight-default"><mark class="highlight-default_background">NLP(Natural Language Processing, 자연어 처리) 전처리</mark></mark></h1><p class="page-description"></p></header><div class="page-body"><h1 id="1f54d778-1cdc-8042-b7bb-cfc8c5d86237" class="">텍스트를 숫자로 변환하는 이유</h1><hr id="1f54d778-1cdc-80a7-97dc-f09bad142f98"/><p id="1f54d778-1cdc-80ed-8c72-d5cc16845088" class="">컴퓨터가 사람처럼 텍스트를 이해하려면 어떤 과정이 필요할까요? 사실, 컴퓨터는 우리가 사용하는 언어를 직접적으로 이해할 수 없습니다. 컴퓨터가 처리할 수 있는 것은 오직 <strong>숫자</strong>뿐입니다. 따라서, 우리가 사용하는 텍스트 데이터를 컴퓨터가 이해할 수 있도록 <strong>숫자로 변환</strong>하는 과정은 NLP(자연어 처리)의 기본이자 필수적인 단계입니다.</p><p id="1f54d778-1cdc-80ce-843d-c09fa4996cb8" class="">이 글에서는 텍스트를 숫자로 변환해야 하는 이유와 그 과정이 자연어 처리에서 왜 중요한 역할을 하는지 알아보겠습니다.</p><hr id="1f54d778-1cdc-80bd-9540-ce992d81d6f9"/><h3 id="1f54d778-1cdc-80e3-b07c-f44fc3ab01cf" class=""><strong>1. 자연어 처리란 무엇인가?</strong></h3><p id="1f54d778-1cdc-8041-aea5-de4c314cdbf5" class="">자연어 처리(NLP, Natural Language Processing)는 컴퓨터가 인간이 사용하는 언어를 이해하고, 분석하며, 생성할 수 있도록 만드는 기술입니다. NLP의 목표는 컴퓨터가 텍스트나 음성과 같은 자연어 데이터를 처리하여 유용한 정보를 추출하거나 새로운 데이터를 생성하도록 돕는 것입니다.</p><p id="1f54d778-1cdc-80a5-a600-c81cf51bfc84" class="">예를 들어, 스마트폰의 음성 비서가 당신의 명령을 이해하고 적절한 응답을 제공하는 것도 NLP 기술 덕분입니다. 이러한 작업을 수행하려면 먼저 텍스트 데이터를 숫자로 변환해야만 합니다.</p><hr id="1f54d778-1cdc-8084-9c99-dded2af03761"/><h3 id="1f54d778-1cdc-80d0-8fc8-fe29985530fe" class=""><strong>2. 텍스트를 숫자로 변환해야 하는 이유</strong></h3><h3 id="1f54d778-1cdc-8047-aed0-e5fe3b57e9fe" class=""><strong>2.1. 연속성: 의미를 수치적으로 비교하기 위해</strong></h3><p id="1f54d778-1cdc-801f-9bc5-eb5d56d6c50d" class="">텍스트 데이터는 인간에게는 직관적으로 이해되지만, 컴퓨터에게는 단순한 문자열에 불과합니다.</p><ul id="1f54d778-1cdc-803c-a1ab-d85af9c6fb98" class="bulleted-list"><li style="list-style-type:disc">예를 들어, &quot;apple&quot;과 &quot;banana&quot;라는 단어는 컴퓨터에게는 아무런 연관성이 없는 두 개의 텍스트일 뿐입니다.</li></ul><ul id="1f54d778-1cdc-8043-ba84-ff17008f573f" class="bulleted-list"><li style="list-style-type:disc">하지만 우리가 이 단어들을 숫자로 변환하고 벡터화하면, 두 단어의 유사성을 수치적으로 표현할 수 있습니다.예를 들어:<ul id="1f54d778-1cdc-800f-a61d-f5d9b4e80f17" class="bulleted-list"><li style="list-style-type:circle">&quot;apple&quot; → <code>[0.5, 1.2, -0.8]</code></li></ul><ul id="1f54d778-1cdc-8032-ad3b-f16b1836f0f5" class="bulleted-list"><li style="list-style-type:circle">&quot;banana&quot; → <code>[0.4, 1.1, -0.7]</code></li></ul><p id="1f54d778-1cdc-80ca-9a0f-db7cf00cc2c8" class="">벡터 간의 거리를 계산해 두 단어의 유사성을 비교할 수 있습니다.</p></li></ul><h3 id="1f54d778-1cdc-80aa-809b-fdbfca37ee1d" class=""><strong>2.2. 효율성: 벡터 연산을 위해</strong></h3><p id="1f54d778-1cdc-80e0-a908-d9bf183b35cb" class="">컴퓨터는 숫자를 기반으로 빠르고 효율적인 연산을 수행하도록 설계되어 있습니다.</p><ul id="1f54d778-1cdc-80b7-bcb9-c6105a193379" class="bulleted-list"><li style="list-style-type:disc">텍스트 데이터는 계산이 불가능하지만, 숫자로 변환하면 벡터와 행렬 연산을 통해 딥러닝 모델에서 학습과 추론이 가능합니다.</li></ul><ul id="1f54d778-1cdc-80fd-83ce-c69c4b3e1ac0" class="bulleted-list"><li style="list-style-type:disc">특히 딥러닝에서 사용되는 GPU나 TPU는 벡터화된 데이터를 기반으로 병렬 연산을 수행하며, 텍스트를 숫자로 변환하지 않으면 이러한 성능을 활용할 수 없습니다.</li></ul><h1 id="1f54d778-1cdc-80b7-bbfa-f99bc79714b8" class="">텍스트를 숫자로 변환하는 방법</h1><hr id="1f54d778-1cdc-80d4-bb05-ee4a8b96e58f"/><h3 id="1f54d778-1cdc-80fa-a79e-ccf5329b8558" class=""><strong>1. 단순한 벡터화</strong></h3><p id="1f54d778-1cdc-8089-9b96-d364f66b02de" class="">텍스트 데이터를 숫자로 변환하는 가장 기본적인 방법은 **원핫 인코딩(One-Hot Encoding)**입니다.</p><details open=""><summary style="font-weight:600;font-size:1.25em;line-height:1.3;margin:0"><strong>1.1. 원핫 인코딩(One-Hot Encoding)</strong></summary><div class="indented"><p id="1f54d778-1cdc-80fb-8309-f641a7c7fc82" class="">원핫 인코딩은 각 단어를 고유한 정수로 매핑한 뒤, 해당 정수 위치에만 1을 표시하고 나머지 위치는 모두 0으로 채우는 방식입니다.</p><h3 id="1f54d778-1cdc-800b-970d-e633d7aef32e" class=""><strong>예시</strong></h3><p id="1f54d778-1cdc-80a5-aa81-f7f27319bc3f" class="">다음과 같은 단어 집합이 있다고 가정합니다:</p><p id="1f54d778-1cdc-80cb-9dd8-ee4bad971af2" class=""><code>[&quot;cat&quot;, &quot;dog&quot;, &quot;mouse&quot;]</code></p><p id="1f54d778-1cdc-8032-bd2d-cceaee09a35c" class="">원핫 인코딩 결과는 다음과 같습니다:</p><ul id="1f54d778-1cdc-8008-906e-d589db69ab5f" class="bulleted-list"><li style="list-style-type:disc">&quot;cat&quot; → <code>[1, 0, 0]</code></li></ul><ul id="1f54d778-1cdc-80f1-ae58-c5a3c2a864e5" class="bulleted-list"><li style="list-style-type:disc">&quot;dog&quot; → <code>[0, 1, 0]</code></li></ul><ul id="1f54d778-1cdc-8042-ba8c-e79ee5aed14e" class="bulleted-list"><li style="list-style-type:disc">&quot;mouse&quot; → <code>[0, 0, 1]</code></li></ul><h3 id="1f54d778-1cdc-807a-93a6-cd2c5dd22a58" class=""><strong>장점</strong></h3><ul id="1f54d778-1cdc-8043-bb71-e89e1a7309a2" class="bulleted-list"><li style="list-style-type:disc">간단하고 직관적입니다.</li></ul><ul id="1f54d778-1cdc-8009-b9ce-fcb3363f6b9b" class="bulleted-list"><li style="list-style-type:disc">모든 단어를 고유하게 구분할 수 있습니다.</li></ul><h3 id="1f54d778-1cdc-8070-9e9b-fed7c994ad1c" class=""><strong>단점</strong></h3><ul id="1f54d778-1cdc-807c-b00e-c296a82f770d" class="bulleted-list"><li style="list-style-type:disc"><strong>차원의 폭발:</strong> 단어 집합 크기가 커질수록 벡터 크기가 커집니다.</li></ul><ul id="1f54d778-1cdc-80b8-bd1b-dee8744ee41e" class="bulleted-list"><li style="list-style-type:disc"><strong>의미 반영 부족:</strong> 단어 간의 유사성을 전혀 표현하지 못합니다.</li></ul><h3 id="1f54d778-1cdc-80b9-8e62-ea24ff974cda" class=""><strong>실습: 원핫 인코딩</strong></h3><p id="1f54d778-1cdc-8024-9ad9-fd3cc8795bea" class="">Python으로 간단히 구현해볼 수 있습니다.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1f54d778-1cdc-8053-8273-ee1b2635dac0" class="code"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from sklearn.preprocessing import OneHotEncoder
+import numpy as np
+
+# 단어 집합
+words = np.array([&quot;cat&quot;, &quot;dog&quot;, &quot;mouse&quot;]).reshape(-1, 1)
+
+# 원핫 인코딩
+encoder = OneHotEncoder(sparse=False)
+one_hot = encoder.fit_transform(words)
+print(one_hot)</code></pre><p id="1f54d778-1cdc-802b-9b15-daf7378a97f5" class="">출력 결과</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1f54d778-1cdc-8000-9d55-cfc422befeaf" class="code"><code class="language-Lua" style="white-space:pre-wrap;word-break:break-all">[[1. 0. 0.]
+ [0. 1. 0.]
+ [0. 0. 1.]]</code></pre></div></details><h3 id="1f54d778-1cdc-80f1-aad6-d2f2391dccf3" class=""><strong>2. 분포 기반 표현</strong></h3><p id="1f54d778-1cdc-80bd-abfc-ed2ea26ca2d8" class="">단순한 벡터화 방법의 한계를 극복하기 위해 <strong>단어의 의미를 반영하는 벡터화 기법</strong>이 등장했습니다. <strong>임베딩</strong>이란 벡터화에서 한 단계 더 나아가서 고차원 공간에서 단어, 문장 또는 다른 데이터의 의미를 반영한 고차원 벡터를 생성하는 과정을 말합니다. 대표적으로 <strong>Word2Vec</strong>과 <strong>TF-IDF</strong>가 있습니다. </p><details open=""><summary style="font-weight:600;font-size:1.25em;line-height:1.3;margin:0"><strong>2.1. TF-IDF (Term Frequency-Inverse Document Frequency)</strong></summary><div class="indented"><h3 id="1f54d778-1cdc-80ac-b4d7-d9c3068da021" class=""><strong>1. TF-IDF란 무엇인가?</strong></h3><p id="1f54d778-1cdc-807c-92b0-f9816f671013" class="">TF-IDF(Term Frequency-Inverse Document Frequency)는 <strong>텍스트 데이터에서 단어의 중요도를 측정</strong>하기 위한 통계적 기법입니다. 단순히 단어의 빈도를 측정하는 것뿐만 아니라, 단어가 문서 내에서 얼마나 중요한지와 전체 문서 집합에서 얼마나 희귀한지를 모두 고려합니다.</p><hr id="1f54d778-1cdc-8099-b2c5-df7acec99c04"/><h3 id="1f54d778-1cdc-8083-84d0-cd1ea326ed37" class=""><strong>2. TF-IDF의 구성 요소</strong></h3><p id="1f54d778-1cdc-80d6-bcd8-db4f07075608" class="">TF-IDF는 두 가지 주요 요소의 곱으로 계산됩니다:</p><ol type="1" id="1f54d778-1cdc-80ac-91ed-e78cbfd70eb2" class="numbered-list" start="1"><li><strong>TF (Term Frequency): 단어 빈도</strong><ul id="1f54d778-1cdc-804e-8d78-d4820267f01b" class="bulleted-list"><li style="list-style-type:disc">단어가 특정 문서에서 얼마나 자주 등장했는지를 측정합니다.</li></ul><ul id="1f54d778-1cdc-80bc-9d51-f8fbb3a72b28" class="bulleted-list"><li style="list-style-type:disc">일반적으로 다음과 같이 계산합니다:<figure id="1f54d778-1cdc-8005-ac93-c90d2ecc5b98" class="equation"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><div class="equation-container"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>T</mi><mi>F</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mrow><mtext>단어 </mtext><mi>t</mi><mtext>의 빈도</mtext></mrow><mtext>문서 내 총 단어 수</mtext></mfrac></mrow><annotation encoding="application/x-tex">TF(t) = \frac{\text{단어 } t \text{의 빈도}}{\text{문서 내 총 단어 수}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">TF</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord hangul_fallback">문서</span><span class="mord"> </span><span class="mord hangul_fallback">내</span><span class="mord"> </span><span class="mord hangul_fallback">총</span><span class="mord"> </span><span class="mord hangul_fallback">단어</span><span class="mord"> </span><span class="mord hangul_fallback">수</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord hangul_fallback">단어</span><span class="mord"> </span></span><span class="mord mathnormal">t</span><span class="mord text"><span class="mord hangul_fallback">의</span><span class="mord"> </span><span class="mord hangul_fallback">빈도</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div></figure></li></ul></li></ol><ol type="1" id="1f54d778-1cdc-8055-a8da-e64c5eed3dc0" class="numbered-list" start="2"><li><strong>IDF (Inverse Document Frequency): 역문서 빈도</strong><ul id="1f54d778-1cdc-80ac-90b5-c43087a1db94" class="bulleted-list"><li style="list-style-type:disc">단어가 전체 문서 집합에서 얼마나 희귀한지를 측정합니다.</li></ul><ul id="1f54d778-1cdc-80e9-80ca-e612bad04a55" class="bulleted-list"><li style="list-style-type:disc">드물게 등장하는 단어일수록 더 높은 가중치를 부여합니다.<figure id="1f54d778-1cdc-80e4-b9bc-d49dbd60f526" class="equation"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><div class="equation-container"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>I</mi><mi>D</mi><mi>F</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>=</mo><mi>log</mi><mo>⁡</mo><mrow><mo fence="true">(</mo><mfrac><mtext>총 문서 수</mtext><mrow><mtext>단어 </mtext><mi>t</mi><mtext>를 포함한 문서 수</mtext><mo>+</mo><mn>1</mn></mrow></mfrac><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">IDF(t) = \log \left(\frac{\text{총 문서 수}}{\text{단어 } t \text{를 포함한 문서 수} + 1}\right)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.4em;vertical-align:-0.95em;"></span><span class="mop">lo<span style="margin-right:0.01389em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord hangul_fallback">단어</span><span class="mord"> </span></span><span class="mord mathnormal">t</span><span class="mord text"><span class="mord hangul_fallback">를</span><span class="mord"> </span><span class="mord hangul_fallback">포함한</span><span class="mord"> </span><span class="mord hangul_fallback">문서</span><span class="mord"> </span><span class="mord hangul_fallback">수</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord hangul_fallback">총</span><span class="mord"> </span><span class="mord hangul_fallback">문서</span><span class="mord"> </span><span class="mord hangul_fallback">수</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span></span></span></span></span></div></figure></li></ul><ul id="1f54d778-1cdc-8054-aa08-d60b8e2cd3ef" class="bulleted-list"><li style="list-style-type:disc"><code>+1</code>은 분모가 0이 되는 것을 방지하기 위한 스무딩(smoothing) 기법입니다.</li></ul></li></ol><ol type="1" id="1f54d778-1cdc-80ce-88fa-eefc6a7a3540" class="numbered-list" start="3"><li><strong>TF-IDF 계산</strong><ul id="1f54d778-1cdc-801d-910f-e7adb5f02754" class="bulleted-list"><li style="list-style-type:disc">TF와 IDF의 곱으로 최종 값을 계산합니다:<figure id="1f54d778-1cdc-80c6-85ad-d0b0ca3704ee" class="equation"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><div class="equation-container"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>T</mi><mi>F</mi><mtext>-</mtext><mi>I</mi><mi>D</mi><mi>F</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>=</mo><mi>T</mi><mi>F</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>×</mo><mi>I</mi><mi>D</mi><mi>F</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">TF\text{-}IDF(t) = TF(t) \times IDF(t)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">TF</span><span class="mord text"><span class="mord">-</span></span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">TF</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.07847em;">I</span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span></span></span></span></span></div></figure></li></ul></li></ol><h3 id="1f54d778-1cdc-803d-a854-e96cd44127e6" class=""><strong>3. TF-IDF의 작동 원리</strong></h3><h3 id="1f54d778-1cdc-809d-9dcd-db77ee574f22" class=""><strong>3.1. 단어 중요도를 측정</strong></h3><ul id="1f54d778-1cdc-8022-b482-fb7595bff1cf" class="bulleted-list"><li style="list-style-type:disc"><strong>높은 TF-IDF 점수</strong>: 특정 문서에서 자주 등장하지만, 다른 문서에서는 잘 나타나지 않는 단어.</li></ul><ul id="1fa4d778-1cdc-807b-944e-dd90641ef4fe" class="bulleted-list"><li style="list-style-type:disc"></li></ul><ul id="1f54d778-1cdc-80a6-aac1-fd242f357a08" class="bulleted-list"><li style="list-style-type:disc"><strong>은 TF-IDF 점수</strong>: 거의 모든 문서에서 자주 등장하거나, 해당 문서에서만 매우 적게 등장하는 단어.</li></ul><h3 id="1f54d778-1cdc-800a-9717-f8f4b884c12b" class=""><strong>3.2. 스톱워드(Stop Words) 처리</strong></h3><ul id="1f54d778-1cdc-80df-a17c-f9678860165e" class="bulleted-list"><li style="list-style-type:disc">&quot;the&quot;, &quot;is&quot;, &quot;and&quot; 같은 흔히 등장하는 단어는 TF-IDF 점수가 낮아집니다.</li></ul><ul id="1f54d778-1cdc-803b-a7b0-e5b2b9b9ba82" class="bulleted-list"><li style="list-style-type:disc">드물게 등장하는 단어는 점수가 높아져 문서 구별에 기여합니다</li></ul><h3 id="1f54d778-1cdc-806a-bc9c-fc28ef678fc0" class=""><strong>특징</strong></h3><ul id="1f54d778-1cdc-805e-aaad-c5468f68b310" class="bulleted-list"><li style="list-style-type:disc">흔히 등장하는 단어(예: &quot;the&quot;, &quot;is&quot;)의 중요도를 낮추고, 상대적으로 적게 등장하지만 의미가 중요한 단어에 가중치를 부여합니다.</li></ul><h3 id="1f54d778-1cdc-8000-b987-cb60b2e6fa7b" class=""><strong>장점</strong></h3><ul id="1f54d778-1cdc-8049-80de-d277225a1d8a" class="bulleted-list"><li style="list-style-type:disc">텍스트 데이터에서 중요한 단어를 강조할 수 있습니다.</li></ul><ul id="1f54d778-1cdc-8060-b246-ef80799d5b84" class="bulleted-list"><li style="list-style-type:disc">빠르게 계산 가능.</li></ul><h3 id="1f54d778-1cdc-8097-abd0-f7326cd5d842" class=""><strong>단점</strong></h3><ul id="1f54d778-1cdc-8094-adc9-e5a3fc057b90" class="bulleted-list"><li style="list-style-type:disc">단어 간 의미적 관계를 반영하지 못합니다.</li></ul><h3 id="1f54d778-1cdc-8007-8a80-cca3fbbc0ee2" class=""><strong>실습: TF-IDF</strong></h3><p id="1f54d778-1cdc-80b1-8eae-cd852646883c" class="">Python에서 Scikit-learn을 사용하여 TF-IDF를 계산할 수 있습니다.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1f54d778-1cdc-802e-9546-db80aef54973" class="code"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from sklearn.feature_extraction.text import TfidfVectorizer
+
+# 샘플 문장
+documents = [&quot;I like pizza&quot;, &quot;I love pizza&quot;, &quot;Pizza is great&quot;]
+
+# TF-IDF 계산
+vectorizer = TfidfVectorizer()
+tfidf = vectorizer.fit_transform(documents)
+
+# 결과 출력
+print(vectorizer.get_feature_names_out())  # 단어 리스트
+print(tfidf.toarray())  # TF-IDF 행렬</code></pre><hr id="1f54d778-1cdc-80d8-b1dd-ca97f0556feb"/></div></details><details open=""><summary style="font-weight:600;font-size:1.25em;line-height:1.3;margin:0"><strong>2.2. Word2Vec</strong></summary><div class="indented"><p id="1f54d778-1cdc-8087-8dbd-efe6631058a5" class="">Word2Vec은 단어를 고정된 크기의 실수 벡터로 변환하여 단어 간의 의미적 유사성을 반영합니다. 단어의 주변 문맥(context)을 학습하여 벡터를 생성합니다.</p><h3 id="1f54d778-1cdc-809e-a6ae-eca60c2fbf83" class=""><strong>1. Word2Vec의 기본 개념</strong></h3><p id="1f54d778-1cdc-8091-8822-c85e3548fc60" class="">Word2Vec은 텍스트 데이터에서 단어의 의미를 학습하기 위해, 단어가 <strong>문맥(Context)</strong> 내에서 어떻게 사용되는지를 분석합니다. Word2Vec은 주로 두 가지 방법론을 사용하여 단어 벡터를 학습합니다:</p><h3 id="1f54d778-1cdc-80d0-8560-fd667c58e302" class=""><strong>1.1. CBOW (Continuous Bag of Words)</strong></h3><ul id="1f54d778-1cdc-8076-8311-f2dc617661dd" class="bulleted-list"><li style="list-style-type:disc"><strong>아이디어:</strong> 주변 단어(Context Words)를 기반으로 중심 단어(Target Word)를 예측합니다.</li></ul><ul id="1f54d778-1cdc-8054-b3e1-df941ca0d213" class="bulleted-list"><li style="list-style-type:disc"><strong>예시:</strong>문장 &quot;The cat sat on the mat&quot;에서 &quot;sat&quot;이 중심 단어라면, CBOW는 <code>[The, cat, on, the, mat]</code>을 입력으로 받아 &quot;sat&quot;을 출력하도록 학습합니다.</li></ul><h3 id="1f54d778-1cdc-8014-a1a9-dd41f6901ab3" class=""><strong>1.2. Skip-gram</strong></h3><ul id="1f54d778-1cdc-804e-abfb-e3fdfe7d2064" class="bulleted-list"><li style="list-style-type:disc"><strong>아이디어:</strong> 중심 단어를 기반으로 주변 단어를 예측합니다.</li></ul><ul id="1f54d778-1cdc-80bb-9b20-f43cb6632f91" class="bulleted-list"><li style="list-style-type:disc"><strong>예시:</strong>동일한 문장에서 중심 단어 &quot;sat&quot;을 입력으로 주고, <code>[The, cat, on, the, mat]</code>을 예측하도록 학습합니다.</li></ul><figure id="1f54d778-1cdc-80c6-8d6f-e19150b6b17f" class="image"><a href="image%2060.png"><img style="width:356.984375px" src="image%2060.png"/></a></figure><hr id="1f54d778-1cdc-80a1-9b99-da79332eb618"/><h3 id="1f54d778-1cdc-8054-bdec-d4d7d9ba920c" class=""><strong>2. Word2Vec의 작동 방식</strong></h3><p id="1f54d778-1cdc-80af-86aa-ed2b02c461a7" class="">Word2Vec은 다음 과정을 통해 단어 벡터를 학습합니다:</p><h3 id="1f54d778-1cdc-803a-938c-c217780919d8" class=""><strong>2.1. 입력 데이터 처리</strong></h3><ul id="1f54d778-1cdc-8027-a4fd-ea487170ef8c" class="bulleted-list"><li style="list-style-type:disc">텍스트 데이터를 단어 단위로 분할한 후, 중심 단어와 주변 단어의 쌍을 생성합니다.</li></ul><ul id="1f54d778-1cdc-80ad-aba7-e8e6ee0e1a2d" class="bulleted-list"><li style="list-style-type:disc">예를 들어, &quot;I love natural language processing&quot;이라는 문장이 있을 때, 다음과 같은 중심-주변 쌍을 생성합니다:<ul id="1f54d778-1cdc-803d-9c27-eb0dc26f645e" class="bulleted-list"><li style="list-style-type:circle">중심 단어: &quot;love&quot; → 주변 단어: [&quot;I&quot;, &quot;natural&quot;, &quot;language&quot;]</li></ul><ul id="1f54d778-1cdc-80f4-a40a-ee7601e7ba5a" class="bulleted-list"><li style="list-style-type:circle">중심 단어: &quot;natural&quot; → 주변 단어: [&quot;love&quot;, &quot;language&quot;, &quot;processing&quot;]</li></ul></li></ul><h3 id="1f54d778-1cdc-8037-a7c6-e16ca2b4e0f1" class=""><strong>2.2. 단어 임베딩 학습</strong></h3><ul id="1f54d778-1cdc-80f2-9216-ca6d19fedf57" class="bulleted-list"><li style="list-style-type:disc">Word2Vec은 단어를 고차원 벡터 공간에서 학습하여 <strong>비슷한 문맥에서 사용되는 단어가 가까운 위치</strong>에 매핑되도록 합니다.</li></ul><ul id="1f54d778-1cdc-8007-b79a-db5bf95c6459" class="bulleted-list"><li style="list-style-type:disc">학습 과정에서 신경망(주로 얕은 신경망)을 사용하며, 손실 함수를 최소화하도록 가중치를 조정합니다.</li></ul><h3 id="1f54d778-1cdc-8096-9e1c-ceafa255c231" class=""><strong>2.3. 결과</strong></h3><ul id="1f54d778-1cdc-80b0-8df5-df336e280007" class="bulleted-list"><li style="list-style-type:disc">학습이 완료되면 각 단어는 고정된 크기의 벡터(예: 100차원)로 표현됩니다.</li></ul><ul id="1f54d778-1cdc-8003-9647-eafe060126eb" class="bulleted-list"><li style="list-style-type:disc">예:<ul id="1f54d778-1cdc-80df-8560-ca93cb44468c" class="bulleted-list"><li style="list-style-type:circle">&quot;king&quot; → <code>[0.4, -0.2, 0.8, ...]</code></li></ul><ul id="1f54d778-1cdc-8040-9127-dcf0e3c0e690" class="bulleted-list"><li style="list-style-type:circle">&quot;queen&quot; → <code>[0.5, -0.1, 0.9, ...]</code></li></ul></li></ul><h3 id="1f54d778-1cdc-80a2-8cf7-efd45a4cfbe7" class=""><strong>특징</strong></h3><ul id="1f54d778-1cdc-807d-867f-e13911096473" class="bulleted-list"><li style="list-style-type:disc">단어의 <strong>의미적 관계</strong>를 벡터로 표현합니다.</li></ul><ul id="1f54d778-1cdc-8078-80fd-ea0afeb57e15" class="bulleted-list"><li style="list-style-type:disc">예: &quot;king&quot;과 &quot;queen&quot;은 서로 유사한 벡터로 표현됩니다.</li></ul><h3 id="1f54d778-1cdc-802f-9e8f-fe92ea5a0596" class=""><strong>장점</strong></h3><ul id="1f54d778-1cdc-8063-9f37-d6b82dce3553" class="bulleted-list"><li style="list-style-type:disc">단어 간의 의미적 유사성을 반영할 수 있습니다.</li></ul><ul id="1f54d778-1cdc-8025-b2ba-e6e48dcd4f5a" class="bulleted-list"><li style="list-style-type:disc">벡터 크기가 고정되어 차원의 폭발 문제를 해결합니다.</li></ul><h3 id="1f54d778-1cdc-80ae-b898-d87ed3e77961" class=""><strong>단점</strong></h3><ul id="1f54d778-1cdc-80a6-bdec-c5eddffa894c" class="bulleted-list"><li style="list-style-type:disc">모델 학습에 많은 데이터와 시간이 필요합니다.</li></ul><h3 id="1f54d778-1cdc-809c-ad0c-dbe0ee82cf33" class=""><strong>실습: Word2Vec</strong></h3><p id="1f54d778-1cdc-803b-9d2b-c5be250508e0" class="">Python에서 Gensim 라이브러리를 사용하여 Word2Vec을 학습시킬 수 있습니다.</p><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1f54d778-1cdc-8053-962c-df1f7a5b23e7" class="code"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from gensim.models import Word2Vec
+
+# 샘플 문장
+sentences = [
+    [&quot;cat&quot;, &quot;sat&quot;, &quot;on&quot;, &quot;the&quot;, &quot;mat&quot;],
+    [&quot;dog&quot;, &quot;barked&quot;, &quot;at&quot;, &quot;the&quot;, &quot;cat&quot;],
+    [&quot;dog&quot;, &quot;sat&quot;, &quot;on&quot;, &quot;the&quot;, &quot;rug&quot;]
+]
+
+# Word2Vec 모델 학습
+model = Word2Vec(sentences, vector_size=10, window=2, min_count=1, sg=0)  # CBOW 방식
+
+# 단어 벡터 확인
+print(model.wv[&quot;cat&quot;])  # &#x27;cat&#x27;의 벡터 출력
+
+# 단어 유사도 계산
+print(model.wv.similarity(&quot;cat&quot;, &quot;dog&quot;))  # &#x27;cat&#x27;과 &#x27;dog&#x27;의 유사도</code></pre><hr id="1f54d778-1cdc-8010-a5ce-f28d4a4f17be"/></div></details><details open=""><summary style="font-weight:600;font-size:1.25em;line-height:1.3;margin:0"><strong>2.3. GloVe (Global Vectors for Word Representation)</strong></summary><div class="indented"><h3 id="1f54d778-1cdc-8028-802e-c3a68edf1b26" class=""><strong>1. GloVe란 무엇인가?</strong></h3><p id="1f54d778-1cdc-803a-943c-c9ca72ac24db" class="">GloVe는 <strong>단어의 의미를 벡터로 표현</strong>하는 기법으로, Stanford University의 연구팀이 개발했습니다. GloVe의 주요 특징은, <strong>단어 간의 전역적 통계 정보(Global Co-occurrence Statistics)를 활용</strong>하여 임베딩 벡터를 생성한다는 점입니다. Word2Vec과 유사하지만, 동시 등장 확률(Co-occurrence Probability)을 기반으로 단어 간의 관계를 학습하며, 전역적인 의미를 반영합니다.</p><hr id="1f54d778-1cdc-80fc-8da2-d1d446ed852f"/><h3 id="1f54d778-1cdc-806d-92d8-e22868e6814c" class=""><strong>2. GloVe의 작동 원리</strong></h3><p id="1f54d778-1cdc-8008-9c49-f2f86f36a83c" class="">GloVe는 단어 벡터를 학습하기 위해 **동시 등장 행렬(Co-occurrence Matrix)**을 생성하고, 이를 바탕으로 벡터를 최적화합니다.</p><h3 id="1f54d778-1cdc-8002-85ec-da3e4388f5b1" class=""><strong>2.1. 동시 등장 행렬</strong></h3><ul id="1f54d778-1cdc-80d2-9e27-c6d177371e4a" class="bulleted-list"><li style="list-style-type:disc"><strong>정의:</strong><p id="1f54d778-1cdc-80b2-99b2-fcf39e04924d" class="">단어 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">w_i</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>와 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">w_j</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>가 같은 문맥에서 등장한 횟수를 나타내는 행렬.</p></li></ul><ul id="1f54d778-1cdc-80c3-ac05-c03e6c3adefe" class="bulleted-list"><li style="list-style-type:disc"><strong>예:</strong><p id="1f54d778-1cdc-808d-bae1-fa9a61998670" class="">단어 집합이 [&quot;apple&quot;, &quot;banana&quot;, &quot;fruit&quot;, &quot;tree&quot;]인 경우:</p><table id="1f54d778-1cdc-801e-9fd1-e62b3a99697c" class="simple-table"><tbody><tr id="1f54d778-1cdc-80a3-ab05-ddd031449b5c"><td id="f^cv" class=""></td><td id="Et]r" class="">apple</td><td id="`;pl" class="">banana</td><td id="zRm]" class="">fruit</td><td id="Lzi^" class="">tree</td></tr><tr id="1f54d778-1cdc-8076-bec9-c5ace3288262"><td id="f^cv" class="">apple</td><td id="Et]r" class="">0</td><td id="`;pl" class="">3</td><td id="zRm]" class="">5</td><td id="Lzi^" class="">2</td></tr><tr id="1f54d778-1cdc-803b-8643-e3b4cde7cf16"><td id="f^cv" class="">banana</td><td id="Et]r" class="">3</td><td id="`;pl" class="">0</td><td id="zRm]" class="">4</td><td id="Lzi^" class="">1</td></tr><tr id="1f54d778-1cdc-80fe-bb3a-d901172aaca5"><td id="f^cv" class="">fruit</td><td id="Et]r" class="">5</td><td id="`;pl" class="">4</td><td id="zRm]" class="">0</td><td id="Lzi^" class="">3</td></tr><tr id="1f54d778-1cdc-804a-8a83-e97a5133c7c0"><td id="f^cv" class="">tree</td><td id="Et]r" class="">2</td><td id="`;pl" class="">1</td><td id="zRm]" class="">3</td><td id="Lzi^" class="">0</td></tr></tbody></table></li></ul><h3 id="1f54d778-1cdc-80fd-9cb0-c1629c967603" class=""><strong>2.2. 동시 등장 확률</strong></h3><ul id="1f54d778-1cdc-8014-9b19-f1c333d3258d" class="bulleted-list"><li style="list-style-type:disc"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><msub><mi>w</mi><mi>j</mi></msub><mi mathvariant="normal">∣</mi><msub><mi>w</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(w_j | w_i)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span><span>﻿</span></span>: 단어 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">w_j</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>가 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">w_i</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>의 문맥에서 등장할 확률.<figure id="1f54d778-1cdc-80d5-85d4-ebfc76742e89" class="equation"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><div class="equation-container"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><msub><mi>w</mi><mi>j</mi></msub><mi mathvariant="normal">∣</mi><msub><mi>w</mi><mi>i</mi></msub><mo stretchy="false">)</mo><mo>=</mo><mfrac><msub><mi>X</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mrow><munder><mo>∑</mo><mi>k</mi></munder><msub><mi>X</mi><mrow><mi>i</mi><mi>k</mi></mrow></msub></mrow></mfrac></mrow><annotation encoding="application/x-tex">P(w_j | w_i) = \frac{X_{ij}}{\sum_k X_{ik}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.346em;vertical-align:-0.9857em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1864em;"><span style="top:-2.4003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2997em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0785em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03148em;">ik</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0785em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">ij</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9857em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></div></figure><p id="1f54d778-1cdc-8024-9d9a-c716cc9817cb" class="">여기서 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>X</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">X_{ij}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0785em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">ij</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>는 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">w_i</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>와 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">w_j</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>의 동시 등장 빈도.</p></li></ul><h3 id="1f54d778-1cdc-80f9-a06e-f9e03a3ef90b" class=""><strong>2.3. GloVe의 목적</strong></h3><ul id="1f54d778-1cdc-80e8-bcdf-ff972f976aa5" class="bulleted-list"><li style="list-style-type:disc">단어 벡터가 다음 관계를 만족하도록 최적화:<figure id="1f54d778-1cdc-805d-bb2a-d4897fd331e6" class="equation"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><div class="equation-container"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>F</mi><mo stretchy="false">(</mo><msub><mi>w</mi><mi>i</mi></msub><mo separator="true">,</mo><msub><mi>w</mi><mi>j</mi></msub><mo separator="true">,</mo><mtext>context</mtext><mo stretchy="false">)</mo><mo>=</mo><mi>log</mi><mo>⁡</mo><mo stretchy="false">(</mo><msub><mi>X</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">F(w_i, w_j, \text{context}) = \log(X_{ij})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord text"><span class="mord">context</span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mop">lo<span style="margin-right:0.01389em;">g</span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0785em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">ij</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span></div></figure><ul id="1f54d778-1cdc-8062-9950-cc976dd59879" class="bulleted-list"><li style="list-style-type:circle"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">w_i</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>: 중심 단어.</li></ul><ul id="1f54d778-1cdc-80c6-b986-c78998755b3d" class="bulleted-list"><li style="list-style-type:circle"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">w_j</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>: 문맥 단어.</li></ul><ul id="1f54d778-1cdc-807f-8081-e941c0e286cd" class="bulleted-list"><li style="list-style-type:circle"><style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>X</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">X_{ij}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.07847em;">X</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0785em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">ij</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span> : <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">w_i</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>와 <style>@import url('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css')</style><span data-token-index="0" contenteditable="false" class="notion-text-equation-token" style="user-select:all;-webkit-user-select:all;-moz-user-select:all"><span></span><span><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>w</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">w_j</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02691em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.05724em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span></span><span>﻿</span></span>의 동시 등장 빈도.</li></ul></li></ul><h3 id="1f54d778-1cdc-803a-ad9b-e698683be2d3" class="">특징</h3><ul id="1f54d778-1cdc-80a7-a5ea-f1f3eac4303c" class="bulleted-list"><li style="list-style-type:disc"> Word2Vec과 달리, <strong>동시 등장 행렬(co-occurrence matrix)</strong>을 기반으로 학습합니다.</li></ul><ul id="1f54d778-1cdc-8062-87d8-c741006a716c" class="bulleted-list"><li style="list-style-type:disc">단어가 문맥에서 얼마나 자주 함께 등장하는지를 수치화하여 벡터를 학습합니다.</li></ul><h3 id="1f54d778-1cdc-80de-91e4-d74f6fd15ae4" class=""><strong>장점:</strong></h3><ul id="1f54d778-1cdc-801f-b6f8-c1c974bcd9ea" class="bulleted-list"><li style="list-style-type:disc">전역적인 의미를 학습: 단어 간의 관계를 문맥에 제한되지 않고 전반적으로 학습합니다.</li></ul><ul id="1f54d778-1cdc-8023-b53d-d1e90cec19b0" class="bulleted-list"><li style="list-style-type:disc">이미 학습된 GloVe 모델을 쉽게 사용할 수 있음 (사전 학습된 벡터 제공).</li></ul><h3 id="1f54d778-1cdc-8075-a791-c086da671fec" class=""><strong>단점:</strong></h3><ul id="1f54d778-1cdc-804e-914c-cd8fe9811291" class="bulleted-list"><li style="list-style-type:disc">Word2Vec보다 느리고, 많은 메모리를 요구함.</li></ul><ul id="1f54d778-1cdc-80d1-965c-fc48335a2f66" class="bulleted-list"><li style="list-style-type:disc"><strong>사용 사례:</strong> 대규모 텍스트 데이터에서 단어 간의 전역적 의미를 추출할 때.</li></ul><h3 id="1f54d778-1cdc-8007-8219-d66d7dfcb6df" class=""><strong>사전 학습된 GloVe 사용 예시</strong></h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1f54d778-1cdc-806e-8b91-ea3d8f004999" class="code"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from gensim.scripts.glove2word2vec import glove2word2vec
+from gensim.models import KeyedVectors
+
+# GloVe 파일 경로
+glove_input_file = &#x27;glove.6B.50d.txt&#x27;  # GloVe 벡터 파일
+word2vec_output_file = &#x27;glove.6B.50d.word2vec&#x27;
+
+# GloVe 형식을 Word2Vec 형식으로 변환
+glove2word2vec(glove_input_file, word2vec_output_file)
+
+# 모델 로드
+model = KeyedVectors.load_word2vec_format(word2vec_output_file, binary=False)
+
+# 단어 벡터 확인
+print(model[&#x27;king&#x27;])
+
+# 벡터 연산
+result = model.most_similar(positive=[&#x27;king&#x27;, &#x27;woman&#x27;], negative=[&#x27;man&#x27;])
+print(result)  # 예상 출력: [(&#x27;queen&#x27;, 높은 유사도 점수)]
+</code></pre></div></details><details open=""><summary style="font-weight:600;font-size:1.25em;line-height:1.3;margin:0"><strong>2.4. Transformer-based Embedding (BERT, GPT, etc.)</strong></summary><div class="indented"><ul id="1f54d778-1cdc-80cf-b788-feddc3efa093" class="bulleted-list"><li style="list-style-type:disc"><strong>특징:</strong> BERT나 GPT와 같은 <strong>사전 학습된 Transformer 모델</strong>에서 텍스트 임베딩을 추출합니다.<ul id="1f54d778-1cdc-8023-9b77-d5348a351a7a" class="bulleted-list"><li style="list-style-type:circle">문맥의 영향을 받는 동적인 벡터를 생성하며, 같은 단어도 문맥에 따라 다른 벡터를 가질 수 있습니다.</li></ul></li></ul><ul id="1f54d778-1cdc-804a-8d78-c6060ba3dedb" class="bulleted-list"><li style="list-style-type:disc"><strong>장점:</strong><ul id="1f54d778-1cdc-8089-b0fe-ff29d935dbe4" class="bulleted-list"><li style="list-style-type:circle">문맥 의존적 벡터 생성: 단어의 다양한 의미를 학습.</li></ul><ul id="1f54d778-1cdc-8003-a0bb-e99605312b3d" class="bulleted-list"><li style="list-style-type:circle">최신 NLP 작업에서 높은 성능.</li></ul></li></ul><ul id="1f54d778-1cdc-80eb-976f-d31523476b78" class="bulleted-list"><li style="list-style-type:disc"><strong>단점:</strong><ul id="1f54d778-1cdc-80fb-8462-c0c8e95128a6" class="bulleted-list"><li style="list-style-type:circle">모델 크기가 크고 계산 비용이 높음.</li></ul></li></ul><ul id="1f54d778-1cdc-80d0-bab2-c18eaacf3395" class="bulleted-list"><li style="list-style-type:disc"><strong>사용 사례:</strong> 텍스트 분류, 감정 분석, 질의응답 시스템 등 고급 NLP 작업.</li></ul><h3 id="1f54d778-1cdc-8068-ad07-d390a152ab2b" class=""><strong>Hugging Face Transformers 라이브러리 사용 예시</strong></h3><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1f54d778-1cdc-806c-a538-e86f885003df" class="code"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from transformers import BertTokenizer, BertModel
+import torch
+
+# BERT 모델과 토크나이저 로드
+tokenizer = BertTokenizer.from_pretrained(&#x27;bert-base-uncased&#x27;)
+model = BertModel.from_pretrained(&#x27;bert-base-uncased&#x27;)
+
+# 입력 텍스트 임베딩 생성
+text = &quot;Natural language processing is fascinating.&quot;
+inputs = tokenizer(text, return_tensors=&quot;pt&quot;)
+outputs = model(**inputs)
+
+# 문장의 임베딩 벡터
+sentence_embedding = outputs.last_hidden_state.mean(dim=1)
+print(sentence_embedding)
+</code></pre></div></details></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>
