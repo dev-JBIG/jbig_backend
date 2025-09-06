@@ -2,16 +2,9 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.conf import settings
 
-class Role(models.Model):
-    name = models.CharField(max_length=50, unique=True)
-
-    class Meta:
-        db_table = 'role'
-        verbose_name = '역할'
-        verbose_name_plural = '역할 목록'
-
-    def __str__(self):
-        return self.name
+from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.db import models
+from django.conf import settings
 
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password=None, **extra_fields):
@@ -19,14 +12,11 @@ class UserManager(BaseUserManager):
             raise ValueError('The Email field must be set')
         email = self.normalize_email(email)
         
-        role_name = extra_fields.pop('role', 'user')
-        try:
-            role = Role.objects.get(name=role_name)
-        except Role.DoesNotExist:
-            role = Role.objects.create(name=role_name)
-
+        extra_fields.setdefault('is_staff', False)
+        extra_fields.setdefault('is_superuser', False)
         extra_fields.setdefault('is_active', False)
-        user = self.model(email=email, username=username, role=role, **extra_fields)
+
+        user = self.model(email=email, username=username, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -41,14 +31,11 @@ class UserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError('Superuser must have is_superuser=True.')
 
-        extra_fields['role'] = 'admin'
-        
         return self.create_user(email, username, password, **extra_fields)
 
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     username = models.CharField(max_length=150, unique=True)
-    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, related_name='users')
     semester = models.PositiveIntegerField(
         verbose_name='기수',
         null=True,
@@ -58,8 +45,7 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(null=True, blank=True)
 
-    groups = None
-    user_permissions = None
+    # groups and user_permissions are inherited from AbstractUser, no need to set to None
 
     objects = UserManager()
 

@@ -4,8 +4,11 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
+from django.contrib.postgres.search import SearchQuery, SearchRank
+from django.db.models import F, Q
+from bs4 import BeautifulSoup
 
 from .models import Board, Post, Comment, Category, Attachment
 from .serializers import (
@@ -13,8 +16,6 @@ from .serializers import (
     CommentSerializer, CategoryWithBoardsSerializer, AttachmentSerializer, PostDetailResponseSerializer,
     CategoryListResponseSerializer, PostListResponseSerializer
 )
-from django.db.models import Q
-from bs4 import BeautifulSoup
 from .permissions import (
     IsOwnerOrReadOnly,
     IsBoardReadable,
@@ -22,8 +23,6 @@ from .permissions import (
     IsCommentWritable,
     PostDetailPermission
 )
-
-from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 @extend_schema(
     tags=['게시글'],
@@ -54,7 +53,7 @@ class PostLikeAPIView(generics.GenericAPIView):
 @extend_schema(
     tags=['게시글'],
     summary="게시글 검색",
-    description="제목, 작성자, 내용(HTML)을 기준으로 게시글을 검색합니다. 권한에 따라 검색 결과가 필터링됩니다.",
+    description="제목, 내용, 작성자명을 기준으로 게시글을 검색합니다. 사용자의 권한에 따라 접근 가능한 게시글 내에서만 검색이 수행됩니다.",
     parameters=[
         OpenApiParameter(
             name='q',
@@ -70,66 +69,59 @@ class PostSearchView(generics.ListAPIView):
 
     def get_queryset(self):
         query = self.request.query_params.get('q', None)
-        board_id = self.kwargs.get('board_id', None)
-        user = self.request.user
-
         if not query:
             return Post.objects.none()
 
-        # Start with a base queryset respecting board-level read permissions
-        if user.is_authenticated and user.is_staff:
-            base_queryset = Post.objects.all()
-        else:
-            # Anonymous and non-staff users can only search in public boards
-            base_queryset = Post.objects.filter(board__read_permission='all')
+        board_id = self.kwargs.get('board_id', None)
+        user = self.request.user
 
         if board_id:
-            # Further filter by the specific board if a board_id is provided
-            base_queryset = base_queryset.filter(board_id=board_id)
+            board = get_object_or_404(Board, id=board_id)
+            if board.read_permission == 'staff' and not (user.is_authenticated and user.is_staff):
+                return Post.objects.none()
+            base_queryset = Post.objects.filter(board_id=board_id)
+        else:
+            base_queryset = Post.objects.all()
+            if not (user.is_authenticated and user.is_staff):
+                base_queryset = base_queryset.filter(board__read_permission='all')
 
-        # Filter based on post_type visibility
-        if not (user.is_authenticated and user.is_staff):
-            base_queryset = base_queryset.exclude(post_type=2) # Exclude Staff Only
-            if user.is_authenticated:
-                # Authenticated non-staff can see default posts, and their own justification letters
-                base_queryset = base_queryset.filter(Q(post_type=1) | Q(post_type=3, author=user))
-            else:
-                # Anonymous users can only see default posts
-                base_queryset = base_queryset.filter(post_type=1)
+        queryset = base_queryset.visible_for_user(user)
 
-        # Perform search on the filtered queryset
-        db_search_filter = Q(title__icontains=query) | Q(author__username__icontains=query)
-        db_results = base_queryset.filter(db_search_filter)
-        db_result_ids = set(db_results.values_list('id', flat=True))
-
-        content_match_ids = set()
-        # Clone the queryset to avoid issues with further filtering
-        posts_to_scan = base_queryset.all()
+        search_query = SearchQuery(query, search_type='websearch')
+        search_filter = Q(search_vector=search_query) | Q(author__username__icontains=query)
         
-        for post in posts_to_scan:
-            if post.content_html and hasattr(post.content_html, 'path'):
-                try:
-                    with open(post.content_html.path, 'r', encoding='utf-8') as f:
-                        soup = BeautifulSoup(f, 'html.parser')
-                        content_text = soup.get_text()
-                        if query.lower() in content_text.lower():
-                            content_match_ids.add(post.id)
-                except (FileNotFoundError, Exception):
-                    continue
-        
-        final_ids = db_result_ids.union(content_match_ids)
-        
-        if not final_ids:
-            return Post.objects.none()
+        queryset = queryset.annotate(
+            rank=SearchRank(F('search_vector'), search_query)
+        ).filter(search_filter).order_by('-rank', '-created_at')
 
-        return Post.objects.filter(id__in=final_ids).order_by('-created_at')
+        return queryset
+
+@extend_schema(
+    tags=['게시글'],
+    summary="전체 게시글 검색",
+    description="모든 게시판의 게시글을 대상으로 검색합니다. 사용자의 권한에 따라 접근 가능한 게시글 내에서만 검색이 수행됩니다.",
+    parameters=[
+        OpenApiParameter(
+            name='q',
+            description='검색할 키워드',
+            required=True,
+            type=str,
+            location=OpenApiParameter.QUERY
+        ),
+    ]
+)
+class AllPostSearchView(PostSearchView):
+    def get_queryset(self):
+        self.kwargs['board_id'] = None
+        return super().get_queryset()
+
 
 @extend_schema(tags=['게시판'])
 @extend_schema_view(
     list=extend_schema(
         summary="카테고리별 게시판 목록 조회",
         description="모든 카테고리와 해당 카테고리에 속한 게시판 목록을 조회합니다. 응답의 최상단에는 전체 게시글의 수가 포함됩니다.",
-        responses={200: CategoryListResponseSerializer}
+        responses={200: CategoryListResponseSerializer},
     )
 )
 class BoardListViewSet(viewsets.ViewSet):
@@ -161,32 +153,23 @@ class BoardListAPIView(generics.ListAPIView):
 @extend_schema_view(
     get=extend_schema(
         summary="게시글 목록 조회",
-        description="""특정 게시판의 정보 및 게시글 목록을 조회합니다.
-- **권한 (Board Level)**: 게시판의 `read_permission` 설정에 따라 접근이 제어됩니다.
-  - `all`: 누구나 조회 가능
-  - `staff`: 스태프만 조회 가능
-- **필터링 (Post Level)**: 사용자의 권한에 따라 조회되는 게시글이 필터링됩니다.
-  - **스태프**: 모든 게시글 조회 가능
-  - **인증된 사용자**: '스태프 전용'(`post_type=2`) 게시글을 제외하고, 본인이 작성한 '해명글'(`post_type=3`)과 '일반'(`post_type=1`) 게시글 조회 가능
-  - **익명 사용자**: '일반'(`post_type=1`) 게시글만 조회 가능""",
+        description="""특정 게시판의 정보 및 게시글 목록을 조회합니다.\n- **게시판 접근 권한**: 게시판의 `read_permission` 설정에 따라 접근이 제어됩니다.\n- **게시글 필터링**: 사용자의 권한(스태프, 인증 여부)에 따라 조회되는 게시글이 자동으로 필터링됩니다. (예: 스태프 전용 글, 본인 작성 해명글 등) """,
         responses={
             200: PostListResponseSerializer,
             403: OpenApiResponse(description="게시판에 대한 읽기 권한이 없습니다."),
             404: OpenApiResponse(description="존재하지 않는 게시판입니다."),
-        }
+        },
     ),
     post=extend_schema(
         summary="게시글 생성",
-        description="""특정 게시판에 새로운 게시글을 작성합니다.
-- **권한 (Board Level)**: 게시판의 `post_permission` 설정에 따라 접근이 제어됩니다.
-  - `all`: 인증된 사용자 누구나 작성 가능
-  - `staff`: 스태프만 작성 가능""",
+        description="""특정 게시판에 새로운 게시글을 작성합니다.\n- **권한 (Board Level)**: 게시판의 `post_permission` 설정에 따라 접근이 제어됩니다.\n  - `all`: 인증된 사용자 누구나 작성 가능\n  - `staff`: 스태프만 작성 가능""",
+        request=PostCreateUpdateSerializer,
         responses={
             201: PostListSerializer,
             400: OpenApiResponse(description="잘못된 요청 데이터입니다."),
             403: OpenApiResponse(description="게시판에 대한 쓰기 권한이 없습니다."),
             404: OpenApiResponse(description="존재하지 않는 게시판입니다."),
-        }
+        },
     )
 )
 class PostListCreateAPIView(generics.ListCreateAPIView):
@@ -206,24 +189,10 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         board_id = self.kwargs.get('board_id')
-        user = self.request.user
-        
-        queryset = Post.objects.filter(board_id=board_id)
-
-        if not (user.is_authenticated and user.is_staff):
-            queryset = queryset.exclude(post_type=2) # Exclude Staff Only
-            if user.is_authenticated:
-                # Authenticated non-staff can see default posts, and their own justification letters
-                queryset = queryset.filter(Q(post_type=1) | Q(post_type=3, author=user))
-            else:
-                # Anonymous users can only see default posts
-                queryset = queryset.filter(post_type=1)
-            
-        return queryset.order_by('-created_at')
+        return Post.objects.filter(board_id=board_id).visible_for_user(self.request.user).order_by('-created_at')
 
     def get_object(self):
         board_id = self.kwargs.get(self.lookup_url_kwarg)
-        # check_object_permissions will be called on this object by the permission classes
         obj = get_object_or_404(Board, pk=board_id)
         self.check_object_permissions(self.request, obj)
         return obj
@@ -236,8 +205,14 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             paginated_response = self.get_paginated_response(serializer.data)
-            paginated_response.data['board'] = BoardSerializer(board, context={'request': request}).data
-            return paginated_response
+            response_data = {
+                'board': BoardSerializer(board, context={'request': request}).data,
+                'count': paginated_response.data['count'],
+                'next': paginated_response.data['next'],
+                'previous': paginated_response.data['previous'],
+                'posts': paginated_response.data['results']
+            }
+            return Response(response_data)
 
         serializer = self.get_serializer(queryset, many=True)
         response_data = {
@@ -255,18 +230,12 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
 @extend_schema_view(
     get=extend_schema(
         summary="게시글 상세 조회",
-        description='''게시글의 상세 정보를 조회합니다.
-- **권한 (Board Level)**: 먼저 게시판의 `read_permission`을 확인합니다.
-- **권한 (Post Level)**: 그 다음, 게시글의 `post_type`에 따라 상세 조회 권한이 결정됩니다.
-  - `1` (일반): 게시판 읽기 권한이 있으면 누구나 조회 가능
-  - `2` (스태프 전용): 스태프만 조회 가능
-  - `3` (해명글): 작성자 또는 스태프만 조회 가능
-- **조회수 증가**: 이 API를 호출하면 해당 게시글의 조회수가 1 증가합니다.''',
+        description='''''게시글의 상세 정보를 조회합니다.\n- **권한 (Board Level)**: 먼저 게시판의 `read_permission`을 확인합니다.\n- **권한 (Post Level)**: 그 다음, 게시글의 `post_type`에 따라 상세 조회 권한이 결정됩니다.\n  - `DEFAULT` (일반): 게시판 읽기 권한이 있으면 누구나 조회 가능\n  - `STAFF_ONLY` (스태프 전용): 스태프만 조회 가능\n  - `JUSTIFICATION_LETTER` (해명글): 작성자 또는 스태프만 조회 가능\n- **조회수 증가**: 이 API를 호출하면 해당 게시글의 조회수가 1 증가합니다.''''', 
         responses={
             200: PostDetailResponseSerializer,
             403: OpenApiResponse(description="게시글을 읽을 권한이 없습니다."),
             404: OpenApiResponse(description="존재하지 않는 게시글입니다."),
-        }
+        },
     ),
     put=extend_schema(summary="게시글 수정", description="작성자 또는 스태프만 게시글을 수정할 수 있습니다."),
     patch=extend_schema(summary="게시글 부분 수정", description="작성자 또는 스태프만 게시글을 부분 수정할 수 있습니다."),
@@ -280,7 +249,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
             return PostCreateUpdateSerializer
-        return PostDetailResponseSerializer
+        return PostDetailSerializer  
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -295,10 +264,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     get=extend_schema(summary="댓글 목록 조회"),
     post=extend_schema(
         summary="댓글 생성",
-        description="""특정 게시글에 새로운 댓글을 작성합니다.
-- **권한 (Board Level)**: 게시판의 `comment_permission` 설정에 따라 접근이 제어됩니다.
-  - `all`: 인증된 사용자 누구나 작성 가능
-  - `staff`: 스태프만 작성 가능""",
+        description="""특정 게시글에 새로운 댓글을 작성합니다.\n- **권한 (Board Level)**: 게시판의 `comment_permission` 설정에 따라 접근이 제어됩니다.\n  - `all`: 인증된 사용자 누구나 작성 가능\n  - `staff`: 스태프만 작성 가능""",
     )
 )
 class CommentListCreateAPIView(generics.ListCreateAPIView):
@@ -335,7 +301,10 @@ class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 @extend_schema(tags=['첨부파일'])
 @extend_schema_view(
-    post=extend_schema(summary="File 첨부")
+    post=extend_schema(
+        summary="File 첨부",
+        description="서버에 파일을 업로드하고 첨부파일 ID를 반환합니다. 파일 크기는 10MB로 제한되며, 허용된 파일 형식만 업로드할 수 있습니다."
+    )
 )
 class AttachmentCreateAPIView(generics.CreateAPIView):
     queryset = Attachment.objects.all()
@@ -347,17 +316,39 @@ class AttachmentCreateAPIView(generics.CreateAPIView):
         file = request.data.get('file')
         if not file:
             return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
-        # ... validation logic ...
+
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+        if file.size > MAX_FILE_SIZE:
+            return Response(
+                {"error": f"File size exceeds the limit of {MAX_FILE_SIZE // 1024 // 1024} MB."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        ALLOWED_MIME_TYPES = [
+            'image/jpeg', 'image/png', 'image/gif', 'application/pdf',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'text/plain', 'application/zip', 'application/x-7z-compressed',
+            'application/x-hwp', 'application/haansofthwp'
+        ]
+        if file.content_type not in ALLOWED_MIME_TYPES:
+            return Response(
+                {"error": f"File type '{file.content_type}' is not allowed."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(filename=self.request.data.get('file').name)
 
+
 @extend_schema(tags=['게시글'])
 @extend_schema_view(
     get=extend_schema(
         summary="전체 게시글 목록 조회",
-        description="모든 게시판의 게시글 목록을 조회합니다. 권한에 따라 필터링됩니다.",
+        description="모든 게시판의 게시글 목록을 조회합니다. 사용자의 권한에 따라 접근 가능한 게시판 및 게시글만 필터링되어 보여집니다.",
     )
 )
 class AllPostListAPIView(generics.ListAPIView):
@@ -366,40 +357,12 @@ class AllPostListAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        
-        queryset = Post.objects.all()
+        queryset = Post.objects.visible_for_user(user)
         
         if not (user.is_authenticated and user.is_staff):
             queryset = queryset.filter(board__read_permission='all')
-            queryset = queryset.exclude(post_type=2) # Exclude Staff Only
-            if user.is_authenticated:
-                queryset = queryset.filter(Q(post_type=1) | Q(post_type=3, author=user))
-            else:
-                queryset = queryset.filter(post_type=1)
                 
         return queryset.order_by('-created_at')
-
-
-@extend_schema(tags=['게시글'])
-@extend_schema_view(
-    get=extend_schema(
-        summary="전체 게시글 검색",
-        description="모든 게시판의 게시글을 대상으로 검색합니다. 권한에 따라 필터링됩니다.",
-        parameters=[
-            OpenApiParameter(
-                name='q',
-                description='검색할 키워드',
-                required=True,
-                type=str,
-                location=OpenApiParameter.QUERY
-            ),
-        ]
-    )
-)
-class AllPostSearchView(PostSearchView):
-    def get_queryset(self):
-        self.kwargs['board_id'] = None
-        return super().get_queryset()
 
 
 @extend_schema(tags=['게시판'])

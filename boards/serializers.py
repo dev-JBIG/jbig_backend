@@ -89,6 +89,13 @@ class CommentSerializer(serializers.ModelSerializer):
             return obj.author == user or user.is_staff
         return False
 
+    def validate_content(self, value):
+        # Strip all HTML tags from comments to prevent XSS.
+        sanitized_content = bleach.clean(value, tags=[], strip=True).strip()
+        if not sanitized_content:
+            raise serializers.ValidationError("Content cannot be empty.")
+        return sanitized_content
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         if instance.is_deleted:
@@ -127,7 +134,24 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         fields = ['title', 'content_html', 'attachment_ids', 'post_type']
 
     def _save_html_content(self, instance, html_string):
-        sanitized_html = html_string
+        # Define allowed tags and attributes for sanitization to prevent XSS attacks
+        allowed_tags = [
+            'p', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'br', 'blockquote', 'li', 'ol', 'ul',
+            'a', 'img', 'pre', 'code', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'
+        ]
+        allowed_attributes = {
+            '*': ['class', 'style'],
+            'a': ['href', 'title', 'target'],
+            'img': ['src', 'alt', 'title', 'style', 'width', 'height'],
+        }
+        # Sanitize the input HTML
+        sanitized_html = bleach.clean(
+            html_string,
+            tags=allowed_tags,
+            attributes=allowed_attributes,
+            strip=True  # Strip disallowed tags instead of escaping them
+        )
+
         file_name = f"{uuid.uuid4()}.html"
         instance.content_html.save(file_name, ContentFile(sanitized_html), save=False)
 
@@ -137,6 +161,11 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         post = Post(**validated_data)
         self._save_html_content(post, html_content)
         post.save()
+
+        # Update search vector after the file is saved.
+        post.update_search_vector()
+        post.save(update_fields=['search_vector'])
+
         if attachment_ids:
             post.attachments.set(attachment_ids)
         return post
@@ -146,7 +175,13 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         html_content = validated_data.pop('content_html', None)
         if html_content is not None:
             self._save_html_content(instance, html_content)
+
         instance = super().update(instance, validated_data)
+        
+        # Update search vector after content is updated.
+        instance.update_search_vector()
+        instance.save(update_fields=['search_vector'])
+
         if attachment_ids is not None:
             instance.attachments.set(attachment_ids)
         return instance
