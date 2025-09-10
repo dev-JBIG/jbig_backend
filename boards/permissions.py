@@ -19,6 +19,7 @@ class IsBoardReadable(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         board = None
+        obj = None
         # In PostListCreateAPIView, get_object() is overridden to return the board.
         if hasattr(view, 'get_object'):
             obj = view.get_object()
@@ -30,6 +31,11 @@ class IsBoardReadable(permissions.BasePermission):
         
         if not board:
             return False
+
+        # If the post is a justification letter, bypass board-level read permission.
+        # The PostDetailPermission will handle the fine-grained check.
+        if isinstance(obj, Post) and obj.post_type == Post.PostType.JUSTIFICATION_LETTER:
+            return True
 
         read_perm = getattr(board, 'read_permission', 'staff')
 
@@ -97,17 +103,25 @@ class IsCommentWritable(permissions.BasePermission):
 class PostDetailPermission(permissions.BasePermission):
     """
     Object-level permission for post detail view.
-    Checks post.post_type to determine readability.
+    Checks post.post_type to determine readability for SAFE_METHODS.
+    For other methods, it checks for ownership.
     """
     def has_object_permission(self, request, view, obj):
-        # obj is a Post instance
-        if obj.post_type == Post.PostType.STAFF_ONLY:
-            return request.user.is_authenticated and request.user.is_staff
-        
-        if obj.post_type == Post.PostType.JUSTIFICATION_LETTER:
-            return request.user.is_authenticated and (obj.author == request.user or request.user.is_staff)
+        # Handle READ permissions for safe methods (GET, HEAD, OPTIONS)
+        if request.method in permissions.SAFE_METHODS:
+            if obj.post_type == Post.PostType.JUSTIFICATION_LETTER:
+                return request.user.is_authenticated and (obj.author.id == request.user.id or request.user.is_staff)
 
-        return True
+            return True # For DEFAULT and STAFF_ONLY posts, allow read
+
+        # Handle WRITE permissions (PUT, PATCH, DELETE)
+        if not request.user.is_authenticated:
+            return False
+
+        if hasattr(obj, 'author'):
+            return obj.author == request.user or request.user.is_staff
+            
+        return False
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """

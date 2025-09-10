@@ -8,6 +8,10 @@ import shutil
 import zipfile
 from bs4 import BeautifulSoup
 from urllib.parse import unquote, quote
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 
 @extend_schema(
     tags=["Notion"],
@@ -201,3 +205,46 @@ def banner_view(request):
         return FileResponse(open(file_path, 'rb'))
     else:
         return Response({"detail": "Image not found."}, status=status.HTTP_404_NOT_FOUND)
+
+@staff_member_required
+def notion_admin_upload_view(request):
+    upload_dir = os.path.join(settings.MEDIA_ROOT, 'notion')
+
+    if request.method == 'POST':
+        if 'zip_file' not in request.FILES:
+            messages.error(request, "No file provided.")
+            return redirect('notion-admin-upload')
+
+        zip_file = request.FILES['zip_file']
+
+        if not zip_file.name.endswith('.zip'):
+            messages.error(request, "Invalid file type. Please upload a ZIP file.")
+            return redirect('notion-admin-upload')
+
+        # Clear the directory first
+        if os.path.exists(upload_dir):
+            shutil.rmtree(upload_dir)
+        os.makedirs(upload_dir)
+
+        zip_path = os.path.join(upload_dir, zip_file.name)
+        with open(zip_path, 'wb+') as destination:
+            for chunk in zip_file.chunks():
+                destination.write(chunk)
+
+        # Unzip the file
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(upload_dir)
+            messages.success(request, 'Notion content uploaded and extracted successfully.')
+        except zipfile.BadZipFile:
+            messages.error(request, 'Invalid ZIP file.')
+        except Exception as e:
+            messages.error(request, f'An error occurred during extraction: {e}')
+        finally:
+            # Clean up the uploaded zip file
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+
+        return redirect('notion-admin-upload')
+
+    return render(request, 'html_serving/notion_admin_upload.html', {'notion_dir': upload_dir})
