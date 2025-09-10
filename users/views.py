@@ -63,7 +63,7 @@ class UserPostListView(generics.ListAPIView):
 
     def get_queryset(self):
         username = self.kwargs['user_id']
-        user = get_object_or_404(User, username=username)
+        user = get_object_or_404(User, email__startswith=username + '@')
         return Post.objects.filter(author=user).order_by('-created_at')
 
 
@@ -200,6 +200,10 @@ class CustomTokenRefreshView(APIView):
                 "message": "토큰이 성공적으로 재발급되었습니다.",
                 'access': str(new_refresh_token.access_token),
                 'refresh': str(new_refresh_token),
+                'username': user.username,
+                'email': user.email,
+                'semester': user.semester,
+                'is_staff': user.is_staff,
             }
             
             return Response(response_data, status=status.HTTP_200_OK)

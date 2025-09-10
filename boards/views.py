@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from .models import Board, Post, Comment, Category, Attachment
 from .serializers import (
     BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
-    CommentSerializer, CategoryWithBoardsSerializer, AttachmentSerializer, PostDetailResponseSerializer,
+    CommentSerializer, CategoryWithBoardsSerializer, AttachmentSerializer,
     CategoryListResponseSerializer, PostListResponseSerializer
 )
 from .permissions import (
@@ -194,7 +194,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
     def get_object(self):
         board_id = self.kwargs.get(self.lookup_url_kwarg)
         obj = get_object_or_404(Board, pk=board_id)
-        self.check_object_permissions(self.request, obj)
+        # self.check_object_permissions(self.request, obj) # This line causes recursion
         return obj
 
     def list(self, request, *args, **kwargs):
@@ -210,21 +210,26 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
                 'count': paginated_response.data['count'],
                 'next': paginated_response.data['next'],
                 'previous': paginated_response.data['previous'],
-                'posts': paginated_response.data['results']
+                'results': paginated_response.data['results']
             }
             return Response(response_data)
 
         serializer = self.get_serializer(queryset, many=True)
         response_data = {
             'board': BoardSerializer(board, context={'request': request}).data,
-            'posts': serializer.data
+            'results': serializer.data
         }
         return Response(response_data)
 
     def perform_create(self, serializer):
         board = get_object_or_404(Board, pk=self.kwargs.get('board_id'))
         self.check_object_permissions(self.request, board)
-        serializer.save(author=self.request.user, board=board)
+        
+        post_type = Post.PostType.DEFAULT # Default to DEFAULT
+        if board.board_type == Board.BoardType.JUSTIFICATION_LETTER:
+            post_type = Post.PostType.JUSTIFICATION_LETTER
+        
+        serializer.save(author=self.request.user, board=board, post_type=post_type)
 
 @extend_schema(tags=['게시글'])
 @extend_schema_view(
@@ -232,7 +237,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         summary="게시글 상세 조회",
         description='''''게시글의 상세 정보를 조회합니다.\n- **권한 (Board Level)**: 먼저 게시판의 `read_permission`을 확인합니다.\n- **권한 (Post Level)**: 그 다음, 게시글의 `post_type`에 따라 상세 조회 권한이 결정됩니다.\n  - `DEFAULT` (일반): 게시판 읽기 권한이 있으면 누구나 조회 가능\n  - `STAFF_ONLY` (스태프 전용): 스태프만 조회 가능\n  - `JUSTIFICATION_LETTER` (해명글): 작성자 또는 스태프만 조회 가능\n- **조회수 증가**: 이 API를 호출하면 해당 게시글의 조회수가 1 증가합니다.''''', 
         responses={
-            200: PostDetailResponseSerializer,
+            200: PostDetailSerializer,
             403: OpenApiResponse(description="게시글을 읽을 권한이 없습니다."),
             404: OpenApiResponse(description="존재하지 않는 게시글입니다."),
         },
@@ -243,7 +248,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
 )
 class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Post.objects.all()
-    permission_classes = [IsBoardReadable, PostDetailPermission, IsOwnerOrReadOnly]
+    permission_classes = [IsBoardReadable, PostDetailPermission]
     lookup_url_kwarg = 'post_id'
 
     def get_serializer_class(self):
@@ -363,6 +368,18 @@ class AllPostListAPIView(generics.ListAPIView):
             queryset = queryset.filter(board__read_permission='all')
                 
         return queryset.order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'results': serializer.data})
+
 
 
 @extend_schema(tags=['게시판'])

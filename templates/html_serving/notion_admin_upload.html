@@ -1,0 +1,36 @@
+{% extends 'admin/base_site.html' %}
+{% load static %}
+
+{% block extrastyle %}
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Upload Notion Content (ZIP)</h1>
+    <p>Upload a ZIP file containing your Notion content. This will replace the entire content of the Notion directory.</p>
+
+    {% if messages %}
+        <ul class="messagelist">
+            {% for message in messages %}
+                <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <form action="" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <fieldset class="module aligned">
+            <div class="form-row field-zip_file">
+                <div>
+                    <label class="required" for="id_zip_file">ZIP File:</label>
+                    <input type="file" name="zip_file" id="id_zip_file" required>
+                </div>
+            </div>
+        </fieldset>
+        <div class="submit-row">
+            <input type="submit" value="Upload" class="default">
+        </div>
+    </form>
+</div>
+{% endblock %}

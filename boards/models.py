@@ -29,7 +29,7 @@ class Board(models.Model):
     class BoardType(models.IntegerChoices):
         GENERAL = 1, 'General'
         ADMIN = 2, 'Admin'
-        REASON = 3, 'Reason'
+        JUSTIFICATION_LETTER = 3, 'Justification Letter'
 
     name = models.CharField(max_length=50)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='boards')
@@ -53,14 +53,14 @@ class Board(models.Model):
 
     def save(self, *args, **kwargs):
         if self.board_type == self.BoardType.ADMIN:
-            self.read_permission = 'staff'
+            self.read_permission = 'all'
             self.post_permission = 'staff'
-            self.comment_permission = 'staff'
+            self.comment_permission = 'all'
         elif self.board_type == self.BoardType.GENERAL:
             self.read_permission = 'all'
             self.post_permission = 'all'
             self.comment_permission = 'all'
-        elif self.board_type == self.BoardType.REASON:
+        elif self.board_type == self.BoardType.JUSTIFICATION_LETTER:
             self.read_permission = 'all'
             self.post_permission = 'all'
             self.comment_permission = 'staff'
@@ -72,18 +72,26 @@ class PostQuerySet(models.QuerySet):
         if user.is_authenticated and user.is_staff:
             return self
         
-        # Exclude staff-only posts for non-staff
-        queryset = self.exclude(post_type=Post.PostType.STAFF_ONLY)
+        # TODO: 추후 프론트엔드에 기능 구현 시 아래 주석 해제하여 활성화
+        # # Exclude staff-only posts for non-staff
+        # queryset = self.exclude(post_type=Post.PostType.STAFF_ONLY)
+
+        # 현재는 STAFF_ONLY 글도 일반 글처럼 취급
+        queryset = self
 
         if user.is_authenticated:
-            # Authenticated non-staff can see default posts and their own justification letters
+            # Authenticated non-staff can see default/staff_only posts and their own justification letters
             queryset = queryset.filter(
                 Q(post_type=Post.PostType.DEFAULT) |
-                Q(post_type=Post.PostType.JUSTIFICATION_LETTER, author=user)
+                Q(post_type=Post.PostType.STAFF_ONLY) | # STAFF_ONLY 글도 목록에 포함
+                Q(post_type=Post.PostType.JUSTIFICATION_LETTER, author__id=user.id)
             )
         else:
-            # Anonymous users can only see default posts
-            queryset = queryset.filter(post_type=Post.PostType.DEFAULT)
+            # Anonymous users can only see default/staff_only posts
+            queryset = queryset.filter(
+                Q(post_type=Post.PostType.DEFAULT) |
+                Q(post_type=Post.PostType.STAFF_ONLY) # STAFF_ONLY 글도 목록에 포함
+            )
             
         return queryset
 
@@ -152,11 +160,7 @@ class Post(models.Model):
         # Otherwise, use the default.
         self.search_vector = SearchVector('title', weight='A') + SearchVector(models.Value(content_text), weight='B')
 
-    def save(self, *args, **kwargs):
-        # We need to save the model first to get an ID for the file path,
-        # then save the file, then update the search vector.
-        # This logic is now handled in the serializer to ensure file is created before vectorization.
-        super().save(*args, **kwargs)
+    
 
 
 class PostLike(models.Model):

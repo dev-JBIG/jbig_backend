@@ -1,4 +1,5 @@
 import bleach
+from bleach.css_sanitizer import CSSSanitizer
 import uuid
 import os
 from django.core.files.base import ContentFile
@@ -86,7 +87,7 @@ class CommentSerializer(serializers.ModelSerializer):
     def get_is_owner(self, obj):
         user = self.context.get('request').user
         if user and user.is_authenticated:
-            return obj.author == user or user.is_staff
+            return obj.author == user
         return False
 
     def validate_content(self, value):
@@ -115,10 +116,11 @@ class PostListSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
+    attachments = AttachmentSerializer(many=True, read_only=True, help_text="게시글에 첨부된 파일 목록")
 
     class Meta:
         model = Post
-        fields = ['id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count']
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'attachments']
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
@@ -134,9 +136,9 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         fields = ['title', 'content_html', 'attachment_ids', 'post_type']
 
     def _save_html_content(self, instance, html_string):
-        # Define allowed tags and attributes for sanitization to prevent XSS attacks
+        # Define allowed tags, attributes, and styles for sanitization to prevent XSS attacks
         allowed_tags = [
-            'p', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'br', 'blockquote', 'li', 'ol', 'ul',
+            'p', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'br', 'blockquote', 'li', 'ol', 'ul',
             'a', 'img', 'pre', 'code', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'
         ]
         allowed_attributes = {
@@ -144,11 +146,24 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
             'a': ['href', 'title', 'target'],
             'img': ['src', 'alt', 'title', 'style', 'width', 'height'],
         }
+        allowed_styles = [
+            'color', 'background-color', 'font-size', 'font-weight', 'font-style',
+            'text-align', 'text-decoration', 'list-style-type',
+            'margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+            'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
+            'border', 'border-style', 'border-color', 'border-width',
+            'width', 'height'
+        ]
+
+        # Create a CSS sanitizer with the allowed styles
+        css_sanitizer = CSSSanitizer(allowed_css_properties=allowed_styles)
+
         # Sanitize the input HTML
         sanitized_html = bleach.clean(
             html_string,
             tags=allowed_tags,
             attributes=allowed_attributes,
+            css_sanitizer=css_sanitizer,
             strip=True  # Strip disallowed tags instead of escaping them
         )
 
@@ -167,7 +182,8 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         post.save(update_fields=['search_vector'])
 
         if attachment_ids:
-            post.attachments.set(attachment_ids)
+            attachments = Attachment.objects.filter(id__in=attachment_ids)
+            post.attachments.set(attachments)
         return post
 
     def update(self, instance, validated_data):
@@ -183,7 +199,8 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         instance.save(update_fields=['search_vector'])
 
         if attachment_ids is not None:
-            instance.attachments.set(attachment_ids)
+            attachments = Attachment.objects.filter(id__in=attachment_ids)
+            instance.attachments.set(attachments)
         return instance
 
 class PostDetailSerializer(serializers.ModelSerializer):
@@ -197,17 +214,18 @@ class PostDetailSerializer(serializers.ModelSerializer):
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
     content_html_url = serializers.URLField(source='content_html.url', read_only=True)
+    is_owner = serializers.SerializerMethodField()
     
-    user_can_edit = serializers.SerializerMethodField()
-    user_can_delete = serializers.SerializerMethodField()
-    user_can_comment = serializers.SerializerMethodField()
+    # user_can_edit = serializers.SerializerMethodField()
+    # user_can_delete = serializers.SerializerMethodField()
+    # user_can_comment = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
-            'id', 'title', 'content_html_url', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
-            'views', 'board', 'comments', 'attachments', 'likes_count', 'comments_count', 'is_liked', 'post_type',
-            'user_can_edit', 'user_can_delete', 'user_can_comment'
+            'id', 'board_post_id', 'title', 'content_html_url', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
+            'views', 'board', 'comments', 'attachments', 'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
+            # 'user_can_edit', 'user_can_delete', 'user_can_comment'
         ]
 
     def get_user_id(self, obj):
@@ -217,26 +235,30 @@ class PostDetailSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         return user.is_authenticated and obj.likes.filter(pk=user.pk).exists()
 
-    def get_user_can_edit(self, obj):
-        user = self.context['request'].user
-        return user.is_authenticated and (obj.author == user or user.is_staff)
+    def get_is_owner(self, obj):
+        user = self.context.get('request').user
+        if user and user.is_authenticated:
+            return obj.author == user
+        return False
 
-    def get_user_can_delete(self, obj):
-        user = self.context['request'].user
-        return user.is_authenticated and (obj.author == user or user.is_staff)
+    # def get_user_can_edit(self, obj):
+    #     user = self.context['request'].user
+    #     return user.is_authenticated and obj.author.id == user.id
 
-    def get_user_can_comment(self, obj):
-        user = self.context['request'].user
-        if not user.is_authenticated:
-            return False
-        perm = getattr(obj.board, 'comment_permission', 'staff')
-        if perm == 'all':
-            return True
-        return user.is_staff
+    # def get_user_can_delete(self, obj):
+    #     user = self.context['request'].user
+    #     return user.is_authenticated and obj.author.id == user.id
 
-class PostDetailResponseSerializer(serializers.Serializer):
-    post = PostDetailSerializer()
-    # Removed permissions field as it's now in PostDetailSerializer
+    # def get_user_can_comment(self, obj):
+    #     user = self.context['request'].user
+    #     if not user.is_authenticated:
+    #         return False
+    #     perm = getattr(obj.board, 'comment_permission', 'staff')
+    #     if perm == 'all':
+    #         return True
+    #     return user.is_staff
+
+
 
 class PostListResponseSerializer(serializers.Serializer):
     board = BoardSerializer()
@@ -248,5 +270,3 @@ class PostListResponseSerializer(serializers.Serializer):
 class CategoryListResponseSerializer(serializers.Serializer):
     total_post_count = serializers.IntegerField()
     categories = CategoryWithBoardsSerializer(many=True)
-
-
