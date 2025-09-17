@@ -25,9 +25,22 @@ from .permissions import (
 )
 
 @extend_schema(
-    tags=['게시글'],
+    tags=['게시판'],
     summary="게시글 좋아요/취소",
-    description="특정 게시글에 좋아요를 추가하거나 취소합니다. 이미 좋아요를 누른 상태에서 요청하면 좋아요가 취소됩니다."
+    description="특정 게시글에 좋아요를 추가하거나 취소합니다. 이미 좋아요를 누른 상태에서 요청하면 좋아요가 취소됩니다.",
+    responses={
+        200: {
+            'description': '좋아요 상태 변경 성공',
+            'examples': {
+                '좋아요 추가': {
+                    'value': {'likes_count': 28, 'is_liked': True}
+                },
+                '좋아요 취소': {
+                    'value': {'likes_count': 27, 'is_liked': False}
+                }
+            }
+        }
+    }
 )
 class PostLikeAPIView(generics.GenericAPIView):
     queryset = Post.objects.all()
@@ -149,13 +162,50 @@ class BoardListAPIView(generics.ListAPIView):
         return Board.objects.all()
 
 
-@extend_schema(tags=['게시글'])
+@extend_schema(tags=['게시판'])
 @extend_schema_view(
     get=extend_schema(
         summary="게시글 목록 조회",
         description="""특정 게시판의 정보 및 게시글 목록을 조회합니다.\n- **게시판 접근 권한**: 게시판의 `read_permission` 설정에 따라 접근이 제어됩니다.\n- **게시글 필터링**: 사용자의 권한(스태프, 인증 여부)에 따라 조회되는 게시글이 자동으로 필터링됩니다. (예: 스태프 전용 글, 본인 작성 해명글 등) """,
         responses={
-            200: PostListResponseSerializer,
+            200: OpenApiResponse(
+                response=PostListResponseSerializer,
+                examples=[
+                    OpenApiExample(
+                        'Success',
+                        summary='게시글 목록 조회 성공',
+                        value={
+                            "board": {
+                                "id": 1,
+                                "name": "자유게시판",
+                                "category": {"id": 1, "name": "커뮤니티"},
+                                "read_permission": True,
+                                "post_permission": True,
+                                "comment_permission": True
+                            },
+                            "count": 1,
+                            "next": None,
+                            "previous": None,
+                            "results": [
+                                {
+                                    "id": 101,
+                                    "board_post_id": 1,
+                                    "title": "첫 번째 게시글입니다.",
+                                    "user_id": "testuser",
+                                    "author": "테스트유저",
+                                    "author_semester": 1,
+                                    "created_at": "2025-09-17T12:30:00Z",
+                                    "views": 150,
+                                    "likes_count": 10,
+                                    "attachments": [
+                                        {"id": 1, "file": "/media/attachments/file1.pdf", "filename": "file1.pdf"}
+                                    ]
+                                }
+                            ]
+                        }
+                    )
+                ]
+            ),
             403: OpenApiResponse(description="게시판에 대한 읽기 권한이 없습니다."),
             404: OpenApiResponse(description="존재하지 않는 게시판입니다."),
         },
@@ -164,6 +214,18 @@ class BoardListAPIView(generics.ListAPIView):
         summary="게시글 생성",
         description="""특정 게시판에 새로운 게시글을 작성합니다.\n- **권한 (Board Level)**: 게시판의 `post_permission` 설정에 따라 접근이 제어됩니다.\n  - `all`: 인증된 사용자 누구나 작성 가능\n  - `staff`: 스태프만 작성 가능""",
         request=PostCreateUpdateSerializer,
+        examples=[
+            OpenApiExample(
+                '게시글 생성 요청',
+                summary='새로운 게시글을 작성하는 예시입니다.',
+                value={
+                    "title": "새로운 게시글 제목",
+                    "content_html": "<p>여기에 게시글 내용이 HTML 형식으로 들어갑니다.</p>",
+                    "attachment_ids": [1, 2],
+                    "post_type": "DEFAULT"
+                }
+            )
+        ],
         responses={
             201: PostListSerializer,
             400: OpenApiResponse(description="잘못된 요청 데이터입니다."),
@@ -231,7 +293,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         
         serializer.save(author=self.request.user, board=board, post_type=post_type)
 
-@extend_schema(tags=['게시글'])
+@extend_schema(tags=['게시판'])
 @extend_schema_view(
     get=extend_schema(
         summary="게시글 상세 조회",
@@ -304,12 +366,38 @@ class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         instance.is_deleted = True
         instance.save()
 
-@extend_schema(tags=['첨부파일'])
-@extend_schema_view(
-    post=extend_schema(
-        summary="File 첨부",
-        description="서버에 파일을 업로드하고 첨부파일 ID를 반환합니다. 파일 크기는 10MB로 제한되며, 허용된 파일 형식만 업로드할 수 있습니다."
-    )
+@extend_schema(
+    tags=['파일'],
+    summary="파일 첨부",
+    description="서버에 파일을 업로드하고 첨부파일 ID를 반환합니다. 파일 크기는 10MB로 제한되며, 허용된 파일 형식만 업로드할 수 있습니다.",
+    request={
+        'multipart/form-data': {
+            'type': 'object',
+            'properties': {
+                'file': {
+                    'type': 'string',
+                    'format': 'binary'
+                }
+            }
+        }
+    },
+    responses={
+        201: OpenApiResponse(
+            response=AttachmentSerializer,
+            examples=[
+                OpenApiExample(
+                    'Success',
+                    summary='파일 업로드 성공',
+                    value={
+                        "id": 123,
+                        "file": "/media/attachments/example.jpg",
+                        "filename": "example.jpg"
+                    }
+                )
+            ]
+        ),
+        400: OpenApiResponse(description="파일이 제공되지 않았거나, 파일 크기/형식이 올바르지 않습니다.")
+    }
 )
 class AttachmentCreateAPIView(generics.CreateAPIView):
     queryset = Attachment.objects.all()
@@ -349,7 +437,7 @@ class AttachmentCreateAPIView(generics.CreateAPIView):
         serializer.save(filename=self.request.data.get('file').name)
 
 
-@extend_schema(tags=['게시글'])
+@extend_schema(tags=['게시판'])
 @extend_schema_view(
     get=extend_schema(
         summary="전체 게시글 목록 조회",
