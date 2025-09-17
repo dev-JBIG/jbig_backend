@@ -11,8 +11,11 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = True
 
 ALLOWED_HOSTS = [
-	'*',
+	'jbig.co.kr', 'www.jbig.co.kr', '127.0.0.1', '0.0.0.0', 'localhost',
 ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 # Application definition
 
@@ -168,9 +171,27 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'JBIG Backend API',
-    'DESCRIPTION': 'JBIG 홈페이지 백엔드 입니다.',
+    'TITLE': 'JBIG 백엔드 API',
+    'DESCRIPTION': 'JBIG 프로젝트 백엔드 API 문서입니다.',
+    'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'SWAGGER_UI_SETTINGS': {
+        'DEFAULT_MODEL_RENDERING': 'example',
+        'DEFAULT_MODELS_EXPANSION': -1,
+        'DEFAULT_MODEL_DEPTH': -1,
+        'DOC_EXPANSION': 'none',
+        'PERSIST_AUTHORIZATION': True,
+        'DISPLAY_REQUEST_DURATION': True,
+    },
+    'TAGS': [
+        {'name': '사용자', 'description': '사용자 인증 및 회원 정보 관련 API'},
+        {'name': '게시판', 'description': '게시판 및 게시글 관련 API'},
+        {'name': '댓글', 'description': '게시글 댓글 관련 API'},
+        {'name': '파일', 'description': '파일 업로드 및 관리 API'},
+    ],
+    'SWAGGER_UI_DIST': 'SIDECAR',
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+    'REDOC_DIST': 'SIDECAR',
 }
 
 from datetime import timedelta

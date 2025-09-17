@@ -29,7 +29,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 )
 @api_view(['GET'])
 def notion_view(request):
-    notion_dir = '/root/jbig_backend/media/notion/'
+    notion_dir = '/home/ubuntu/jbig_backend/media/notion/'
     requested_file = request.query_params.get('file', None)
 
     file_to_serve = None
@@ -90,7 +90,7 @@ def notion_view(request):
 )
 @api_view(['GET'])
 def award_view(request):
-    file_path = '/root/jbig_backend/media/awards/Awards 24c0b4f89da28059b565cbf910e6d6ad.html'
+    file_path = '/home/ubuntu/jbig_backend/media/awards/Awards 24c0b4f89da28059b565cbf910e6d6ad.html'
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -124,7 +124,7 @@ def award_upload_view(request):
     if not file.name.endswith('.html'):
         return Response({'error': 'Invalid file type. Please upload an HTML file.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    upload_dir = '/root/jbig_backend/media/awards/'
+    upload_dir = '/ubuntu/jbig_backend/media/awards/'
     if not os.path.exists(upload_dir):
         os.makedirs(upload_dir)
         
@@ -199,7 +199,7 @@ def notion_upload_view(request):
 )
 @api_view(['GET'])
 def banner_view(request):
-    file_path = '/root/jbig_backend/media/banner/banner.jpg'
+    file_path = '/home/ubuntu/jbig_backend/media/banner/banner.jpg'
 
     if os.path.exists(file_path):
         return FileResponse(open(file_path, 'rb'))

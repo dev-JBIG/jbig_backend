@@ -1,4 +1,4 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>JBIG 교안 (New)</title><style>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>JBIG 교안</title><style>
 /* cspell:disable-file */
 /* webkit printing magic: print all background colors */
 html {
@@ -127,6 +127,11 @@ img {
 
 .collection-content {
 	font-size: 0.875rem;
+}
+
+.collection-content td {
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 
 .column-list {
@@ -430,10 +435,14 @@ code {
 }
 
 blockquote {
-	font-size: 1.25em;
+	font-size: 1em;
 	margin: 1em 0;
 	padding-left: 1em;
 	border-left: 3px solid rgb(55, 53, 47);
+}
+
+blockquote.quote-large {
+	font-size: 1.25em;
 }
 
 .bookmark {
@@ -509,155 +518,155 @@ blockquote {
 .pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
 .pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
 .highlight-default {
-	color: rgba(50, 48, 44, 1);
+	color: rgba(44, 44, 43, 1);
 }
 .highlight-gray {
-	color: rgba(115, 114, 110, 1);
-	fill: rgba(115, 114, 110, 1);
+	color: rgba(142, 139, 134, 1);
+	fill: rgba(142, 139, 134, 1);
 }
 .highlight-brown {
-	color: rgba(159, 107, 83, 1);
-	fill: rgba(159, 107, 83, 1);
+	color: rgba(182, 137, 101, 1);
+	fill: rgba(182, 137, 101, 1);
 }
 .highlight-orange {
-	color: rgba(217, 115, 13, 1);
-	fill: rgba(217, 115, 13, 1);
+	color: rgba(213, 128, 59, 1);
+	fill: rgba(213, 128, 59, 1);
 }
 .highlight-yellow {
-	color: rgba(203, 145, 47, 1);
-	fill: rgba(203, 145, 47, 1);
+	color: rgba(229, 178, 68, 1);
+	fill: rgba(229, 178, 68, 1);
 }
 .highlight-teal {
-	color: rgba(68, 131, 97, 1);
-	fill: rgba(68, 131, 97, 1);
+	color: rgba(85, 167, 124, 1);
+	fill: rgba(85, 167, 124, 1);
 }
 .highlight-blue {
-	color: rgba(51, 126, 169, 1);
-	fill: rgba(51, 126, 169, 1);
+	color: rgba(35, 131, 226, 1);
+	fill: rgba(35, 131, 226, 1);
 }
 .highlight-purple {
-	color: rgba(144, 101, 176, 1);
-	fill: rgba(144, 101, 176, 1);
+	color: rgba(181, 119, 214, 1);
+	fill: rgba(181, 119, 214, 1);
 }
 .highlight-pink {
-	color: rgba(193, 76, 138, 1);
-	fill: rgba(193, 76, 138, 1);
+	color: rgba(219, 105, 153, 1);
+	fill: rgba(219, 105, 153, 1);
 }
 .highlight-red {
-	color: rgba(205, 60, 58, 1);
-	fill: rgba(205, 60, 58, 1);
+	color: rgba(229, 100, 88, 1);
+	fill: rgba(229, 100, 88, 1);
 }
 .highlight-default_background {
-	color: rgba(50, 48, 44, 1);
+	color: rgba(44, 44, 43, 1);
 }
 .highlight-gray_background {
-	background: rgba(248, 248, 247, 1);
+	background: rgba(240, 239, 237, 1);
 }
 .highlight-brown_background {
-	background: rgba(244, 238, 238, 1);
+	background: rgba(245, 237, 233, 1);
 }
 .highlight-orange_background {
-	background: rgba(251, 236, 221, 1);
+	background: rgba(251, 235, 222, 1);
 }
 .highlight-yellow_background {
-	background: rgba(251, 243, 219, 1);
+	background: rgba(249, 243, 220, 1);
 }
 .highlight-teal_background {
-	background: rgba(237, 243, 236, 1);
+	background: rgba(232, 241, 236, 1);
 }
 .highlight-blue_background {
-	background: rgba(231, 243, 248, 1);
+	background: rgba(232, 242, 250, 1);
 }
 .highlight-purple_background {
-	background: rgba(248, 243, 252, 1);
+	background: rgba(243, 235, 249, 1);
 }
 .highlight-pink_background {
-	background: rgba(252, 241, 246, 1);
+	background: rgba(250, 233, 241, 1);
 }
 .highlight-red_background {
-	background: rgba(253, 235, 236, 1);
+	background: rgba(252, 233, 231, 1);
 }
 .block-color-default {
 	color: inherit;
 	fill: inherit;
 }
 .block-color-gray {
-	color: rgba(115, 114, 110, 1);
-	fill: rgba(115, 114, 110, 1);
+	color: rgba(142, 139, 134, 1);
+	fill: rgba(142, 139, 134, 1);
 }
 .block-color-brown {
-	color: rgba(159, 107, 83, 1);
-	fill: rgba(159, 107, 83, 1);
+	color: rgba(182, 137, 101, 1);
+	fill: rgba(182, 137, 101, 1);
 }
 .block-color-orange {
-	color: rgba(217, 115, 13, 1);
-	fill: rgba(217, 115, 13, 1);
+	color: rgba(213, 128, 59, 1);
+	fill: rgba(213, 128, 59, 1);
 }
 .block-color-yellow {
-	color: rgba(203, 145, 47, 1);
-	fill: rgba(203, 145, 47, 1);
+	color: rgba(229, 178, 68, 1);
+	fill: rgba(229, 178, 68, 1);
 }
 .block-color-teal {
-	color: rgba(68, 131, 97, 1);
-	fill: rgba(68, 131, 97, 1);
+	color: rgba(85, 167, 124, 1);
+	fill: rgba(85, 167, 124, 1);
 }
 .block-color-blue {
-	color: rgba(51, 126, 169, 1);
-	fill: rgba(51, 126, 169, 1);
+	color: rgba(35, 131, 226, 1);
+	fill: rgba(35, 131, 226, 1);
 }
 .block-color-purple {
-	color: rgba(144, 101, 176, 1);
-	fill: rgba(144, 101, 176, 1);
+	color: rgba(181, 119, 214, 1);
+	fill: rgba(181, 119, 214, 1);
 }
 .block-color-pink {
-	color: rgba(193, 76, 138, 1);
-	fill: rgba(193, 76, 138, 1);
+	color: rgba(219, 105, 153, 1);
+	fill: rgba(219, 105, 153, 1);
 }
 .block-color-red {
-	color: rgba(205, 60, 58, 1);
-	fill: rgba(205, 60, 58, 1);
+	color: rgba(229, 100, 88, 1);
+	fill: rgba(229, 100, 88, 1);
 }
 .block-color-default_background {
 	color: inherit;
 	fill: inherit;
 }
 .block-color-gray_background {
-	background: rgba(248, 248, 247, 1);
+	background: rgba(240, 239, 237, 1);
 }
 .block-color-brown_background {
-	background: rgba(244, 238, 238, 1);
+	background: rgba(245, 237, 233, 1);
 }
 .block-color-orange_background {
-	background: rgba(251, 236, 221, 1);
+	background: rgba(251, 235, 222, 1);
 }
 .block-color-yellow_background {
-	background: rgba(251, 243, 219, 1);
+	background: rgba(249, 243, 220, 1);
 }
 .block-color-teal_background {
-	background: rgba(237, 243, 236, 1);
+	background: rgba(232, 241, 236, 1);
 }
 .block-color-blue_background {
-	background: rgba(231, 243, 248, 1);
+	background: rgba(232, 242, 250, 1);
 }
 .block-color-purple_background {
-	background: rgba(248, 243, 252, 1);
+	background: rgba(243, 235, 249, 1);
 }
 .block-color-pink_background {
-	background: rgba(252, 241, 246, 1);
+	background: rgba(250, 233, 241, 1);
 }
 .block-color-red_background {
-	background: rgba(253, 235, 236, 1);
+	background: rgba(252, 233, 231, 1);
 }
-.select-value-color-default { background-color: rgba(84, 72, 49, 0.08); }
-.select-value-color-gray { background-color: rgba(84, 72, 49, 0.15); }
-.select-value-color-brown { background-color: rgba(210, 162, 141, 0.35); }
-.select-value-color-orange { background-color: rgba(224, 124, 57, 0.27); }
-.select-value-color-yellow { background-color: rgba(236, 191, 66, 0.39); }
-.select-value-color-green { background-color: rgba(123, 183, 129, 0.27); }
-.select-value-color-blue { background-color: rgba(93, 165, 206, 0.27); }
-.select-value-color-purple { background-color: rgba(168, 129, 197, 0.27); }
-.select-value-color-pink { background-color: rgba(225, 136, 179, 0.27); }
-.select-value-color-red { background-color: rgba(244, 171, 159, 0.4); }
+.select-value-color-default { background-color: rgba(42, 28, 0, 0.07); }
+.select-value-color-gray { background-color: rgba(28, 19, 1, 0.11); }
+.select-value-color-brown { background-color: rgba(127, 51, 0, 0.156); }
+.select-value-color-orange { background-color: rgba(196, 88, 0, 0.203); }
+.select-value-color-yellow { background-color: rgba(209, 156, 0, 0.282); }
+.select-value-color-green { background-color: rgba(0, 96, 38, 0.156); }
+.select-value-color-blue { background-color: rgba(0, 99, 174, 0.172); }
+.select-value-color-purple { background-color: rgba(92, 0, 163, 0.141); }
+.select-value-color-pink { background-color: rgba(183, 0, 78, 0.152); }
+.select-value-color-red { background-color: rgba(206, 24, 0, 0.164); }
 
 .checkbox {
 	display: inline-flex;
@@ -677,8 +686,7 @@ blockquote {
 	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
 }
 	
-</style></head><body><article id="1ad4d778-1cdc-803a-9a5e-f553af7782fe" class="page sans"><header><img class="page-cover-image" src="https://www.notion.so/images/page-cover/gradients_3.png" style="object-position:center 60%"/><div class="page-header-icon page-header-icon-with-cover"><img class="icon" src="KakaoTalk_20250304_194023389_01.png"/></div><h1 class="page-title">JBIG 교안 (New)</h1><p class="page-description"></p></header><div class="page-body"><p id="1af4d778-1cdc-8037-b9be-e208898ece17" class="block-color-gray">오류 혹은 설명 추가를 원하시면 운영진에게 문의해주세요.</p><hr id="1ae4d778-1cdc-801f-8f51-ce27dba2049d"/><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">1주차</summary><div class="indented"><figure id="1ad4d778-1cdc-80bc-8137-c7b611a1af58" class="link-to-page"><a href="머신러닝%20개요%201ad4d7781cdc80bc8137c7b611a1af58.html">머신러닝 개요</a></figure><p id="1b44d778-1cdc-804d-b791-db1f2cab466d" class=""><mark class="highlight-yellow_background"><strong>데이터 불러오기 및 확인</strong></mark></p><figure id="1ae4d778-1cdc-8070-a915-c58ab6ae33b1" class="link-to-page"><a href="데이터%20불러오기%20및%20확인%201ae4d7781cdc8070a915c58ab6ae33b1.html">데이터 불러오기 및 확인</a></figure><p id="1b44d778-1cdc-8010-9dce-c38e717259a2" class=""><mark class="highlight-yellow_background"><strong>시각화</strong></mark></p><figure id="1ad4d778-1cdc-80c3-8021-e644cc7d97c6" class="link-to-page"><a href="시각화%201ad4d7781cdc80c38021e644cc7d97c6.html">시각화</a></figure><p id="1b44d778-1cdc-80c4-8da0-cad0e7dbc9cf" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><figure id="1ad4d778-1cdc-80c5-abd7-e1f24821344b" class="link-to-page"><a href="전처리%20데이터%20세트%20분리%201ad4d7781cdc80c5abd7e1f24821344b.html">전처리 : 데이터 세트 분리</a></figure><figure id="1ad4d778-1cdc-80a4-9ff2-e190118a45ba" class="link-to-page"><a href="전처리%20데이터%20인코딩%201ad4d7781cdc80a49ff2e190118a45ba.html">전처리 : 데이터 인코딩</a></figure><p id="1b44d778-1cdc-8021-99ee-c10c89ab2e5e" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1ad4d778-1cdc-8032-9c53-f194fd8bea6d" class="link-to-page"><a href="회귀%20분석(Regression%20Analysis)%201ad4d7781cdc80329c53f194fd8bea6d.html">회귀 분석(Regression Analysis)</a></figure><p id="1b44d778-1cdc-809c-ad87-cce0874cc464" class=""><mark class="highlight-default_background"><strong>모델 평가</strong></mark></p><p id="1b44d778-1cdc-8058-925a-ef88676c132f" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1ae4d778-1cdc-804b-a7de-da8a9d50ed36" class="link-to-page"><a href="Hyperparameters%20vs%20Parameters%201ae4d7781cdc804ba7deda8a9d50ed36.html">Hyperparameters vs Parameters</a></figure><p id="1b44d778-1cdc-80e8-9bb7-dbeca2abf6c1" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">2주차</summary><div class="indented"><p id="1b54d778-1cdc-80ef-a882-f1b30c2fdb86" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1b54d778-1cdc-80b4-b9f3-f8a700e0da58" class=""><mark class="highlight-default_background"><strong>시각화</strong></mark></p><p id="1b54d778-1cdc-80f0-b6be-ce4767f860cb" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><figure id="1b44d778-1cdc-80c4-a995-e211c9ac80e7" class="link-to-page"><a href="데이터%20전처리%201b44d7781cdc80c4a995e211c9ac80e7.html">데이터 전처리</a></figure><p id="1b54d778-1cdc-8083-befe-d510db95a628" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1b44d778-1cdc-80d6-89c4-ca3511d3065d" class="link-to-page"><a href="분류%20모델%20정의%20및%20학습%201b44d7781cdc80d689c4ca3511d3065d.html">분류 모델 정의 및 학습</a></figure><p id="1b54d778-1cdc-8060-9fef-e6b26dd06a67" class=""><mark class="highlight-default_background"><strong>모델 평가</strong></mark></p><p id="1b54d778-1cdc-80e9-87d5-e090ed9dead9" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1b44d778-1cdc-800c-a100-c6f56332c308" class="link-to-page"><a href="하이퍼%20파라미터%20튜닝%201b44d7781cdc800ca100c6f56332c308.html">하이퍼 파라미터 튜닝</a></figure><figure id="1b44d778-1cdc-8056-980f-d7f5b3de526f" class="link-to-page"><a href="앙상블%201b44d7781cdc8056980fd7f5b3de526f.html">앙상블</a></figure><p id="1b44d778-1cdc-805a-a470-ddb5850cc9e9" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><p id="1b54d778-1cdc-8028-878d-e3c7da729005" class="">
-</p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">3주차</summary><div class="indented"><p id="1ba4d778-1cdc-816b-b319-f09efbe00be9" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1ba4d778-1cdc-810c-8917-d0348103eb12" class=""><mark class="highlight-yellow_background"><strong>시각화</strong></mark></p><figure id="1ba4d778-1cdc-805e-a52a-f3bb878f2da2" class="link-to-page"><a href="Seaborn%201ba4d7781cdc805ea52af3bb878f2da2.html">Seaborn</a></figure><p id="1ba4d778-1cdc-8112-be1d-f29df36ce502" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><figure id="1ba4d778-1cdc-81f8-a879-c6e25c55ad52" class="link-to-page"><a href="교차%20검증%201ba4d7781cdc81f8a879c6e25c55ad52.html">교차 검증</a></figure><figure id="1ba4d778-1cdc-811d-ade8-ec1b6a95763c" class="link-to-page"><a href="GBM%20계열%201ba4d7781cdc811dade8ec1b6a95763c.html">GBM 계열</a></figure><p id="1ba4d778-1cdc-81e3-a898-db199a95a629" class=""><mark class="highlight-yellow_background"><strong>모델 평가</strong></mark></p><figure id="1ba4d778-1cdc-80fc-97b3-dd2c1646062c" class="link-to-page"><a href="회귀%20모델%20평가%20분류%20모델%20평가%201ba4d7781cdc80fc97b3dd2c1646062c.html">회귀 모델 평가 / 분류 모델 평가</a></figure><p id="1ba4d778-1cdc-8163-b837-e7b93d5ac2ae" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><p id="1ba4d778-1cdc-8114-a241-e30ea3b62bc5" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1ba4d778-1cdc-81bb-ac35-d040e4145a84" class="link-to-page"><a href="하이퍼%20파라미터%20튜닝%201ba4d7781cdc81bbac35d040e4145a84.html">하이퍼 파라미터 튜닝</a></figure><figure id="1ba4d778-1cdc-804d-b5fe-d9397228195a" class="link-to-page"><a href="AutoML%201ba4d7781cdc804db5fed9397228195a.html">AutoML</a></figure><figure id="1ba4d778-1cdc-815a-9d27-ffe4a7158e2b" class="link-to-page"><a href="앙상블%201ba4d7781cdc815a9d27ffe4a7158e2b.html">앙상블</a></figure><p id="1ba4d778-1cdc-81da-a2de-f24f4d0bcd30" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">4주차</summary><div class="indented"><p id="1c14d778-1cdc-8128-b967-eb29b5627906" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1c14d778-1cdc-81bc-863b-d1b0c13316f9" class=""><mark class="highlight-yellow_background"><strong>시각화</strong></mark></p><figure id="1c14d778-1cdc-81b7-8248-c2d730a3fcc9" class="link-to-page"><a href="PyGWalker%201c14d7781cdc81b78248c2d730a3fcc9.html">PyGWalker</a></figure><figure id="1c44d778-1cdc-8072-8ad1-e18ed69f24a7" class="link-to-page"><a href="Plotly%201c44d7781cdc80728ad1e18ed69f24a7.html">Plotly</a></figure><p id="1c14d778-1cdc-81af-8a48-cbd304c743b3" class=""><mark class="highlight-yellow_background"><strong>데이터 전처리</strong></mark></p><p id="1c14d778-1cdc-81a2-8931-d107b31359d3" class=""><mark class="highlight-yellow_background"><strong>모델 평가</strong></mark></p><p id="1c14d778-1cdc-81f5-a6ce-e18926b59c55" class=""><mark class="highlight-yellow_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1c14d778-1cdc-8157-824b-ca39450233e4" class="link-to-page"><a href="정규화(Regularization)%201c14d7781cdc8157824bca39450233e4.html">정규화(Regularization)</a></figure><p id="1c14d778-1cdc-81a0-8810-f1fc34afe5ad" class=""><mark class="highlight-yellow_background"><strong>성능 개선</strong></mark></p><figure id="1c14d778-1cdc-818e-9c45-f198a94b8e92" class="link-to-page"><a href="AutoGluon%201c14d7781cdc818e9c45f198a94b8e92.html">AutoGluon</a></figure><figure id="1c14d778-1cdc-81c2-9658-c64a5737a687" class="link-to-page"><a href="HyperOpt%201c14d7781cdc81c29658c64a5737a687.html">HyperOpt</a></figure><p id="1c14d778-1cdc-8173-b8c1-e2ffd2add3a0" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><figure id="1c14d778-1cdc-8123-951c-cdd955c4a109" class="link-to-page"><a href="앙상블%201c14d7781cdc8123951ccdd955c4a109.html">앙상블</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">6주차</summary><div class="indented"><p id="1e94d778-1cdc-8044-9ebb-d985a524ca62" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1e94d778-1cdc-8057-be9d-dfb6c3b1ed3c" class="block-color-default"><strong>시각화</strong></p><p id="1e94d778-1cdc-8096-8a7c-f678d01f0026" class="block-color-default"><strong>데이터 전처리</strong></p><p id="1e94d778-1cdc-804b-bb70-c6cda30620cc" class="block-color-default"><strong>모델 평가</strong></p><p id="1e94d778-1cdc-8038-b1ad-dfaab96e80f7" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1ec4d778-1cdc-806d-852c-fca7d168f2c8" class="link-to-page"><a href="퍼셉트론(Perceptron)%201ec4d7781cdc806d852cfca7d168f2c8.html">퍼셉트론(Perceptron)</a></figure><figure id="1ec4d778-1cdc-807f-a2bf-f7a5a9330ab4" class="link-to-page"><a href="다층%20퍼셉트론(MLP)%201ec4d7781cdc807fa2bff7a5a9330ab4.html">다층 퍼셉트론(MLP)</a></figure><figure id="1ec4d778-1cdc-804e-a6dc-fc23765c919a" class="link-to-page"><a href="활성화%20함수%20(Activation%20Function)%201ec4d7781cdc804ea6dcfc23765c919a.html">활성화 함수 (Activation Function)</a></figure><figure id="1ec4d778-1cdc-804c-ab10-e1ad053a0169" class="link-to-page"><a href="드롭아웃(Dropout)%201ec4d7781cdc804cab10e1ad053a0169.html">드롭아웃(Dropout)</a></figure><figure id="1ec4d778-1cdc-80fb-a583-ddcfc6a91754" class="link-to-page"><a href="배치%20정규화%20(Batch%20Normalization)%201ec4d7781cdc80fba583ddcfc6a91754.html">배치 정규화 (Batch Normalization)</a></figure><figure id="1ec4d778-1cdc-80b0-8fbc-c89610f953b4" class="link-to-page"><a href="def%20&amp;%20Class%201ec4d7781cdc80b08fbcc89610f953b4.html"><span class="icon">🤮</span>def &amp; Class</a></figure><figure id="1e94d778-1cdc-804e-9e62-e7a033c25b2e" class="link-to-page"><a href="PyTorch%20코드%20기본%20구조%201e94d7781cdc804e9e62e7a033c25b2e.html">PyTorch 코드 기본 구조</a></figure><p id="1e94d778-1cdc-80d5-8d32-d3f4861724f3" class="block-color-default"><strong>성능 개선</strong></p><p id="1e94d778-1cdc-8077-8231-f01697c01a8b" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">7주차</summary><div class="indented"><p id="1ec4d778-1cdc-80c6-b611-ecda37d0a5c7" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1ec4d778-1cdc-80d1-bf42-ea38c87e5ec9" class="block-color-default"><strong>시각화</strong></p><p id="1ec4d778-1cdc-8076-b8dd-d04f435432ad" class="block-color-default"><strong>데이터 전처리</strong></p><p id="1ec4d778-1cdc-802b-a968-c31fe49b55f3" class="block-color-default"><strong>모델 평가</strong></p><p id="1ec4d778-1cdc-80e8-a03a-ef6b35eb4ef6" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1ec4d778-1cdc-80c3-ab5b-f56da28e11c9" class="link-to-page"><a href="퍼셉트론(Perceptron)%201ec4d7781cdc80c3ab5bf56da28e11c9.html">퍼셉트론(Perceptron)</a></figure><figure id="1ec4d778-1cdc-8000-8640-db28f4277c95" class="link-to-page"><a href="다층%20퍼셉트론(MLP)%201ec4d7781cdc80008640db28f4277c95.html">다층 퍼셉트론(MLP)</a></figure><figure id="1ec4d778-1cdc-8072-99b1-c5c0845e116f" class="link-to-page"><a href="활성화%20함수%20(Activation%20Function)%201ec4d7781cdc807299b1c5c0845e116f.html">활성화 함수 (Activation Function)</a></figure><figure id="1ec4d778-1cdc-80b5-982b-c2d1823cdc77" class="link-to-page"><a href="드롭아웃(Dropout)%201ec4d7781cdc80b5982bc2d1823cdc77.html">드롭아웃(Dropout)</a></figure><figure id="1ec4d778-1cdc-8002-8ff5-db61a51747cb" class="link-to-page"><a href="배치%20정규화%20(Batch%20Normalization)%201ec4d7781cdc80028ff5db61a51747cb.html">배치 정규화 (Batch Normalization)</a></figure><figure id="1ec4d778-1cdc-80cb-a2c5-ed1bfc6c2e77" class="link-to-page"><a href="Computer%20Vision%20개요%201ec4d7781cdc80cba2c5ed1bfc6c2e77.html">Computer Vision 개요</a></figure><figure id="1ec4d778-1cdc-80cf-bab8-c8f159c083dd" class="link-to-page"><a href="CNN%201ec4d7781cdc80cfbab8c8f159c083dd.html">CNN</a></figure><p id="1ec4d778-1cdc-808e-a006-c34e23d6c985" class="block-color-default"><strong>성능 개선</strong></p><p id="1ec4d778-1cdc-80bc-aafd-e4273ed5d4ad" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><h3 id="1f44d778-1cdc-802f-abf7-db2469f2550f" class="block-color-blue_background">추가 자료</h3><figure id="1f44d778-1cdc-80a5-ad79-dcd15ea30572" class="link-to-page"><a href="고전%20컴퓨터%20비전%201f44d7781cdc80a5ad79dcd15ea30572.html">고전 컴퓨터 비전</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">8주차</summary><div class="indented"><p id="1f54d778-1cdc-816a-bac4-f7e3962bb212" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1f54d778-1cdc-81ba-b5f5-f844380af34d" class="block-color-default"><strong>시각화</strong></p><p id="1f54d778-1cdc-817b-9aea-ea894cdcdc41" class="block-color-default"><mark class="highlight-orange_background"><strong>데이터 전처리</strong></mark></p><figure id="1f54d778-1cdc-80de-9356-de8fadfb7c15" class="link-to-page"><a href="NLP(Natural%20Language%20Processing,%20자연어%20처리)%20전%201f54d7781cdc80de9356de8fadfb7c15.html">NLP(Natural Language Processing, 자연어 처리) 전처리</a></figure><p id="1f54d778-1cdc-8170-8830-da8f8f9ac2a5" class="block-color-default"><strong>모델 평가</strong></p><p id="1f54d778-1cdc-81ec-bc68-ebd7e7adf7fd" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1f64d778-1cdc-807f-b8e7-d6cb7415704f" class="link-to-page"><a href="전이학습(Transfer%20Learning)%201f64d7781cdc807fb8e7d6cb7415704f.html">전이학습(Transfer Learning)</a></figure><figure id="1f64d778-1cdc-809c-b87c-da41c476e24a" class="link-to-page"><a href="Pre-Trained%20Model(사전%20학습%20모델)%201f64d7781cdc809cb87cda41c476e24a.html">Pre-Trained Model(사전 학습 모델)</a></figure><figure id="1f64d778-1cdc-80be-8a75-dd7a95e8eb05" class="link-to-page"><a href="AlexNet%201f64d7781cdc80be8a75dd7a95e8eb05.html">AlexNet</a></figure><figure id="1f64d778-1cdc-80d0-9c83-ee52b7d6ac2b" class="link-to-page"><a href="VGG%201f64d7781cdc80d09c83ee52b7d6ac2b.html">VGG</a></figure><figure id="1f64d778-1cdc-8076-890e-ddf6fe389a6d" class="link-to-page"><a href="ResNet%20(Residual%20Network)%201f64d7781cdc8076890eddf6fe389a6d.html">ResNet (Residual Network)</a></figure><figure id="1f64d778-1cdc-806e-a392-d9694d22d667" class="link-to-page"><a href="U-Net%201f64d7781cdc806ea392d9694d22d667.html">U-Net</a></figure><p id="1f54d778-1cdc-8112-8377-d54cd78fdf0a" class="block-color-default"><strong>성능 개선</strong></p><p id="1f54d778-1cdc-8102-9419-e6d2c271571c" class=""><mark class="highlight-default_background"><strong>예측 및 제출</strong></mark></p><figure id="1f64d778-1cdc-809c-9ea6-dfde6b605714" class="link-to-page"><a href="허깅페이스%201f64d7781cdc809c9ea6dfde6b605714.html">허깅페이스</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">9주차</summary><div class="indented"><p id="1fc4d778-1cdc-803e-b27a-f0bb5b141861" class=""><mark class="highlight-default_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="1fc4d778-1cdc-808b-ac46-cc2a8a5e731d" class="block-color-default"><strong>시각화</strong></p><p id="1fc4d778-1cdc-8037-a956-d66a4fc7c854" class="block-color-default"><mark class="highlight-default"><mark class="highlight-default_background"><strong>데이터 전처리</strong></mark></mark></p><p id="1fc4d778-1cdc-80b7-ab81-de3ff57d2a8f" class="block-color-default"><strong>모델 평가</strong></p><p id="1fc4d778-1cdc-80ed-9540-d76cd6557dd9" class="block-color-default"><mark class="highlight-orange_background"><strong>모델 정의 및 학습</strong></mark></p><figure id="1fc4d778-1cdc-805f-b889-dbab517adff3" class="link-to-page"><a href="RNN%201fc4d7781cdc805fb889dbab517adff3.html">RNN</a></figure><figure id="1fc4d778-1cdc-8011-b259-e298ac74ef7a" class="link-to-page"><a href="LSTM%201fc4d7781cdc8011b259e298ac74ef7a.html">LSTM</a></figure><figure id="1fd4d778-1cdc-8007-9223-d6c487ad2264" class="link-to-page"><a href="GRU%201fd4d7781cdc80079223d6c487ad2264.html">GRU</a></figure><figure id="1fd4d778-1cdc-80e5-86ec-e4d5eceb7112" class="link-to-page"><a href="Seq2Seq%201fd4d7781cdc80e586ece4d5eceb7112.html">Seq2Seq</a></figure><figure id="1fd4d778-1cdc-8008-b540-d163db8b745f" class="link-to-page"><a href="Attention%201fd4d7781cdc8008b540d163db8b745f.html">Attention </a></figure><p id="1fc4d778-1cdc-805e-9254-fc3a0ca9f4d8" class="block-color-default"><strong>성능 개선</strong></p><ul id="1fc4d778-1cdc-8044-b251-ceb0042ef163" class="toggle"><li><details open=""><summary><strong>PyTorch 코드 기본 구조</strong></summary><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1fc4d778-1cdc-8025-927c-c0a780daee02" class="code"><code class="language-Python">import torch
+</style></head><body><article id="1ad4d778-1cdc-803a-9a5e-f553af7782fe" class="page sans"><header><img class="page-cover-image" src="https://www.notion.so/images/page-cover/gradients_3.png" style="object-position:center 60%"/><div class="page-header-icon page-header-icon-with-cover"><img class="icon" src="KakaoTalk_20250304_194023389_01.png"/></div><h1 class="page-title">JBIG 교안</h1><p class="page-description"></p></header><div class="page-body"><p id="1af4d778-1cdc-8037-b9be-e208898ece17" class="block-color-gray">오류 혹은 설명 추가를 원하시면 운영진에게 문의해주세요.</p><hr id="1ae4d778-1cdc-801f-8f51-ce27dba2049d"/><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">1주차 (분류 기초)</summary><div class="indented"><figure id="1ad4d778-1cdc-80bc-8137-c7b611a1af58" class="link-to-page"><a href="%EB%A8%B8%EC%8B%A0%EB%9F%AC%EB%8B%9D%20%EA%B0%9C%EC%9A%94%201ad4d7781cdc80bc8137c7b611a1af58.html">머신러닝 개요</a></figure><p id="1b44d778-1cdc-804d-b791-db1f2cab466d" class=""><mark class="highlight-yellow_background"><strong>데이터 불러오기 및 확인</strong></mark></p><figure id="1ae4d778-1cdc-8070-a915-c58ab6ae33b1" class="link-to-page"><a href="%EB%8D%B0%EC%9D%B4%ED%84%B0%20%EB%B6%88%EB%9F%AC%EC%98%A4%EA%B8%B0%20%EB%B0%8F%20%ED%99%95%EC%9D%B8%201ae4d7781cdc8070a915c58ab6ae33b1.html">데이터 불러오기 및 확인</a></figure><p id="1b44d778-1cdc-8010-9dce-c38e717259a2" class=""><mark class="highlight-yellow_background"><strong>데이터 분석 및 시각화</strong></mark></p><figure id="1ad4d778-1cdc-80c3-8021-e644cc7d97c6" class="link-to-page"><a href="Matplotlib%201ad4d7781cdc80c38021e644cc7d97c6.html">Matplotlib</a></figure><p id="1b44d778-1cdc-80c4-8da0-cad0e7dbc9cf" class=""><mark class="highlight-yellow_background"><strong>데이터 수집 및 전처리</strong></mark></p><figure id="1ad4d778-1cdc-80c5-abd7-e1f24821344b" class="link-to-page"><a href="%EB%8D%B0%EC%9D%B4%ED%84%B0%20%EC%84%B8%ED%8A%B8%20%EB%B6%84%EB%A6%AC%201ad4d7781cdc80c5abd7e1f24821344b.html">데이터 세트 분리</a></figure><p id="1b44d778-1cdc-8021-99ee-c10c89ab2e5e" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1b44d778-1cdc-80d6-89c4-ca3511d3065d" class="link-to-page"><a href="%EB%A1%9C%EC%A7%80%EC%8A%A4%ED%8B%B1%20%ED%9A%8C%EA%B7%80%201b44d7781cdc80d689c4ca3511d3065d.html">로지스틱 회귀</a></figure><figure id="25e4d778-1cdc-801d-aa44-d1d39eace198" class="link-to-page"><a href="%ED%8A%B8%EB%A6%AC%20%EA%B3%84%EC%97%B4%2025e4d7781cdc801daa44d1d39eace198.html">트리 계열</a></figure><p id="25e4d778-1cdc-80d6-9eec-eb5d562d0afe" class=""><mark class="highlight-yellow_background"><strong>모델평가</strong></mark></p><p id="2694d778-1cdc-807a-9bda-c68e90803c5c" class=""><mark class="highlight-yellow_background"><strong>하이퍼 파라미터 튜닝</strong></mark></p><figure id="1ae4d778-1cdc-804b-a7de-da8a9d50ed36" class="link-to-page"><a href="Hyperparameters%20vs%20Parameters%201ae4d7781cdc804ba7deda8a9d50ed36.html">Hyperparameters vs Parameters</a></figure><p id="1b44d778-1cdc-809c-ad87-cce0874cc464" class="block-color-default_background"><mark class="highlight-default"><mark class="highlight-yellow_background"><strong>앙상블</strong></mark></mark></p><figure id="1b44d778-1cdc-8056-980f-d7f5b3de526f" class="link-to-page"><a href="%EB%B0%B0%EA%B9%85%201b44d7781cdc8056980fd7f5b3de526f.html">배깅</a></figure><p id="2694d778-1cdc-8045-a926-c27f6fbd221f" class=""><mark class="highlight-yellow_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">2주차 (분류 심화)</summary><div class="indented"><p id="2694d778-1cdc-8016-b875-d000eb344653" class=""><mark class="highlight-yellow_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="25e4d778-1cdc-805f-825d-c1efd0fc6329" class=""><mark class="highlight-yellow_background"><strong>데이터 분석 및 시각화</strong></mark></p><figure id="1ba4d778-1cdc-805e-a52a-f3bb878f2da2" class="link-to-page"><a href="Seaborn%201ba4d7781cdc805ea52af3bb878f2da2.html">Seaborn</a></figure><p id="1b54d778-1cdc-80f0-b6be-ce4767f860cb" class=""><mark class="highlight-yellow_background"><strong>데이터 수집 및 전처리</strong></mark></p><figure id="1ba4d778-1cdc-81f8-a879-c6e25c55ad52" class="link-to-page"><a href="%EA%B5%90%EC%B0%A8%20%EA%B2%80%EC%A6%9D%201ba4d7781cdc81f8a879c6e25c55ad52.html">교차 검증</a></figure><figure id="2694d778-1cdc-8051-b79c-eae76cc029a5" class="link-to-page"><a href="%EC%8A%A4%EC%BC%80%EC%9D%BC%EB%A7%81%202694d7781cdc8051b79ceae76cc029a5.html">스케일링</a></figure><figure id="2694d778-1cdc-80f2-bf83-f8526b075e24" class="link-to-page"><a href="%EB%8D%B0%EC%9D%B4%ED%84%B0%20%EB%B6%88%EA%B7%A0%ED%98%95%202694d7781cdc80f2bf83f8526b075e24.html">데이터 불균형</a></figure><p id="1b54d778-1cdc-8083-befe-d510db95a628" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1ba4d778-1cdc-811d-ade8-ec1b6a95763c" class="link-to-page"><a href="GBM%201ba4d7781cdc811dade8ec1b6a95763c.html">GBM</a></figure><p id="25e4d778-1cdc-80c8-ba40-fea92c591f95" class=""><mark class="highlight-yellow_background"><strong>모델평가</strong></mark></p><figure id="1ba4d778-1cdc-80fc-97b3-dd2c1646062c" class="link-to-page"><a href="%EB%B6%84%EB%A5%98%20%EB%AA%A8%EB%8D%B8%20%ED%8F%89%EA%B0%80%20%EC%A7%80%ED%91%9C%201ba4d7781cdc80fc97b3dd2c1646062c.html">분류 모델 평가 지표</a></figure><p id="25e4d778-1cdc-80ca-86e6-d76529dbf630" class=""><mark class="highlight-yellow_background"><strong>하이퍼 파라미터 튜닝</strong></mark></p><figure id="1b44d778-1cdc-800c-a100-c6f56332c308" class="link-to-page"><a href="%ED%95%98%EC%9D%B4%ED%8D%BC%20%ED%8C%8C%EB%9D%BC%EB%AF%B8%ED%84%B0%20%ED%8A%9C%EB%8B%9D%201b44d7781cdc800ca100c6f56332c308.html">하이퍼 파라미터 튜닝</a></figure><p id="1b54d778-1cdc-80e9-87d5-e090ed9dead9" class=""><mark class="highlight-yellow_background"><strong>앙상블</strong></mark></p><figure id="25c4d778-1cdc-8058-a593-c2fbfc0c7b0f" class="link-to-page"><a href="%EB%B3%B4%ED%8C%85%2025c4d7781cdc8058a593c2fbfc0c7b0f.html">보팅</a></figure><p id="2694d778-1cdc-8004-bf36-dbe490ab0ba7" class=""><mark class="highlight-yellow_background"><strong>AutoML</strong></mark></p><figure id="2694d778-1cdc-80ff-8408-d8bcaf8abd79" class="link-to-page"><a href="%EA%B0%9C%EB%85%90%202694d7781cdc80ff8408d8bcaf8abd79.html">개념</a></figure><figure id="1ba4d778-1cdc-804d-b5fe-d9397228195a" class="link-to-page"><a href="PyCaret%201ba4d7781cdc804db5fed9397228195a.html">PyCaret</a></figure><p id="2694d778-1cdc-80ab-ae65-d6a54b590ae5" class=""><mark class="highlight-yellow_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">3주차 (회귀 기초)</summary><div class="indented"><p id="26c4d778-1cdc-8066-afd4-e36d4e1852ef" class=""><mark class="highlight-yellow_background"><strong>데이터 불러오기 및 확인</strong></mark></p><p id="25e4d778-1cdc-8088-b1eb-f471bf969842" class=""><mark class="highlight-yellow_background"><strong>데이터 분석 및 시각화</strong></mark></p><figure id="1c14d778-1cdc-81b7-8248-c2d730a3fcc9" class="link-to-page"><a href="PyGWalker%201c14d7781cdc81b78248c2d730a3fcc9.html">PyGWalker</a></figure><p id="1ba4d778-1cdc-8112-be1d-f29df36ce502" class=""><mark class="highlight-yellow_background"><strong>데이터 수집 및  전처리</strong></mark></p><figure id="26c4d778-1cdc-80ae-993e-dc77f6e74c56" class="link-to-page"><a href="%EC%9D%B4%EC%83%81%EC%B9%98%20%ED%8C%90%EB%8B%A8%20%EB%B0%8F%20%EC%B2%98%EB%A6%AC%2026c4d7781cdc80ae993edc77f6e74c56.html">이상치 판단 및 처리</a></figure><figure id="1b44d778-1cdc-80c4-a995-e211c9ac80e7" class="link-to-page"><a href="%EA%B2%B0%EC%B8%A1%EC%B9%98%20%EC%B2%98%EB%A6%AC%201b44d7781cdc80c4a995e211c9ac80e7.html">결측치 처리</a></figure><p id="1ba4d778-1cdc-8163-b837-e7b93d5ac2ae" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1ad4d778-1cdc-8032-9c53-f194fd8bea6d" class="link-to-page"><a href="%ED%9A%8C%EA%B7%80%20%EB%B6%84%EC%84%9D(Regression%20Analysis)%201ad4d7781cdc80329c53f194fd8bea6d.html">회귀 분석(Regression Analysis)</a></figure><p id="26c4d778-1cdc-80d2-84cb-d3c134824af1" class=""><mark class="highlight-yellow_background"><strong>모델평가</strong></mark></p><figure id="2694d778-1cdc-8050-a875-ce70ab6651d1" class="link-to-page"><a href="%ED%9A%8C%EA%B7%80%20%EB%AA%A8%EB%8D%B8%20%ED%8F%89%EA%B0%80%20%EC%A7%80%ED%91%9C%202694d7781cdc8050a875ce70ab6651d1.html">회귀 모델 평가 지표</a></figure><p id="1ba4d778-1cdc-8114-a241-e30ea3b62bc5" class=""><mark class="highlight-yellow_background"><strong>하이퍼 파라미터 튜닝</strong></mark></p><figure id="1ba4d778-1cdc-81bb-ac35-d040e4145a84" class="link-to-page"><a href="Optuna%201ba4d7781cdc81bbac35d040e4145a84.html">Optuna</a></figure><p id="25e4d778-1cdc-8052-bdca-e4c2de6131f0" class=""><mark class="highlight-yellow_background"><strong>앙상블</strong></mark></p><figure id="1ba4d778-1cdc-815a-9d27-ffe4a7158e2b" class="link-to-page"><a href="%EB%B6%80%EC%8A%A4%ED%8C%85%201ba4d7781cdc815a9d27ffe4a7158e2b.html">부스팅</a></figure><p id="25e4d778-1cdc-80cd-ba5c-c804e7dad2a3" class=""><mark class="highlight-yellow_background"><strong>예측 및 제출</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">4주차 (회귀 심화)</summary><div class="indented"><p id="1c14d778-1cdc-81bc-863b-d1b0c13316f9" class=""><mark class="highlight-yellow_background"><strong>데이터 분석 및 시각화</strong></mark></p><figure id="1c44d778-1cdc-8072-8ad1-e18ed69f24a7" class="link-to-page"><a href="Plotly%201c44d7781cdc80728ad1e18ed69f24a7.html">Plotly</a></figure><p id="1c14d778-1cdc-81af-8a48-cbd304c743b3" class=""><mark class="highlight-yellow_background"><strong>데이터 수집 및 전처리</strong></mark></p><figure id="25e4d778-1cdc-80a4-9ae0-d50fde4da3b7" class="link-to-page"><a href="%EA%B5%90%EC%B0%A8%20%EA%B2%80%EC%A6%9D%2025e4d7781cdc80a49ae0d50fde4da3b7.html">교차 검증</a></figure><p id="1c14d778-1cdc-81f5-a6ce-e18926b59c55" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1c14d778-1cdc-8157-824b-ca39450233e4" class="link-to-page"><a href="%EC%A0%95%EA%B7%9C%ED%99%94(Regularization)%201c14d7781cdc8157824bca39450233e4.html">정규화(Regularization)</a></figure><figure id="1c14d778-1cdc-818e-9c45-f198a94b8e92" class="link-to-page"><a href="AutoGluon%201c14d7781cdc818e9c45f198a94b8e92.html">AutoGluon</a></figure><p id="1c14d778-1cdc-81a0-8810-f1fc34afe5ad" class=""><mark class="highlight-yellow_background"><strong>하이퍼 파라미터 튜닝</strong></mark></p><figure id="1c14d778-1cdc-81c2-9658-c64a5737a687" class="link-to-page"><a href="HyperOpt%201c14d7781cdc81c29658c64a5737a687.html">HyperOpt</a></figure><p id="25e4d778-1cdc-80ec-a2ff-d17166d80ae7" class=""><mark class="highlight-yellow_background"><strong>앙상블</strong></mark></p><figure id="1c14d778-1cdc-8123-951c-cdd955c4a109" class="link-to-page"><a href="%EC%8A%A4%ED%83%9C%ED%82%B9%201c14d7781cdc8123951ccdd955c4a109.html">스태킹</a></figure><p id="25e4d778-1cdc-80c8-9309-c62149ce2eb9" class=""><mark class="highlight-yellow_background"><strong>기타</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">5주차 (딥러닝 개요)</summary><div class="indented"><p id="25e4d778-1cdc-8052-9dcd-e19a617e9c2d" class=""><mark class="highlight-yellow_background"><strong>데이터 수집 및 전처리</strong></mark></p><p id="25e4d778-1cdc-80e0-b928-fde84be82b67" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1ec4d778-1cdc-806d-852c-fca7d168f2c8" class="link-to-page"><a href="%ED%8D%BC%EC%85%89%ED%8A%B8%EB%A1%A0(Perceptron)%201ec4d7781cdc806d852cfca7d168f2c8.html">퍼셉트론(Perceptron)</a></figure><figure id="1ec4d778-1cdc-807f-a2bf-f7a5a9330ab4" class="link-to-page"><a href="%EB%8B%A4%EC%B8%B5%20%ED%8D%BC%EC%85%89%ED%8A%B8%EB%A1%A0(MLP)%201ec4d7781cdc807fa2bff7a5a9330ab4.html">다층 퍼셉트론(MLP)</a></figure><figure id="1ec4d778-1cdc-804e-a6dc-fc23765c919a" class="link-to-page"><a href="%ED%99%9C%EC%84%B1%ED%99%94%20%ED%95%A8%EC%88%98%20(Activation%20Function)%201ec4d7781cdc804ea6dcfc23765c919a.html">활성화 함수 (Activation Function)</a></figure><p id="25e4d778-1cdc-80c7-8cb5-d3c13c2b5245" class=""><mark class="highlight-yellow_background"><strong>최적화</strong></mark></p><figure id="1ec4d778-1cdc-804c-ab10-e1ad053a0169" class="link-to-page"><a href="%EB%93%9C%EB%A1%AD%EC%95%84%EC%9B%83(Dropout)%201ec4d7781cdc804cab10e1ad053a0169.html">드롭아웃(Dropout)</a></figure><figure id="1ec4d778-1cdc-80fb-a583-ddcfc6a91754" class="link-to-page"><a href="%EB%B0%B0%EC%B9%98%20%EC%A0%95%EA%B7%9C%ED%99%94%20(Batch%20Normalization)%201ec4d7781cdc80fba583ddcfc6a91754.html">배치 정규화 (Batch Normalization)</a></figure><figure id="1ec4d778-1cdc-80b0-8fbc-c89610f953b4" class="link-to-page"><a href="def%20&amp;%20Class%201ec4d7781cdc80b08fbcc89610f953b4.html"><span class="icon">🤮</span>def &amp; Class</a></figure><figure id="1e94d778-1cdc-804e-9e62-e7a033c25b2e" class="link-to-page"><a href="PyTorch%20%EC%BD%94%EB%93%9C%20%EA%B8%B0%EB%B3%B8%20%EA%B5%AC%EC%A1%B0%201e94d7781cdc804e9e62e7a033c25b2e.html">PyTorch 코드 기본 구조</a></figure><p id="25e4d778-1cdc-8071-8a02-eb40a3c4e76c" class=""><mark class="highlight-yellow_background"><strong>기타</strong></mark></p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">6주차 (이미지)</summary><div class="indented"><p id="25e4d778-1cdc-80b2-ab43-e530aaabcc27" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1ec4d778-1cdc-80cb-a2c5-ed1bfc6c2e77" class="link-to-page"><a href="Computer%20Vision%20%EA%B0%9C%EC%9A%94%201ec4d7781cdc80cba2c5ed1bfc6c2e77.html">Computer Vision 개요</a></figure><figure id="1ec4d778-1cdc-80cf-bab8-c8f159c083dd" class="link-to-page"><a href="CNN%201ec4d7781cdc80cfbab8c8f159c083dd.html">CNN</a></figure><figure id="1f64d778-1cdc-80be-8a75-dd7a95e8eb05" class="link-to-page"><a href="AlexNet%201f64d7781cdc80be8a75dd7a95e8eb05.html">AlexNet</a></figure><figure id="1f64d778-1cdc-80d0-9c83-ee52b7d6ac2b" class="link-to-page"><a href="VGG%201f64d7781cdc80d09c83ee52b7d6ac2b.html">VGG</a></figure><p id="25e4d778-1cdc-802b-8c3d-fcb83859ec06" class=""><mark class="highlight-yellow_background"><strong>최적화</strong></mark></p><figure id="25e4d778-1cdc-80de-b53e-fa98f9ebbc81" class="link-to-page"><a href="%EB%93%9C%EB%A1%AD%EC%95%84%EC%9B%83(Dropout)%2025e4d7781cdc80deb53efa98f9ebbc81.html">드롭아웃(Dropout)</a></figure><figure id="1f64d778-1cdc-807f-b8e7-d6cb7415704f" class="link-to-page"><a href="%EC%A0%84%EC%9D%B4%ED%95%99%EC%8A%B5(Transfer%20Learning)%201f64d7781cdc807fb8e7d6cb7415704f.html">전이학습(Transfer Learning)</a></figure><p id="25e4d778-1cdc-801f-8166-cccbabe7e71d" class=""><mark class="highlight-yellow_background"><strong>기타</strong></mark></p><h3 id="1f44d778-1cdc-802f-abf7-db2469f2550f" class="block-color-blue_background">추가 자료</h3><figure id="1f44d778-1cdc-80a5-ad79-dcd15ea30572" class="link-to-page"><a href="%EA%B3%A0%EC%A0%84%20%EC%BB%B4%ED%93%A8%ED%84%B0%20%EB%B9%84%EC%A0%84%201f44d7781cdc80a5ad79dcd15ea30572.html">고전 컴퓨터 비전</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">7주차 (이미지)</summary><div class="indented"><p id="25e4d778-1cdc-80e3-a887-fb58fa8d20bb" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="25e4d778-1cdc-81f5-ba68-e4e11efcb2a5" class="link-to-page"><a href="Computer%20Vision%20%EA%B0%9C%EC%9A%94%2025e4d7781cdc81f5ba68e4e11efcb2a5.html">Computer Vision 개요</a></figure><figure id="25e4d778-1cdc-8157-b339-dafc2873e5b8" class="link-to-page"><a href="CNN%2025e4d7781cdc8157b339dafc2873e5b8.html">CNN</a></figure><figure id="25e4d778-1cdc-8191-ae8c-deedd3c90109" class="link-to-page"><a href="ResNet%20(Residual%20Network)%2025e4d7781cdc8191ae8cdeedd3c90109.html">ResNet (Residual Network)</a></figure><figure id="25e4d778-1cdc-811a-8da1-f5ca1a455dc6" class="link-to-page"><a href="U-Net%2025e4d7781cdc811a8da1f5ca1a455dc6.html">U-Net</a></figure><p id="25e4d778-1cdc-8058-948a-d44b8b960106" class=""><mark class="highlight-yellow_background"><strong>최적화</strong></mark></p><figure id="25e4d778-1cdc-813f-8070-ea0253975efe" class="link-to-page"><a href="%EC%A0%84%EC%9D%B4%ED%95%99%EC%8A%B5(Transfer%20Learning)%2025e4d7781cdc813f8070ea0253975efe.html">전이학습(Transfer Learning)</a></figure><figure id="25e4d778-1cdc-8149-a39c-c2396f91df70" class="link-to-page"><a href="%EB%B0%B0%EC%B9%98%20%EC%A0%95%EA%B7%9C%ED%99%94%20(Batch%20Normalization)%2025e4d7781cdc8149a39cc2396f91df70.html">배치 정규화 (Batch Normalization)</a></figure><p id="25e4d778-1cdc-80bd-8ca4-e94f92be506f" class=""><mark class="highlight-yellow_background"><strong>기타</strong></mark></p><h3 id="25e4d778-1cdc-813c-a082-d2b70e83d597" class="block-color-blue_background">추가 자료</h3><figure id="25e4d778-1cdc-816e-9205-c97be233ef6b" class="link-to-page"><a href="%EA%B3%A0%EC%A0%84%20%EC%BB%B4%ED%93%A8%ED%84%B0%20%EB%B9%84%EC%A0%84%2025e4d7781cdc816e9205c97be233ef6b.html">고전 컴퓨터 비전</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">8주차 (LLM)</summary><div class="indented"><p id="1f54d778-1cdc-817b-9aea-ea894cdcdc41" class="block-color-default"><mark class="highlight-orange_background"><strong>데이터 전처리</strong></mark></p><figure id="1f54d778-1cdc-80de-9356-de8fadfb7c15" class="link-to-page"><a href="NLP(Natural%20Language%20Processing,%20%EC%9E%90%EC%97%B0%EC%96%B4%20%EC%B2%98%EB%A6%AC)%20%EC%A0%84%EC%B2%98%EB%A6%AC%201f54d7781cdc80de9356de8fadfb7c15.html">NLP(Natural Language Processing, 자연어 처리) 전처리</a></figure><p id="25e4d778-1cdc-8068-affe-cd0ea28c6784" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1fc4d778-1cdc-805f-b889-dbab517adff3" class="link-to-page"><a href="RNN%201fc4d7781cdc805fb889dbab517adff3.html">RNN</a></figure><figure id="1fc4d778-1cdc-8011-b259-e298ac74ef7a" class="link-to-page"><a href="LSTM%201fc4d7781cdc8011b259e298ac74ef7a.html">LSTM</a></figure><figure id="1fd4d778-1cdc-8007-9223-d6c487ad2264" class="link-to-page"><a href="GRU%201fd4d7781cdc80079223d6c487ad2264.html">GRU</a></figure><figure id="1f64d778-1cdc-809c-b87c-da41c476e24a" class="link-to-page"><a href="Pre-Trained%20Model(%EC%82%AC%EC%A0%84%20%ED%95%99%EC%8A%B5%20%EB%AA%A8%EB%8D%B8)%201f64d7781cdc809cb87cda41c476e24a.html">Pre-Trained Model(사전 학습 모델)</a></figure><p id="25e4d778-1cdc-805a-b186-d243205b0293" class=""><mark class="highlight-yellow_background"><strong>기타</strong></mark></p><figure id="1f64d778-1cdc-809c-9ea6-dfde6b605714" class="link-to-page"><a href="%ED%97%88%EA%B9%85%ED%8E%98%EC%9D%B4%EC%8A%A4%201f64d7781cdc809c9ea6dfde6b605714.html">허깅페이스</a></figure></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">9주차 (LLM)</summary><div class="indented"><p id="25e4d778-1cdc-80be-96eb-c16ac256f496" class=""><mark class="highlight-yellow_background"><strong>모델 선택 및 학습</strong></mark></p><figure id="1fd4d778-1cdc-80e5-86ec-e4d5eceb7112" class="link-to-page"><a href="Seq2Seq%201fd4d7781cdc80e586ece4d5eceb7112.html">Seq2Seq</a></figure><figure id="1fd4d778-1cdc-8008-b540-d163db8b745f" class="link-to-page"><a href="Attention%201fd4d7781cdc8008b540d163db8b745f.html">Attention </a></figure><figure id="2024d778-1cdc-80d1-b8db-fccf7431f2b8" class="link-to-page"><a href="Transformer%202024d7781cdc80d1b8dbfccf7431f2b8.html">Transformer</a></figure><figure id="2024d778-1cdc-8069-ac5c-e66dfb83703f" class="link-to-page"><a href="transformer%20%EC%9D%B4%EB%A1%A0%20%EA%B3%B5%EB%B6%80%5Bappendix%5D%202024d7781cdc8069ac5ce66dfb83703f.html">transformer 이론 공부[appendix]</a></figure><figure id="2024d778-1cdc-8032-8c54-d437dc809f5a" class="link-to-page"><a href="Transformer%20%EC%BD%94%EB%93%9C%202024d7781cdc80328c54d437dc809f5a.html">Transformer 코드</a></figure><figure id="2024d778-1cdc-803b-91de-c6cbf0551477" class="link-to-page"><a href="BERT%20%EC%99%80%20fine-tuning%202024d7781cdc803b91dec6cbf0551477.html">BERT 와 fine-tuning</a></figure><figure id="2024d778-1cdc-8063-8348-d47cb8384bad" class="link-to-page"><a href="BERT%20%EC%BD%94%EB%93%9C%202024d7781cdc80638348d47cb8384bad.html">BERT 코드</a></figure><p id="25e4d778-1cdc-80f9-b630-f4fd56cdccb5" class=""><mark class="highlight-yellow_background"><strong>기타</strong></mark></p><ul id="1fc4d778-1cdc-8044-b251-ceb0042ef163" class="toggle"><li><details open=""><summary><strong>PyTorch 코드 기본 구조</strong></summary><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="1fc4d778-1cdc-8025-927c-c0a780daee02" class="code code-wrap"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
@@ -776,10 +784,4 @@ with torch.no_grad():  # 평가 시에는 그래디언트 계산 비활성화
         correct += (predicted == labels).sum().item()
 
 accuracy = correct / total * 100
-print(f&quot;Test Accuracy: {accuracy:.2f}%&quot;)</code></pre></details></li></ul><p id="8c8f6c7a-31a8-470e-baec-a976f06c9e13" class="">
-</p><p id="8473264b-b3a8-4b03-88e7-c29f2e41a43c" class="">
-</p></div></details><details open=""><summary style="font-weight:600;font-size:1.875em;line-height:1.3;margin:0">10주차</summary><div class="indented"><h2 id="2024d778-1cdc-8030-9127-cc40b7c9ea5c" class="">Trasnformer 와 Bert fine-tuning</h2><figure id="2024d778-1cdc-80d1-b8db-fccf7431f2b8" class="link-to-page"><a href="Transformer%202024d7781cdc80d1b8dbfccf7431f2b8.html">Transformer</a></figure><figure id="2024d778-1cdc-8069-ac5c-e66dfb83703f" class="link-to-page"><a href="transformer%20이론%20공부%5Bappendix%5D%202024d7781cdc8069ac5ce66dfb83703f.html">transformer 이론 공부[appendix]</a></figure><figure id="2024d778-1cdc-8032-8c54-d437dc809f5a" class="link-to-page"><a href="Transformer%20코드%202024d7781cdc80328c54d437dc809f5a.html">Transformer 코드</a></figure><figure id="2024d778-1cdc-803b-91de-c6cbf0551477" class="link-to-page"><a href="BERT%20와%20fine-tuning%202024d7781cdc803b91dec6cbf0551477.html">BERT 와 fine-tuning</a></figure><figure id="2024d778-1cdc-8063-8348-d47cb8384bad" class="link-to-page"><a href="BERT%20코드%202024d7781cdc80638348d47cb8384bad.html">BERT 코드</a></figure><p id="2024d778-1cdc-8082-91dc-c9c57ab88684" class="">
-</p><p id="2024d778-1cdc-808c-8215-d4c9b6c70fa0" class="">
-</p><p id="2024d778-1cdc-80ed-b956-ca071729744c" class="">
-</p><p id="2024d778-1cdc-8098-bf27-d587d15441bc" class="">
-</p></div></details></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>
+print(f&quot;Test Accuracy: {accuracy:.2f}%&quot;)</code></pre></details></li></ul></div></details></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>

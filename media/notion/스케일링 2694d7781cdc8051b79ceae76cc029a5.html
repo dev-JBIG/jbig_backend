@@ -1,0 +1,716 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>스케일링</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 3px;
+	padding: 1rem;
+}
+
+figure {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.collection-content td {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.column-list {
+	display: flex;
+	justify-content: space-between;
+}
+
+.column {
+	padding: 0 1em;
+}
+
+.column:first-child {
+	padding-left: 0;
+}
+
+.column:last-child {
+	padding-right: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding: 0.125rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+	border-collapse: collapse;
+}
+
+table {
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.page-description {
+	margin-bottom: 2em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-block;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	transform: scale(1.5);
+	margin-right: 0.6em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+blockquote.quote-large {
+	font-size: 1.25em;
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray {
+	color: rgba(142, 139, 134, 1);
+	fill: rgba(142, 139, 134, 1);
+}
+.highlight-brown {
+	color: rgba(182, 137, 101, 1);
+	fill: rgba(182, 137, 101, 1);
+}
+.highlight-orange {
+	color: rgba(213, 128, 59, 1);
+	fill: rgba(213, 128, 59, 1);
+}
+.highlight-yellow {
+	color: rgba(229, 178, 68, 1);
+	fill: rgba(229, 178, 68, 1);
+}
+.highlight-teal {
+	color: rgba(85, 167, 124, 1);
+	fill: rgba(85, 167, 124, 1);
+}
+.highlight-blue {
+	color: rgba(35, 131, 226, 1);
+	fill: rgba(35, 131, 226, 1);
+}
+.highlight-purple {
+	color: rgba(181, 119, 214, 1);
+	fill: rgba(181, 119, 214, 1);
+}
+.highlight-pink {
+	color: rgba(219, 105, 153, 1);
+	fill: rgba(219, 105, 153, 1);
+}
+.highlight-red {
+	color: rgba(229, 100, 88, 1);
+	fill: rgba(229, 100, 88, 1);
+}
+.highlight-default_background {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray_background {
+	background: rgba(240, 239, 237, 1);
+}
+.highlight-brown_background {
+	background: rgba(245, 237, 233, 1);
+}
+.highlight-orange_background {
+	background: rgba(251, 235, 222, 1);
+}
+.highlight-yellow_background {
+	background: rgba(249, 243, 220, 1);
+}
+.highlight-teal_background {
+	background: rgba(232, 241, 236, 1);
+}
+.highlight-blue_background {
+	background: rgba(232, 242, 250, 1);
+}
+.highlight-purple_background {
+	background: rgba(243, 235, 249, 1);
+}
+.highlight-pink_background {
+	background: rgba(250, 233, 241, 1);
+}
+.highlight-red_background {
+	background: rgba(252, 233, 231, 1);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(142, 139, 134, 1);
+	fill: rgba(142, 139, 134, 1);
+}
+.block-color-brown {
+	color: rgba(182, 137, 101, 1);
+	fill: rgba(182, 137, 101, 1);
+}
+.block-color-orange {
+	color: rgba(213, 128, 59, 1);
+	fill: rgba(213, 128, 59, 1);
+}
+.block-color-yellow {
+	color: rgba(229, 178, 68, 1);
+	fill: rgba(229, 178, 68, 1);
+}
+.block-color-teal {
+	color: rgba(85, 167, 124, 1);
+	fill: rgba(85, 167, 124, 1);
+}
+.block-color-blue {
+	color: rgba(35, 131, 226, 1);
+	fill: rgba(35, 131, 226, 1);
+}
+.block-color-purple {
+	color: rgba(181, 119, 214, 1);
+	fill: rgba(181, 119, 214, 1);
+}
+.block-color-pink {
+	color: rgba(219, 105, 153, 1);
+	fill: rgba(219, 105, 153, 1);
+}
+.block-color-red {
+	color: rgba(229, 100, 88, 1);
+	fill: rgba(229, 100, 88, 1);
+}
+.block-color-default_background {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray_background {
+	background: rgba(240, 239, 237, 1);
+}
+.block-color-brown_background {
+	background: rgba(245, 237, 233, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 235, 222, 1);
+}
+.block-color-yellow_background {
+	background: rgba(249, 243, 220, 1);
+}
+.block-color-teal_background {
+	background: rgba(232, 241, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(232, 242, 250, 1);
+}
+.block-color-purple_background {
+	background: rgba(243, 235, 249, 1);
+}
+.block-color-pink_background {
+	background: rgba(250, 233, 241, 1);
+}
+.block-color-red_background {
+	background: rgba(252, 233, 231, 1);
+}
+.select-value-color-default { background-color: rgba(42, 28, 0, 0.07); }
+.select-value-color-gray { background-color: rgba(28, 19, 1, 0.11); }
+.select-value-color-brown { background-color: rgba(127, 51, 0, 0.156); }
+.select-value-color-orange { background-color: rgba(196, 88, 0, 0.203); }
+.select-value-color-yellow { background-color: rgba(209, 156, 0, 0.282); }
+.select-value-color-green { background-color: rgba(0, 96, 38, 0.156); }
+.select-value-color-blue { background-color: rgba(0, 99, 174, 0.172); }
+.select-value-color-purple { background-color: rgba(92, 0, 163, 0.141); }
+.select-value-color-pink { background-color: rgba(183, 0, 78, 0.152); }
+.select-value-color-red { background-color: rgba(206, 24, 0, 0.164); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style></head><body><article id="2694d778-1cdc-8051-b79c-eae76cc029a5" class="page sans"><header><h1 class="page-title">스케일링</h1><p class="page-description"></p></header><div class="page-body"><ul id="2694d778-1cdc-8007-b1f3-fb03eedb68b3" class="toggle"><li><details open=""><summary><mark class="highlight-default_background">개념</mark></summary><ul id="2694d778-1cdc-8093-93aa-ef07cab44e8c" class="bulleted-list"><li style="list-style-type:disc"><mark class="highlight-default_background">데이터 스케일링이란 데이터 전처리 과정 중의 하나입니다.</mark></li></ul><ul id="2694d778-1cdc-80ab-8e14-f6262f3202ca" class="bulleted-list"><li style="list-style-type:disc"><mark class="highlight-default_background">피처(feature)들마다 데이터값의 범위가 다 제각각이기 때문에 범위 차이가 클 경우 데이터를 갖고 모델을 학습할 때 0으로 수렴하거나 무한으로 발산할 수 있습니다.</mark></li></ul><ul id="2694d778-1cdc-802e-9ba5-e45ff7d5f424" class="bulleted-list"><li style="list-style-type:disc"><mark class="highlight-default_background">따라서 데이터 스케일링을 통해 </mark><mark class="highlight-default_background"><strong>모든 피처들의 데이터 분포나 범위를 동일하게 조정</strong></mark><mark class="highlight-default_background">해줄 수 있습니다.</mark></li></ul><ul id="2694d778-1cdc-808d-9f39-df5e91e18daf" class="bulleted-list"><li style="list-style-type:disc"><mark class="highlight-default_background">트리 기반 알고리즘 같은 특수한 경우를 제외한 대다수의 머신러닝 알고리즘은 결과가 input features의 스케일에 큰 영향을 받음.</mark></li></ul><ul id="2694d778-1cdc-80bb-bff1-f9fc1959d81e" class="bulleted-list"><li style="list-style-type:disc"><mark class="highlight-default_background">따라서 데이터의 스케일을 동일하게 맞춰주는 표준화 작업이 필요함.</mark></li></ul></details></li></ul><ul id="2694d778-1cdc-80ab-b83c-d7b64a5932ce" class="toggle"><li><details open=""><summary><mark class="highlight-default_background">종류</mark></summary><ul id="2694d778-1cdc-81b8-87b2-fff264aeb7f8" class="toggle"><li><details open=""><summary><mark class="highlight-default_background">MinMaxScaler</mark></summary><p id="2694d778-1cdc-81b7-8326-fbcdc52ca21d" class="">MinMaxScaler는 모든 피처들이 <strong>0과 1사이</strong>의 데이터값을 갖도록 만들어줍니다.</p><p id="2694d778-1cdc-81da-b1f0-f039dfa9d7a4" class="">즉, 피처별로 최솟값은 0이 되고, 최댓값은 1이 되는 것이죠.</p><p id="2694d778-1cdc-8132-bcc9-d127d5582cf2" class="">데이터가 2차원인 겅우, 모든 데이터는 x, y 축의 0과 1 사이에 존재하게 됩니다.</p><p id="2694d778-1cdc-81cb-9644-fda4b1f9a150" class="">이 방법 또한 이상치가 존재한다면, 이상치가 극값이 되어 데이터가 아주 좁은 범위에 분포하게 되기 때문에 스케일링 방법으로 적절하지 않습니다.</p><figure id="2694d778-1cdc-8190-9426-f53722408408" class="image"><a href="Untitled%2012.png"><img style="width:191.00001525878906px" src="Untitled%2012.png"/></a></figure><ul id="2694d778-1cdc-81d5-a1f9-c688080c8698" class="toggle"><li><details open=""><summary>코드</summary><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="2694d778-1cdc-8161-af48-d7e219135095" class="code code-wrap"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from sklearn.preprocessing import MinMaxScaler
+
+mms = MinMaxScaler()
+mms.fit(X_train)
+X_train_scaled = mms.transform(X_train)
+X_test_scaled = mms.transform(X_test)
+dtc.fit(X_train_scaled, y_train)
+print(&#x27;모델의 정확도 :&#x27;, round(dtc.score(X_test_scaled, y_test), 4))</code></pre></details></li></ul></details></li></ul><ul id="2694d778-1cdc-81de-b041-cb2bd9e8fdd9" class="toggle"><li><details open=""><summary><mark class="highlight-default_background">MaxAbsScaler</mark></summary><p id="2694d778-1cdc-81d4-a9b2-d64faeebee7b" class="">MaxAbsScaler는 MinMaxScaler와 비슷한데요!</p><p id="2694d778-1cdc-8156-a15d-ceabfeb5a23d" class="">MaxAbs Scaling은 데이터의 최대 절댓값이 1, 0이 0으로 스케일링됩니다.</p><p id="2694d778-1cdc-8105-a3b4-da6ef4915208" class="">즉, 절댓값이 0에서 1 사이로 매핑되므로 결과적으로 -1에서 1 사이로 스케일링됩니다.</p><p id="2694d778-1cdc-8189-8625-ca7cb8a14e62" class="">마찬가지로, 이상치의 영향을 크게 받기 때문에 이상치가 존재할 경우 이 방법은 적절하지 않습니다.</p><figure id="2694d778-1cdc-8186-ab2e-dba70b812d1a" class="image"><a href="image%209.png"><img style="width:399px" src="image%209.png"/></a></figure><ul id="2694d778-1cdc-8136-9515-e3556bd6e96d" class="toggle"><li><details open=""><summary>코드</summary><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="2694d778-1cdc-8122-b94e-f9cf35ed2d40" class="code code-wrap"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from sklearn.preprocessing import MaxAbsScaler
+
+mas = MaxAbsScaler()
+mas.fit(X_train)
+X_train_scaled = mas.transform(X_train)
+X_test_scaled = mas.transform(X_test)
+dtc.fit(X_train_scaled, y_train)
+print(&#x27;모델의 정확도 :&#x27;, round(dtc.score(X_test_scaled, y_test), 4))</code></pre></details></li></ul></details></li></ul><ul id="2694d778-1cdc-81ef-ab2e-dd658ec0e471" class="toggle"><li><details open=""><summary><mark class="highlight-default_background">StandardScaler</mark></summary><p id="2694d778-1cdc-811f-9533-db0bfc4aeb64" class=""><strong>표준화(Standardization)</strong>는 <strong>변수 각각의 평균을 0, 분산을 1로 만들어주는 스케일링 기법</strong>입니다. 표준화가 적용된 변수는 가우시안 정규분포를 가진 값으로 변환됩니다.</p><p id="2694d778-1cdc-8194-b9a6-c478d4ea3503" class="">아래 수식과 같이, 변수 x의 원래 값에서 x의 평균을 뺀 값을 x의 표준편차로 나눈 값으로 계산할 수 있습니다.</p><figure id="2694d778-1cdc-8158-a02e-dcfc2b96b612" class="image"><a href="https://velog.velcdn.com/images/jiazzang/post/98d79c42-206a-4f1f-aab2-19ead7a3b49e/image.png"><img src="https://velog.velcdn.com/images/jiazzang/post/98d79c42-206a-4f1f-aab2-19ead7a3b49e/image.png"/></a></figure><p id="2694d778-1cdc-8147-b80f-eaba8fb8fe9e" class="">이 방법의 경우에도 데이터 내에 이상치가 있다면 데이터의 평균과 분산에 크게 영향을 주기 때문에 스케일링 방법으로 적절하지 않습니다.</p><ul id="2694d778-1cdc-81da-bd11-cb530937ad4d" class="toggle"><li><details open=""><summary>코드</summary><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="2694d778-1cdc-8189-ac8c-fdc8eea110d8" class="code code-wrap"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from sklearn.preprocessing import StandardScaler
+
+std = StandardScaler()
+std.fit(X_train)
+X_train_scaled = std.transform(X_train)
+X_test_scaled = std.transform(X_test)
+dtc.fit(X_train_scaled, y_train)
+print(&#x27;모델의 정확도 :&#x27;, round(dtc.score(X_test_scaled, y_test), 4))</code></pre></details></li></ul></details></li></ul><ul id="2694d778-1cdc-8163-8846-dc7a990292ca" class="toggle"><li><details open=""><summary><mark class="highlight-default_background">RobustScaler</mark></summary><p id="2694d778-1cdc-8132-ac0b-f71fa0bbef7f" class="">RobustScaler는 StandardScaler와 비슷합니다.</p><p id="2694d778-1cdc-81d9-bf3e-c6f01d583a9f" class="">다만, StandardScaler는 평균과 분산을 사용했지만 RobustScaler는 <strong>중간값</strong>(median)과 <strong>사분위값</strong>(quartile)을 사용합니다.</p><p id="2694d778-1cdc-81b9-b4b8-c45e367b6f31" class="">데이터의 중앙값 = 0, <a href="https://www.notion.so/553bdd95ecf74fb3ad0fb38829ba0747?pvs=21">IQR </a>= 1이 되도록 스케일링 합니다.</p><figure id="2694d778-1cdc-81fa-b672-fc974312995b" class="image"><a href="image%2010.png"><img style="width:399px" src="image%2010.png"/></a></figure><p id="2694d778-1cdc-81e8-843d-c16c0873d00c" class="">따라서, 이상치의 영향을 최소화할 수 있겠습니다.</p><p id="2694d778-1cdc-818a-8a84-dfc3e1cf20f0" class="">StandardScaler와 비교하였을 때, RobustScaler를 활용하면 표준화 후 데이터가 더 넓게 분포해있습니다.</p><ul id="2694d778-1cdc-81a1-bd1e-ece09eb4954d" class="toggle"><li><details open=""><summary>코드</summary><script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" integrity="sha512-7Z9J3l1+EYfeaPKcGXu3MS/7T+w19WtKQY/n+xzmw4hZhJ9tyYmcUS+4QqAlzhicE5LAfMQSF3iFTK9bQdTxXg==" crossorigin="anonymous" referrerPolicy="no-referrer"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" integrity="sha512-tN7Ec6zAFaVSG3TpNAKtk4DOHNpSwKHxxrsiw4GHKESGPs5njn/0sMCUMl2svV4wo4BK/rCP7juYz+zx+l6oeQ==" crossorigin="anonymous" referrerPolicy="no-referrer"/><pre id="2694d778-1cdc-810c-9888-cc4f340d8c91" class="code code-wrap"><code class="language-Python" style="white-space:pre-wrap;word-break:break-all">from sklearn.preprocessing import RobustScaler
+
+rbs = RobustScaler()
+X_train_scaled = rbs.fit_transform(X_train)
+X_test_scaled = rbs.transform(X_test)
+dtc.fit(X_train_scaled, y_train)
+print(&#x27;모델의 정확도 :&#x27;, round(dtc.score(X_test_scaled, y_test), 4))</code></pre></details></li></ul></details></li></ul></details></li></ul></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>

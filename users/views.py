@@ -37,10 +37,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from boards.serializers import PostListSerializer, CommentSerializer
 from boards.models import Post, Comment
 
-# schemas.py에서 스키마들 import
-from .schemas import (
-    signup_schema, signin_schema, email_send_schema, email_verify_schema
-)
+
 from rest_framework.parsers import JSONParser, FormParser
 
 
@@ -90,12 +87,45 @@ class UserCommentListView(generics.ListAPIView):
         return Comment.objects.filter(author=user).order_by('-created_at')
 
 
+@extend_schema(
+    tags=["사용자"],
+    summary="회원가입",
+    description="새로운 사용자를 등록합니다. 성공 시 인증 이메일이 발송됩니다.",
+    request=UserCreateSerializer,
+    responses={
+        201: {
+            'description': '회원가입 성공',
+            'examples': {
+                'Success': {
+                    'value': {
+                        "isSuccess": True,
+                        "message": "회원가입에 성공하였습니다. 인증번호를 확인해주세요."
+                    }
+                }
+            }
+        },
+        400: {
+            'description': '잘못된 요청',
+            'examples': {
+                'Invalid Data': {
+                    'value': {
+                        "email": [
+                            "user with this email already exists."
+                        ],
+                        "username": [
+                            "A user with that username already exists."
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 class SignUpView(generics.CreateAPIView):
     parser_classes = [JSONParser, FormParser]
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
 
-    @signup_schema
     def post(self, request, *args, **kwargs):
         return self.create(request, *args, **kwargs)
 
@@ -126,18 +156,67 @@ class SignUpView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED, headers=headers)
 
 
+@extend_schema(
+    tags=["사용자"],
+    summary="로그인",
+    description="이메일과 비밀번호를 사용하여 로그인하고 JWT 토큰(Access, Refresh)을 발급받습니다.",
+    request=CustomTokenObtainPairSerializer,
+    responses={
+        200: {
+            'description': '로그인 성공',
+            'examples': {
+                'Success': {
+                    'value': {
+                        "isSuccess": True,
+                        "message": "로그인에 성공했습니다.",
+                        "username": "testuser",
+                        "semester": 1,
+                        "is_staff": False,
+                        "refresh": "your_refresh_token",
+                        "access": "your_access_token"
+                    }
+                }
+            }
+        },
+        401: {
+            'description': '인증 실패',
+            'examples': {
+                'User Not Found': {
+                    'value': {
+                        "isSuccess": False,
+                        "errorCode": "USER_NOT_FOUND",
+                        "message": "존재하지 않는 이메일입니다."
+                    }
+                },
+                'Invalid Password': {
+                    'value': {
+                        "isSuccess": False,
+                        "errorCode": "INVALID_PASSWORD",
+                        "message": "비밀번호가 올바르지 않습니다."
+                    }
+                },
+                'Account Not Verified': {
+                    'value': {
+                        "isSuccess": False,
+                        "errorCode": "ACCOUNT_NOT_VERIFIED",
+                        "message": "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요."
+                    }
+                }
+            }
+        }
+    }
+)
 class SignInView(TokenObtainPairView):
     parser_classes = [JSONParser, FormParser]
     serializer_class = CustomTokenObtainPairSerializer
     
-    @signin_schema
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
 
 class CustomTokenRefreshView(APIView):
     @extend_schema(
-        tags=["인증"],
+        tags=["사용자"],
         summary="JWT 토큰 재발급",
         description="""**Refresh 토큰을 사용하여 새로운 Access 토큰을 발급받습니다.** 
         
@@ -214,10 +293,47 @@ class CustomTokenRefreshView(APIView):
             return Response({"error": "An unexpected error occurred.", "detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    tags=["사용자"],
+    summary="이메일 인증",
+    description="회원가입 후 이메일로 발송된 6자리 인증 코드를 사용하여 이메일 주소를 인증합니다.",
+    request=EmailVerificationSerializer,
+    responses={
+        200: {
+            'description': '인증 성공',
+            'examples': {
+                'Success': {
+                    'value': {"message": "Email verified successfully."}
+                },
+                'Already Verified': {
+                    'value': {"message": "This account is already verified."}
+                }
+            }
+        },
+        400: {
+            'description': '잘못된 요청',
+            'examples': {
+                'Expired Code': {
+                    'value': {"error": "Verification code has expired."}
+                },
+                'Invalid Code': {
+                    'value': {"error": "Invalid verification code."}
+                }
+            }
+        },
+        404: {
+            'description': '사용자를 찾을 수 없음',
+            'examples': {
+                'User Not Found': {
+                    'value': {"error": "User not found"}
+                }
+            }
+        }
+    }
+)
 class EmailVerifyView(APIView):
     serializer_class = EmailVerificationSerializer
     
-    @email_verify_schema
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -260,7 +376,7 @@ class ResendVerificationEmailView(APIView):
     serializer_class = EmailResendSerializer
 
     @extend_schema(
-        tags=["인증"],
+        tags=["사용자"],
         summary="인증 이메일 재전송",
         description="인증 이메일을 재전송합니다. 사용자가 인증 코드를 받지 못했거나 코드가 만료된 경우 사용됩니다.",
     )
@@ -297,7 +413,7 @@ class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 
     @extend_schema(
-        tags=["인증"],
+        tags=["사용자"],
         summary="로그아웃",
         description="사용자를 로그아웃 처리합니다. 요청 본문에 제공된 리프레시 토큰을 블랙리스트에 추가하여 더 이상 사용할 수 없게 만듭니다.",
         request= {
@@ -332,7 +448,7 @@ class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        tags=["비밀번호 재설정"],
+        tags=["사용자"],
         summary="비밀번호 재설정 인증코드 요청",
         description="이메일로 인증 코드를 요청하여 비밀번호 재설정을 시작합니다.",
         request=PasswordResetRequestSerializer,
@@ -372,7 +488,7 @@ class VerifyPasswordCodeView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        tags=["비밀번호 재설정"],
+        tags=["사용자"],
         summary="비밀번호 재설정 인증코드 확인",
         description="이메일로 전송된 인증 코드를 확인합니다.",
         request=VerifyPasswordCodeSerializer,
@@ -419,7 +535,7 @@ class PasswordResetView(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        tags=["비밀번호 재설정"],
+        tags=["사용자"],
         summary="새 비밀번호로 재설정",
         description="인증코드 확인 후 새로운 비밀번호를 설정합니다.",
         request=PasswordResetSerializer,
