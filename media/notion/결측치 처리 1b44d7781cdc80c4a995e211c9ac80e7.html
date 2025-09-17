@@ -1,0 +1,691 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>결측치 처리</title><style>
+/* cspell:disable-file */
+/* webkit printing magic: print all background colors */
+html {
+	-webkit-print-color-adjust: exact;
+}
+* {
+	box-sizing: border-box;
+	-webkit-print-color-adjust: exact;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+@media only screen {
+	body {
+		margin: 2em auto;
+		max-width: 900px;
+		color: rgb(55, 53, 47);
+	}
+}
+
+body {
+	line-height: 1.5;
+	white-space: pre-wrap;
+}
+
+a,
+a.visited {
+	color: inherit;
+	text-decoration: underline;
+}
+
+.pdf-relative-link-path {
+	font-size: 80%;
+	color: #444;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.01em;
+	line-height: 1.2;
+	font-weight: 600;
+	margin-bottom: 0;
+}
+
+.page-title {
+	font-size: 2.5rem;
+	font-weight: 700;
+	margin-top: 0;
+	margin-bottom: 0.75em;
+}
+
+h1 {
+	font-size: 1.875rem;
+	margin-top: 1.875rem;
+}
+
+h2 {
+	font-size: 1.5rem;
+	margin-top: 1.5rem;
+}
+
+h3 {
+	font-size: 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.source {
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	padding: 1.5em;
+	word-break: break-all;
+}
+
+.callout {
+	border-radius: 3px;
+	padding: 1rem;
+}
+
+figure {
+	margin: 1.25em 0;
+	page-break-inside: avoid;
+}
+
+figcaption {
+	opacity: 0.5;
+	font-size: 85%;
+	margin-top: 0.5em;
+}
+
+mark {
+	background-color: transparent;
+}
+
+.indented {
+	padding-left: 1.5em;
+}
+
+hr {
+	background: transparent;
+	display: block;
+	width: 100%;
+	height: 1px;
+	visibility: visible;
+	border: none;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+}
+
+img {
+	max-width: 100%;
+}
+
+@media only print {
+	img {
+		max-height: 100vh;
+		object-fit: contain;
+	}
+}
+
+@page {
+	margin: 1in;
+}
+
+.collection-content {
+	font-size: 0.875rem;
+}
+
+.collection-content td {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.column-list {
+	display: flex;
+	justify-content: space-between;
+}
+
+.column {
+	padding: 0 1em;
+}
+
+.column:first-child {
+	padding-left: 0;
+}
+
+.column:last-child {
+	padding-right: 0;
+}
+
+.table_of_contents-item {
+	display: block;
+	font-size: 0.875rem;
+	line-height: 1.3;
+	padding: 0.125rem;
+}
+
+.table_of_contents-indent-1 {
+	margin-left: 1.5rem;
+}
+
+.table_of_contents-indent-2 {
+	margin-left: 3rem;
+}
+
+.table_of_contents-indent-3 {
+	margin-left: 4.5rem;
+}
+
+.table_of_contents-link {
+	text-decoration: none;
+	opacity: 0.7;
+	border-bottom: 1px solid rgba(55, 53, 47, 0.18);
+}
+
+table,
+th,
+td {
+	border: 1px solid rgba(55, 53, 47, 0.09);
+	border-collapse: collapse;
+}
+
+table {
+	border-left: none;
+	border-right: none;
+}
+
+th,
+td {
+	font-weight: normal;
+	padding: 0.25em 0.5em;
+	line-height: 1.5;
+	min-height: 1.5em;
+	text-align: left;
+}
+
+th {
+	color: rgba(55, 53, 47, 0.6);
+}
+
+ol,
+ul {
+	margin: 0;
+	margin-block-start: 0.6em;
+	margin-block-end: 0.6em;
+}
+
+li > ol:first-child,
+li > ul:first-child {
+	margin-block-start: 0.6em;
+}
+
+ul > li {
+	list-style: disc;
+}
+
+ul.to-do-list {
+	padding-inline-start: 0;
+}
+
+ul.to-do-list > li {
+	list-style: none;
+}
+
+.to-do-children-checked {
+	text-decoration: line-through;
+	opacity: 0.375;
+}
+
+ul.toggle > li {
+	list-style: none;
+}
+
+ul {
+	padding-inline-start: 1.7em;
+}
+
+ul > li {
+	padding-left: 0.1em;
+}
+
+ol {
+	padding-inline-start: 1.6em;
+}
+
+ol > li {
+	padding-left: 0.2em;
+}
+
+.mono ol {
+	padding-inline-start: 2em;
+}
+
+.mono ol > li {
+	text-indent: -0.4em;
+}
+
+.toggle {
+	padding-inline-start: 0em;
+	list-style-type: none;
+}
+
+/* Indent toggle children */
+.toggle > li > details {
+	padding-left: 1.7em;
+}
+
+.toggle > li > details > summary {
+	margin-left: -1.1em;
+}
+
+.selected-value {
+	display: inline-block;
+	padding: 0 0.5em;
+	background: rgba(206, 205, 202, 0.5);
+	border-radius: 3px;
+	margin-right: 0.5em;
+	margin-top: 0.3em;
+	margin-bottom: 0.3em;
+	white-space: nowrap;
+}
+
+.collection-title {
+	display: inline-block;
+	margin-right: 1em;
+}
+
+.page-description {
+	margin-bottom: 2em;
+}
+
+.simple-table {
+	margin-top: 1em;
+	font-size: 0.875rem;
+	empty-cells: show;
+}
+.simple-table td {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table th {
+	height: 29px;
+	min-width: 120px;
+}
+
+.simple-table-header-color {
+	background: rgb(247, 246, 243);
+	color: black;
+}
+.simple-table-header {
+	font-weight: 500;
+}
+
+time {
+	opacity: 0.5;
+}
+
+.icon {
+	display: inline-block;
+	max-width: 1.2em;
+	max-height: 1.2em;
+	text-decoration: none;
+	vertical-align: text-bottom;
+	margin-right: 0.5em;
+}
+
+img.icon {
+	border-radius: 3px;
+}
+
+.user-icon {
+	width: 1.5em;
+	height: 1.5em;
+	border-radius: 100%;
+	margin-right: 0.5rem;
+}
+
+.user-icon-inner {
+	font-size: 0.8em;
+}
+
+.text-icon {
+	border: 1px solid #000;
+	text-align: center;
+}
+
+.page-cover-image {
+	display: block;
+	object-fit: cover;
+	width: 100%;
+	max-height: 30vh;
+}
+
+.page-header-icon {
+	font-size: 3rem;
+	margin-bottom: 1rem;
+}
+
+.page-header-icon-with-cover {
+	margin-top: -0.72em;
+	margin-left: 0.07em;
+}
+
+.page-header-icon img {
+	border-radius: 3px;
+}
+
+.link-to-page {
+	margin: 1em 0;
+	padding: 0;
+	border: none;
+	font-weight: 500;
+}
+
+p > .user {
+	opacity: 0.5;
+}
+
+td > .user,
+td > time {
+	white-space: nowrap;
+}
+
+input[type="checkbox"] {
+	transform: scale(1.5);
+	margin-right: 0.6em;
+	vertical-align: middle;
+}
+
+p {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+}
+
+.image {
+	border: none;
+	margin: 1.5em 0;
+	padding: 0;
+	border-radius: 0;
+	text-align: center;
+}
+
+.code,
+code {
+	background: rgba(135, 131, 120, 0.15);
+	border-radius: 3px;
+	padding: 0.2em 0.4em;
+	border-radius: 3px;
+	font-size: 85%;
+	tab-size: 2;
+}
+
+code {
+	color: #eb5757;
+}
+
+.code {
+	padding: 1.5em 1em;
+}
+
+.code-wrap {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.code > code {
+	background: none;
+	padding: 0;
+	font-size: 100%;
+	color: inherit;
+}
+
+blockquote {
+	font-size: 1em;
+	margin: 1em 0;
+	padding-left: 1em;
+	border-left: 3px solid rgb(55, 53, 47);
+}
+
+blockquote.quote-large {
+	font-size: 1.25em;
+}
+
+.bookmark {
+	text-decoration: none;
+	max-height: 8em;
+	padding: 0;
+	display: flex;
+	width: 100%;
+	align-items: stretch;
+}
+
+.bookmark-title {
+	font-size: 0.85em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	height: 1.75em;
+	white-space: nowrap;
+}
+
+.bookmark-text {
+	display: flex;
+	flex-direction: column;
+}
+
+.bookmark-info {
+	flex: 4 1 180px;
+	padding: 12px 14px 14px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+.bookmark-image {
+	width: 33%;
+	flex: 1 1 180px;
+	display: block;
+	position: relative;
+	object-fit: cover;
+	border-radius: 1px;
+}
+
+.bookmark-description {
+	color: rgba(55, 53, 47, 0.6);
+	font-size: 0.75em;
+	overflow: hidden;
+	max-height: 4.5em;
+	word-break: break-word;
+}
+
+.bookmark-href {
+	font-size: 0.75em;
+	margin-top: 0.25em;
+}
+
+.sans { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; }
+.code { font-family: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace; }
+.serif { font-family: Lyon-Text, Georgia, ui-serif, serif; }
+.mono { font-family: iawriter-mono, Nitti, Menlo, Courier, monospace; }
+.pdf .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK JP'; }
+.pdf:lang(zh-CN) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK SC'; }
+.pdf:lang(zh-TW) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK TC'; }
+.pdf:lang(ko-KR) .sans { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol", 'Twemoji', 'Noto Color Emoji', 'Noto Sans CJK KR'; }
+.pdf .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .code { font-family: Source Code Pro, "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.pdf .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK JP'; }
+.pdf:lang(zh-CN) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK SC'; }
+.pdf:lang(zh-TW) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK TC'; }
+.pdf:lang(ko-KR) .serif { font-family: PT Serif, Lyon-Text, Georgia, ui-serif, serif, 'Twemoji', 'Noto Color Emoji', 'Noto Serif CJK KR'; }
+.pdf .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK JP'; }
+.pdf:lang(zh-CN) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK SC'; }
+.pdf:lang(zh-TW) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK TC'; }
+.pdf:lang(ko-KR) .mono { font-family: PT Mono, iawriter-mono, Nitti, Menlo, Courier, monospace, 'Twemoji', 'Noto Color Emoji', 'Noto Sans Mono CJK KR'; }
+.highlight-default {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray {
+	color: rgba(142, 139, 134, 1);
+	fill: rgba(142, 139, 134, 1);
+}
+.highlight-brown {
+	color: rgba(182, 137, 101, 1);
+	fill: rgba(182, 137, 101, 1);
+}
+.highlight-orange {
+	color: rgba(213, 128, 59, 1);
+	fill: rgba(213, 128, 59, 1);
+}
+.highlight-yellow {
+	color: rgba(229, 178, 68, 1);
+	fill: rgba(229, 178, 68, 1);
+}
+.highlight-teal {
+	color: rgba(85, 167, 124, 1);
+	fill: rgba(85, 167, 124, 1);
+}
+.highlight-blue {
+	color: rgba(35, 131, 226, 1);
+	fill: rgba(35, 131, 226, 1);
+}
+.highlight-purple {
+	color: rgba(181, 119, 214, 1);
+	fill: rgba(181, 119, 214, 1);
+}
+.highlight-pink {
+	color: rgba(219, 105, 153, 1);
+	fill: rgba(219, 105, 153, 1);
+}
+.highlight-red {
+	color: rgba(229, 100, 88, 1);
+	fill: rgba(229, 100, 88, 1);
+}
+.highlight-default_background {
+	color: rgba(44, 44, 43, 1);
+}
+.highlight-gray_background {
+	background: rgba(240, 239, 237, 1);
+}
+.highlight-brown_background {
+	background: rgba(245, 237, 233, 1);
+}
+.highlight-orange_background {
+	background: rgba(251, 235, 222, 1);
+}
+.highlight-yellow_background {
+	background: rgba(249, 243, 220, 1);
+}
+.highlight-teal_background {
+	background: rgba(232, 241, 236, 1);
+}
+.highlight-blue_background {
+	background: rgba(232, 242, 250, 1);
+}
+.highlight-purple_background {
+	background: rgba(243, 235, 249, 1);
+}
+.highlight-pink_background {
+	background: rgba(250, 233, 241, 1);
+}
+.highlight-red_background {
+	background: rgba(252, 233, 231, 1);
+}
+.block-color-default {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray {
+	color: rgba(142, 139, 134, 1);
+	fill: rgba(142, 139, 134, 1);
+}
+.block-color-brown {
+	color: rgba(182, 137, 101, 1);
+	fill: rgba(182, 137, 101, 1);
+}
+.block-color-orange {
+	color: rgba(213, 128, 59, 1);
+	fill: rgba(213, 128, 59, 1);
+}
+.block-color-yellow {
+	color: rgba(229, 178, 68, 1);
+	fill: rgba(229, 178, 68, 1);
+}
+.block-color-teal {
+	color: rgba(85, 167, 124, 1);
+	fill: rgba(85, 167, 124, 1);
+}
+.block-color-blue {
+	color: rgba(35, 131, 226, 1);
+	fill: rgba(35, 131, 226, 1);
+}
+.block-color-purple {
+	color: rgba(181, 119, 214, 1);
+	fill: rgba(181, 119, 214, 1);
+}
+.block-color-pink {
+	color: rgba(219, 105, 153, 1);
+	fill: rgba(219, 105, 153, 1);
+}
+.block-color-red {
+	color: rgba(229, 100, 88, 1);
+	fill: rgba(229, 100, 88, 1);
+}
+.block-color-default_background {
+	color: inherit;
+	fill: inherit;
+}
+.block-color-gray_background {
+	background: rgba(240, 239, 237, 1);
+}
+.block-color-brown_background {
+	background: rgba(245, 237, 233, 1);
+}
+.block-color-orange_background {
+	background: rgba(251, 235, 222, 1);
+}
+.block-color-yellow_background {
+	background: rgba(249, 243, 220, 1);
+}
+.block-color-teal_background {
+	background: rgba(232, 241, 236, 1);
+}
+.block-color-blue_background {
+	background: rgba(232, 242, 250, 1);
+}
+.block-color-purple_background {
+	background: rgba(243, 235, 249, 1);
+}
+.block-color-pink_background {
+	background: rgba(250, 233, 241, 1);
+}
+.block-color-red_background {
+	background: rgba(252, 233, 231, 1);
+}
+.select-value-color-default { background-color: rgba(42, 28, 0, 0.07); }
+.select-value-color-gray { background-color: rgba(28, 19, 1, 0.11); }
+.select-value-color-brown { background-color: rgba(127, 51, 0, 0.156); }
+.select-value-color-orange { background-color: rgba(196, 88, 0, 0.203); }
+.select-value-color-yellow { background-color: rgba(209, 156, 0, 0.282); }
+.select-value-color-green { background-color: rgba(0, 96, 38, 0.156); }
+.select-value-color-blue { background-color: rgba(0, 99, 174, 0.172); }
+.select-value-color-purple { background-color: rgba(92, 0, 163, 0.141); }
+.select-value-color-pink { background-color: rgba(183, 0, 78, 0.152); }
+.select-value-color-red { background-color: rgba(206, 24, 0, 0.164); }
+
+.checkbox {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	width: 16;
+	height: 16;
+	background-size: 16px;
+	margin-left: 2px;
+	margin-right: 5px;
+}
+
+.checkbox-on {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%2216%22%20height%3D%2216%22%20fill%3D%22%2358A9D7%22%2F%3E%0A%3Cpath%20d%3D%22M6.71429%2012.2852L14%204.9995L12.7143%203.71436L6.71429%209.71378L3.28571%206.2831L2%207.57092L6.71429%2012.2852Z%22%20fill%3D%22white%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+
+.checkbox-off {
+	background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20x%3D%220.75%22%20y%3D%220.75%22%20width%3D%2214.5%22%20height%3D%2214.5%22%20fill%3D%22white%22%20stroke%3D%22%2336352F%22%20stroke-width%3D%221.5%22%2F%3E%0A%3C%2Fsvg%3E");
+}
+	
+</style></head><body><article id="1b44d778-1cdc-80c4-a995-e211c9ac80e7" class="page sans"><header><h1 class="page-title">결측치 처리</h1><p class="page-description"></p></header><div class="page-body"><p id="1b44d778-1cdc-8152-b8a0-d88ce909c6cc" class="">데이터 분석 과정에서 결측치(missing values)는 흔히 접하게 되는 중요한 이슈입니다. 결측치를 어떻게 처리하느냐에 따라 모델의 성능뿐만 아니라 해석 가능성에도 큰 영향을 미치므로, 데이터를 다룰 때 항상 신중하게 접근해야 합니다. 아래에서는 결측치의 정의, 결측치가 모델에 미치는 영향, 그리고 이를 해결하기 위한 대표적인 방법들을 순서대로 알아보겠습니다.</p><hr id="1b44d778-1cdc-812d-a964-fc299e82020d"/><h2 id="1b44d778-1cdc-81b7-88bb-d8fd6a8fc8ff" class="">1. 결측치란?</h2><ul id="1b44d778-1cdc-81b1-84a1-fef47d9a6e0d" class="bulleted-list"><li style="list-style-type:disc"><strong>결측치(missing value)</strong>란, 특정 변수(컬럼)에 원래 존재해야 할 관측값이 누락된 상태를 말합니다.</li></ul><ul id="1b44d778-1cdc-818b-8160-d3c20369939d" class="bulleted-list"><li style="list-style-type:disc">예를 들어, 설문조사에서 응답자가 나이를 기입하지 않았다면(빈 칸), 해당 레코드는 나이 변수에 대해 결측치가 됩니다.</li></ul><ul id="1b44d778-1cdc-8173-8264-e54f2e808e53" class="bulleted-list"><li style="list-style-type:disc">머신러닝, 통계분석에서 결측치는 알고리즘에 직접 입력할 수 없는 경우가 대부분이므로, 처리가 필수적입니다.</li></ul><hr id="1b44d778-1cdc-81d3-a507-e8444deff3b6"/><h2 id="1b44d778-1cdc-81de-bc9c-c7b08a8a7389" class="">2. 결측치가 모델에 미치는 영향</h2><ol type="1" id="1b44d778-1cdc-813e-9460-c2b90da032a1" class="numbered-list" start="1"><li><strong>데이터 손실</strong><ul id="1b44d778-1cdc-810f-912f-d1ed59575545" class="bulleted-list"><li style="list-style-type:disc">결측치가 많을수록 실제로 모델이 학습할 수 있는 유효한 데이터가 줄어듭니다.</li></ul><ul id="1b44d778-1cdc-81c6-9097-ecb5eba4d82a" class="bulleted-list"><li style="list-style-type:disc">만약 무작정 결측치가 있는 행(또는 열)을 제거해버리면 표본의 수가 현저히 줄어들 가능성이 있으므로, 이는 모델의 성능 저하와 통계적 파워(power)의 감소로 이어질 수 있습니다.</li></ul></li></ol><ol type="1" id="1b44d778-1cdc-81e2-83e3-d2adab4b4304" class="numbered-list" start="2"><li><strong>편향(Bias) 유발</strong><ul id="1b44d778-1cdc-8111-bb1d-e9f239f94f70" class="bulleted-list"><li style="list-style-type:disc">결측이 단순히 무작위로 발생한다면 상대적으로 덜하지만, 특정 패턴(예: 나이가 많을수록 질문에 응답을 안 했다)이 있을 경우에는 데이터의 분포가 왜곡(bias)될 수 있습니다.</li></ul><ul id="1b44d778-1cdc-8128-984d-de3acbc3a704" class="bulleted-list"><li style="list-style-type:disc">편향된 데이터로 학습된 모델은 일반화 성능이 떨어지고 왜곡된 예측 결과를 낳게 됩니다.</li></ul></li></ol><ol type="1" id="1b44d778-1cdc-81d3-9566-e8f8ebbba704" class="numbered-list" start="3"><li><strong>모델 훈련 및 예측에 직접적 장애</strong><ul id="1b44d778-1cdc-8122-a29b-d1649719bebb" class="bulleted-list"><li style="list-style-type:disc">일부 알고리즘(예: 회귀분석, 트리 기반 모델)은 결측치를 스스로 처리할 수 있거나(트리 기반 모델 중 LightGBM 등) 무시할 수 있는 기법이 있기는 하지만, 대부분의 머신러닝 알고리즘은 결측치를 입력값으로 허용하지 않습니다. 따라서 결측치 처리를 반드시 진행해야 합니다.</li></ul></li></ol><hr id="1b44d778-1cdc-8140-8ba6-df0f1a6d4196"/><h2 id="1b44d778-1cdc-8194-9827-dfee08a0f88d" class="">3. 결측치 해결 방법</h2><p id="1b44d778-1cdc-81d7-9fcc-ec27ad97704d" class="">결측치를 처리하는 대표적인 방법은 크게 ‘삭제(제거)’와 ‘대체(보간, Imputation)’로 나눌 수 있습니다. 어떤 방법을 쓸지 결정할 때에는 데이터의 특성과 결측 발생 메커니즘(MCAR, MAR, MNAR 등)을 고려해야 합니다.</p><h3 id="1b44d778-1cdc-81c4-8377-f056a8e26b81" class="">3.1 삭제(제거)를 통한 처리</h3><ol type="1" id="1b44d778-1cdc-81a9-ac6c-ee8bc550eb0c" class="numbered-list" start="1"><li><strong>행(레코드) 단위 삭제 (Listwise Deletion)</strong><ul id="1b44d778-1cdc-8186-9701-f35b9aacf50a" class="bulleted-list"><li style="list-style-type:disc">결측치가 있는 행 전체를 제거합니다.</li></ul><ul id="1b44d778-1cdc-8170-829f-c64e2eaf6c44" class="bulleted-list"><li style="list-style-type:disc">가장 간단한 방법이지만, 결측치가 많은 열에서 이 방식을 사용하면 전체 데이터 중 다수의 행이 삭제될 수 있어 데이터 손실이 큰 편입니다.</li></ul><ul id="1b44d778-1cdc-8182-a9c6-d97a83de1add" class="bulleted-list"><li style="list-style-type:disc">결측치가 매우 적고, 해당 데이터를 제거해도 통계적 파워나 모델 성능에 큰 영향이 없다고 판단될 때 사용합니다.</li></ul></li></ol><ol type="1" id="1b44d778-1cdc-81df-affa-d0e93da7eaeb" class="numbered-list" start="2"><li><strong>열(변수) 단위 삭제 (Column Deletion)</strong><ul id="1b44d778-1cdc-813d-adf5-e3c930b07625" class="bulleted-list"><li style="list-style-type:disc">결측치가 지나치게 많은 특정 컬럼을 통째로 제거합니다.</li></ul><ul id="1b44d778-1cdc-816c-8332-e46cfb857d52" class="bulleted-list"><li style="list-style-type:disc">해당 변수가 분석 및 모델링에서 결정적으로 중요한 변수가 아니라면 고려할 수 있지만, 핵심적인 예측 변수라면 피해야 합니다.</li></ul></li></ol><blockquote id="1b44d778-1cdc-8171-a3a3-dff99b61cac9" class="">장점<ul id="1b44d778-1cdc-81b8-a74a-d793f9bb1640" class="bulleted-list"><li style="list-style-type:disc">단순하고 빠르게 적용 가능</li></ul><ul id="1b44d778-1cdc-8105-9793-f23c9c4d9586" class="bulleted-list"><li style="list-style-type:disc">추가적인 가정이나 추정을 하지 않아 분석의 해석성을 유지하기 쉬움</li></ul><p id="1b44d778-1cdc-81ad-9241-f594125b49c8" class=""><strong>단점</strong></p><ul id="1b44d778-1cdc-8111-9b17-d97ba8e6e43c" class="bulleted-list"><li style="list-style-type:disc">값비싼 정보 손실 발생 가능</li></ul><ul id="1b44d778-1cdc-81fe-adc8-de8501f9f02c" class="bulleted-list"><li style="list-style-type:disc">결측 데이터에 패턴이 있을 경우 편향 발생 가능</li></ul></blockquote><hr id="1b44d778-1cdc-81d2-aebf-e34d659e8201"/><h3 id="1b44d778-1cdc-8184-9f59-cb4cdb12a7b4" class="">3.2 대체(보간, Imputation)를 통한 처리</h3><p id="1b44d778-1cdc-81b7-8e60-fc8b989be682" class="">결측치를 제거하지 않고, 적절한 방법으로 결측값을 추정하여 실제로 값을 채워넣는 방법입니다.</p><p id="1b44d778-1cdc-8127-843b-ec2e3c97aaa3" class="">가장 흔히 사용되는 방식부터 점차 복잡한 기법까지 살펴보겠습니다.</p><ol type="1" id="1b44d778-1cdc-8116-a572-cf8934f79706" class="numbered-list" start="1"><li><strong>단순 대체 (Simple Imputation)</strong><ul id="1b44d778-1cdc-81c7-914f-ed05f84f2c06" class="bulleted-list"><li style="list-style-type:disc"><strong>평균(mean) 또는 중앙값(median) 대체</strong><ul id="1b44d778-1cdc-8193-8867-de11a93e6401" class="bulleted-list"><li style="list-style-type:circle">연속형 변수(숫자형 데이터)에 주로 사용됩니다.</li></ul><ul id="1b44d778-1cdc-81de-b975-fbbaee21e373" class="bulleted-list"><li style="list-style-type:circle">단순하지만, 원 데이터의 분산을 과소추정(Variance Underestimation)할 수 있으므로 주의가 필요합니다.</li></ul></li></ul><ul id="1b44d778-1cdc-816e-bff9-f06424a54a2a" class="bulleted-list"><li style="list-style-type:disc"><strong>최빈값(mode) 대체</strong><ul id="1b44d778-1cdc-810c-b869-c177d186cb56" class="bulleted-list"><li style="list-style-type:circle">범주형 변수(카테고리형 데이터)에서 사용됩니다.</li></ul></li></ul></li></ol><ol type="1" id="1b44d778-1cdc-81e3-8679-c11aeae29361" class="numbered-list" start="2"><li><strong>K-최근접 이웃(KNN) 대체</strong><ul id="1b44d778-1cdc-814f-9b38-e7947dd8b76c" class="bulleted-list"><li style="list-style-type:disc">결측값이 있는 샘플과 유사한(가까운) 다른 샘플들을 찾은 뒤, 그들의 값을 이용해 결측값을 추정하는 방식입니다.</li></ul><ul id="1b44d778-1cdc-8199-966e-c8322da93f90" class="bulleted-list"><li style="list-style-type:disc">관측값 간의 유사도를 측정하기 위해 거리를 계산하며, 이웃의 숫자(k)와 거리 측정 방법에 따라 결과가 달라질 수 있습니다.</li></ul><ul id="1b44d778-1cdc-8177-af8f-e6293a2ea7fb" class="bulleted-list"><li style="list-style-type:disc">데이터 차원이 높을수록(많은 변수를 다룰수록) 거리 계산에 주의해야 합니다(차원의 저주).</li></ul></li></ol><ol type="1" id="1b44d778-1cdc-81e3-b518-ecb1d0e26c07" class="numbered-list" start="3"><li><strong>회귀(Regression)를 활용한 대체</strong><ul id="1b44d778-1cdc-81a5-8160-cdb40c8d80d0" class="bulleted-list"><li style="list-style-type:disc">결측값이 있는 변수를 종속변수(타깃)로 설정하고, 다른 변수를 독립변수로 하여 회귀 모델(선형 회귀, 랜덤 포레스트 등)을 학습시키고 결측값을 예측합니다.</li></ul><ul id="1b44d778-1cdc-8179-aab8-c145ac050016" class="bulleted-list"><li style="list-style-type:disc">조금 더 정교한 접근으로, 해당 변수를 예측하는 모델을 만들어 채워넣는 방식입니다.</li></ul></li></ol><blockquote id="1b44d778-1cdc-81cd-902d-e999730f4a44" class="">장점<ul id="1b44d778-1cdc-81a2-bf7d-e7434b813550" class="bulleted-list"><li style="list-style-type:disc">값(정보) 손실이 적음</li></ul><ul id="1b44d778-1cdc-813e-9f1f-d8d1954be9d3" class="bulleted-list"><li style="list-style-type:disc">편향을 완화하고 모델 성능을 향상시킬 수 있음</li></ul><p id="1b44d778-1cdc-8146-adc7-efd2e877e61a" class=""><strong>단점</strong></p><ul id="1b44d778-1cdc-8142-a832-f5f9c2f0bea1" class="bulleted-list"><li style="list-style-type:disc">추가적인 가정과 모델링이 필요하기 때문에 복잡함 증가</li></ul><ul id="1b44d778-1cdc-817a-b8ce-c479d74ebd16" class="bulleted-list"><li style="list-style-type:disc">잘못된 가정이나 부정확한 모델을 사용할 경우 오히려 노이즈를 증가시킬 위험 존재</li></ul></blockquote><hr id="1b44d778-1cdc-8171-8539-de187a95de0d"/><h2 id="1b44d778-1cdc-818a-bef8-d22ba928e1f0" class="">4. 결측치 처리 시 고려 사항 및 요약</h2><ol type="1" id="1b44d778-1cdc-8159-9581-cf607f54228d" class="numbered-list" start="1"><li><strong>결측치 발생 메커니즘 파악</strong><ul id="1b44d778-1cdc-8138-93ee-c8c3476fc914" class="bulleted-list"><li style="list-style-type:disc">MCAR(무작위 결측): 결측치가 완전히 임의로 발생</li></ul><ul id="1b44d778-1cdc-812b-8475-c0db1a4c5ea4" class="bulleted-list"><li style="list-style-type:disc">MAR(조건부 무작위 결측): 관찰된 변수들에 의해 발생 확률이 달라질 수 있음</li></ul><ul id="1b44d778-1cdc-81b9-a7ed-f05bd13b379d" class="bulleted-list"><li style="list-style-type:disc">MNAR(비무작위 결측): 결측치 자체가 특정 패턴 또는 값의 영향을 받음</li></ul><ul id="1b44d778-1cdc-8161-830e-d1950dedd72a" class="bulleted-list"><li style="list-style-type:disc">결측 패턴을 이해하면, 어떤 방법을 사용하는 것이 합리적인지 판단에 도움을 줍니다.</li></ul></li></ol><ol type="1" id="1b44d778-1cdc-8160-b427-da3589d30f53" class="numbered-list" start="2"><li><strong>데이터 탐색(EDA) 진행</strong><ul id="1b44d778-1cdc-8199-9ad6-f94520cc213e" class="bulleted-list"><li style="list-style-type:disc">결측치 비율, 결측치 분포, 다른 변수와의 상관관계 등을 확인하여 적합한 처리 방식을 결정합니다.</li></ul></li></ol><ol type="1" id="1b44d778-1cdc-81d8-880d-fdfae0c4cf75" class="numbered-list" start="3"><li><strong>성능 및 해석력 비교</strong><ul id="1b44d778-1cdc-8101-bd75-db0869c50a89" class="bulleted-list"><li style="list-style-type:disc">여러 결측치 처리 방법을 시도한 뒤, 모델 성능(정확도, RMSE 등)을 비교하고, 해석 관점(변수 중요도, 분포 왜곡 여부 등)도 함께 살펴봅니다.</li></ul></li></ol><hr id="1b44d778-1cdc-8187-b053-d3399abcfea3"/><h2 id="1b44d778-1cdc-8138-887c-d50a6346ab96" class="">5. 결론</h2><ol type="1" id="1b44d778-1cdc-8167-89f3-fe9954059249" class="numbered-list" start="1"><li><strong>가능한 한 원본 데이터 수집 과정을 개선</strong><ul id="1b44d778-1cdc-81ea-b3fc-f08979a5c7ed" class="bulleted-list"><li style="list-style-type:disc">근본적으로는 결측치가 최소화되도록 데이터 수집 과정을 정비하는 것이 가장 좋습니다.</li></ul></li></ol><ul id="1b44d778-1cdc-8191-ae05-f662f4a59b0b" class="bulleted-list"><li style="list-style-type:disc"><strong>결측치는 데이터에서 누락된 값</strong>으로, 유효 데이터 양을 감소시키고 편향을 유발하여 모델의 성능 및 해석 가능성에 부정적인 영향을 줄 수 있습니다.</li></ul><ul id="1b44d778-1cdc-8119-ade4-f9ce91c34924" class="bulleted-list"><li style="list-style-type:disc">결측치를 처리하는 방법은 크게 <strong>삭제</strong>와 <strong>대체</strong>로 나눌 수 있으며, 각각 장단점이 존재합니다.</li></ul><ul id="1b44d778-1cdc-81ce-8b9a-dc70dc3718f5" class="bulleted-list"><li style="list-style-type:disc">모델과 상황에 따라 가장 적합한 방식을 선택하고, 선택한 방법의 결과를 충분히 검증하는 과정이 필요합니다.</li></ul><p id="1b44d778-1cdc-8136-8da9-f49caa9e92a0" class="">결국 “<strong>데이터의 특성과 결측 발생 메커니즘을 충분히 이해하고, 그에 맞는 결측치 처리 기법을 신중히 적용</strong>”하는 것이 성공적인 데이터 분석과 모델링의 핵심이라 할 수 있습니다.</p><p id="26c4d778-1cdc-8018-901c-db4320689c12" class="">
+</p><p id="1b44d778-1cdc-80a8-ba92-e3b24f4905ff" class="">
+</p></div></article><span class="sans" style="font-size:14px;padding-top:2em"></span></body></html>
