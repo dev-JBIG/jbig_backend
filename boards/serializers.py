@@ -1,8 +1,5 @@
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
-import uuid
-import os
-from django.core.files.base import ContentFile
 from rest_framework import serializers
 from .models import Category, Board, Post, Comment, Attachment
 
@@ -166,9 +163,8 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
             css_sanitizer=css_sanitizer,
             strip=True  # Strip disallowed tags instead of escaping them
         )
-
-        file_name = f"{uuid.uuid4()}.html"
-        instance.content_html.save(file_name, ContentFile(sanitized_html), save=False)
+        # Directly store sanitized HTML into DB-backed TextField
+        instance.content_html = sanitized_html
 
     def create(self, validated_data):
         attachment_ids = validated_data.pop('attachment_ids', [])
@@ -213,7 +209,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
-    content_html_url = serializers.URLField(source='content_html.url', read_only=True)
+    content_html = serializers.CharField(read_only=True)
     is_owner = serializers.SerializerMethodField()
     
     # user_can_edit = serializers.SerializerMethodField()
@@ -223,9 +219,8 @@ class PostDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = [
-            'id', 'board_post_id', 'title', 'content_html_url', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
+            'id', 'board_post_id', 'title', 'content_html', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
             'views', 'board', 'comments', 'attachments', 'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
-            # 'user_can_edit', 'user_can_delete', 'user_can_comment'
         ]
 
     def get_user_id(self, obj):

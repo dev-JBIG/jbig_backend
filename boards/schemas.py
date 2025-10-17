@@ -1,8 +1,4 @@
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from .serializers import (
-    CategorySerializer, BoardSerializer, PostListSerializer, PostDetailSerializer,
-    CommentSerializer, AttachmentSerializer
-)
 
 # ===================================================================
 # Category Schemas
@@ -96,7 +92,7 @@ board_list_schema = extend_schema(
                     },
                     {
                         "category": "커뮤니티",
-                        "boards": ["자유게시판", "질문게시판", "정보공유", "유머��시판"]
+                        "boards": ["자유게시판", "질문게시판", "정보공유", "유머게시판"]
                     }
                 ]
             }
@@ -115,7 +111,7 @@ post_viewset_schema = {
     ),
     'retrieve': extend_schema(
         summary="[Post] 상세 조회",
-        description="ID를 사용하여 특정 게시글의 상세 정보를 조���합니다. 조회 시 조회수가 1 증가합니다.",
+        description="ID를 사용하여 특정 게시글의 상세 정보를 조회합니다. 조회 시 조회수가 1 증가합니다.",
         tags=["Post"]
     ),
     'create': extend_schema(

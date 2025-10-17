@@ -1,18 +1,33 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 load_dotenv()
+
+# --- Helpers for reading env vars ---
+def get_env_bool(key: str, default: bool = False) -> bool:
+    val = os.getenv(key)
+    if val is None:
+        return default
+    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_env_list(key: str, default: list[str] | None = None) -> list[str]:
+    val = os.getenv(key)
+    if not val:
+        return [] if default is None else default
+    return [item.strip() for item in val.split(',') if item.strip()]
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-DEBUG = True
+# Debug toggle
+DEBUG = get_env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = [
-	'jbig.co.kr', 'www.jbig.co.kr', '127.0.0.1', '0.0.0.0', 'localhost',
-]
+# Hosts / CORS
+ALLOWED_HOSTS = get_env_list('ALLOWED_HOSTS', ['*'])
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
@@ -130,10 +145,17 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = os.getenv('STATIC_URL', 'static/')
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
+_MEDIA_ROOT = os.getenv('MEDIA_ROOT')
+MEDIA_ROOT = Path(_MEDIA_ROOT) if _MEDIA_ROOT else BASE_DIR / 'media'
+
+# App content paths configurable via environment
+CONTENT_NOTION_SUBDIR = os.getenv('CONTENT_NOTION_SUBDIR', 'notion')
+CONTENT_AWARDS_SUBDIR = os.getenv('CONTENT_AWARDS_SUBDIR', 'awards')
+CONTENT_AWARD_HTML_FILENAME = os.getenv('CONTENT_AWARD_HTML_FILENAME', 'Awards 24c0b4f89da28059b565cbf910e6d6ad.html')
+CONTENT_BANNER_SUBPATH = os.getenv('CONTENT_BANNER_SUBPATH', 'banner/banner.jpg')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -143,11 +165,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
 # CORS settings
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_CREDENTIALS = get_env_bool('CORS_ALLOW_CREDENTIALS', True)
 # 개발 환경에서는 모든 출처를 허용합니다.
 # 운영 환경에서는 보안을 위해 특정 도메인 목록을 사용하는 것이 좋습니다.
-# 예: CORS_ALLOWED_ORIGINS = ['https://your-frontend-domain.com']
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = get_env_bool('CORS_ALLOW_ALL_ORIGINS', True)
+
+# If not allowing all origins, allow specific origins from env (comma-separated)
+CORS_ALLOWED_ORIGINS = get_env_list('CORS_ALLOWED_ORIGINS', [])
 
 CORS_ALLOW_HEADERS = [
     'Accept',
@@ -157,10 +181,8 @@ CORS_ALLOW_HEADERS = [
     'Authorization',
 ]
 
-# CORS_ALLOWED_ORIGIN_REGEXES = [
-#     r"^http://localhost:\d+$",
-#     r"^http://127\.0\.0\.1:\d+$",
-# ]
+# CSRF trusted origins (comma-separated, e.g., https://example.com,https://www.example.com)
+CSRF_TRUSTED_ORIGINS = get_env_list('CSRF_TRUSTED_ORIGINS', [])
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -194,11 +216,12 @@ SPECTACULAR_SETTINGS = {
     'REDOC_DIST': 'SIDECAR',
 }
 
-from datetime import timedelta
+_ACCESS_TOKEN_HOURS = int(os.getenv('ACCESS_TOKEN_HOURS', '1'))
+_REFRESH_TOKEN_DAYS = int(os.getenv('REFRESH_TOKEN_DAYS', '1'))
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=_ACCESS_TOKEN_HOURS),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=_REFRESH_TOKEN_DAYS),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,

@@ -4,15 +4,13 @@ from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiParameter
 from .serializers import (
     UserCreateSerializer,
     EmailVerificationSerializer,
     EmailResendSerializer,
-    CustomTokenRefreshSerializer,
     CustomTokenObtainPairSerializer,
-    UserSerializer,
     UserProfileSerializer,
     PasswordChangeSerializer,
     PasswordResetRequestSerializer,
@@ -20,20 +18,16 @@ from .serializers import (
     PasswordResetSerializer
 )
 from .models import User, EmailVerificationCode
-from django.utils.http import urlsafe_base64_decode
-from django.utils.encoding import force_str
-from django.contrib.auth.tokens import default_token_generator
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.exceptions import AuthenticationFailed
 import random
 import string
 from django.core.mail import send_mail
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 import pytz
 
-from django.contrib.auth import authenticate
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.exceptions import TokenError
 from boards.serializers import PostListSerializer, CommentSerializer
 from boards.models import Post, Comment
 
@@ -440,7 +434,7 @@ class LogoutView(APIView):
             token.blacklist()
 
             return Response(status=status.HTTP_205_RESET_CONTENT)
-        except Exception as e:
+        except Exception :
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
 
