@@ -1,7 +1,5 @@
 from django.core.management.base import BaseCommand
 from boards.models import Attachment
-import os
-from django.conf import settings
 
 class Command(BaseCommand):
     help = 'Deletes orphaned attachment files (not linked to any post).'

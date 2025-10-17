@@ -1,9 +1,7 @@
-import uuid
 import os
 from django.db import models
 from django.conf import settings
 from django.db.models import Q
-from django.contrib.postgres.search import SearchVector
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from bs4 import BeautifulSoup
 
@@ -112,7 +110,8 @@ class Post(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
-    content_html = models.FileField(upload_to=post_upload_path, null=True, blank=True)
+    # Store sanitized HTML directly in DB to avoid file dependency
+    content_html = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     views = models.PositiveIntegerField(default=0)
@@ -148,16 +147,14 @@ class Post(models.Model):
 
     def update_search_vector(self):
         content_text = ''
-        if self.content_html and hasattr(self.content_html, 'path') and os.path.exists(self.content_html.path):
+        if self.content_html:
             try:
-                with open(self.content_html.path, 'r', encoding='utf-8') as f:
-                    soup = BeautifulSoup(f, 'html.parser')
-                    content_text = soup.get_text()
-            except (FileNotFoundError, Exception):
-                content_text = '' # In case of error, proceed with empty content
-        
-        # We use 'config='ko'' if a Korean stemmer is installed in PostgreSQL.
-        # Otherwise, use the default.
+                soup = BeautifulSoup(self.content_html or '', 'html.parser')
+                content_text = soup.get_text()
+            except Exception:
+                content_text = ''
+
+        # We use 'config=ko' if a Korean stemmer is installed in PostgreSQL; otherwise default.
         self.search_vector = SearchVector('title', weight='A') + SearchVector(models.Value(content_text), weight='B')
 
     
