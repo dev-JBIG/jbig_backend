@@ -1,4 +1,4 @@
-name: Django deploy
+name: Django Deploy
 
 on:
   push:
@@ -7,11 +7,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      # 서버 접속용 SSH 에이전트 준비 (서버로 SSH 접속하는 용도)
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -20,53 +17,45 @@ jobs:
       - name: Add deploy host to known_hosts
         run: ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Upload with rsync (no scp action)
+      # 서버에서 git pull 하고 runserver 재가동
+      - name: Update code on server and restart
         run: |
           set -euo pipefail
-          # rsync 설치 (GitHub ubuntu 러너엔 보통 없어서 설치)
-          sudo apt-get update
-          sudo apt-get install -y rsync
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -lc '
+            set -euo pipefail
+            REPO_SSH="git@github.com:${{ github.repository }}.git"
+            APP_DIR="${{ secrets.DEPLOY_PATH }}"
 
-          # 원격 경로 준비
-          ssh -o StrictHostKeyChecking=yes \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "mkdir -p '${{ secrets.DEPLOY_PATH }}'"
+            # 0) 디렉터리 준비
+            mkdir -p "$APP_DIR"
 
-          # 제외 규칙 적용해서 동기화
-          rsync -az --delete \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='node_modules/' \
-            --exclude='venv/' \
-            --exclude='.venv/' \
-            --exclude='**/__pycache__/' \
-            --exclude='*.log' \
-            --exclude='.DS_Store' \
-            --exclude='**/*.pyc' \
-            --exclude='**/.pytest_cache/' \
-            --exclude='.env' \
-            ./ \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:'${{ secrets.DEPLOY_PATH }}/'"
-
-      - name: Restart runserver (no systemd)
-        run: |
-          set -euo pipefail
-          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -lc "
-            cd '${{ secrets.DEPLOY_PATH }}'
-
-            # .venv 준비
-            if [ ! -d '.venv' ]; then
-              python3 -m venv .venv
+            # 1) 레포 없으면 clone, 있으면 최신화
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone "$REPO_SSH" "$APP_DIR"
             fi
+
+            cd "$APP_DIR"
+            # 안전하게 원격 기준으로 맞춤
+            git fetch origin
+            git checkout main
+            git reset --hard origin/main
+
+            # 2) 가상환경(.venv) 준비
+            [ -d .venv ] || python3 -m venv .venv
             . .venv/bin/activate
 
-            # 필요 시 주석 해제
+            # (필요 시 주석 해제)
             # pip install --upgrade pip
             # pip install -r requirements.txt
+            # python3 manage.py migrate --noinput
+            # python3 manage.py collectstatic --noinput
 
-            # 기존 runserver 종료(있으면)
-            pkill -f 'manage.py runserver 0.0.0.0:3001' || true
+            # 3) 기존 runserver 종료 후 재가동
+            pkill -f "manage.py runserver 0.0.0.0:3001" || true
             sleep 1
-
-            # 백그라운드 실행
             nohup python3 manage.py runserver 0.0.0.0:3001 > runserver.out 2>&1 &
+
+            # 4) 간단 체크
+            sleep 2
+            pgrep -f "manage.py runserver 0.0.0.0:3001" >/dev/null && echo "Django runserver up on :3001"
+          '
