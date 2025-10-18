@@ -7,9 +7,16 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Show workspace snapshot
+        run: |
+          pwd
+          git status || true
+          ls -la
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -35,6 +42,9 @@ jobs:
             !**/__pycache__/**
             !**/*.log
             !**/.env
+            !.DS_Store
+            !**/*.pyc
+            !**/.pytest_cache/**
           target: ${{ secrets.DEPLOY_PATH }}
           overwrite: true
 
@@ -50,7 +60,7 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
 
-            # .venv 준비
+            # .venv 준비(없으면 생성)
             if [ ! -d ".venv" ]; then
               python3 -m venv .venv
             fi
@@ -60,7 +70,7 @@ jobs:
             # pip install --upgrade pip
             # pip install -r requirements.txt
 
-            # 기존 runserver 종료
+            # 기존 runserver 종료(있으면)
             pkill -f "manage.py runserver 0.0.0.0:3001" || true
             sleep 1
 
