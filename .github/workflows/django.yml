@@ -26,14 +26,15 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: |
-            .
-            !.git/
-            !.github/
-            !node_modules/
-            !venv/
-            !.venv/
-            !__pycache__/
-            !*.log
+            ./**
+            !.git/**
+            !.github/**
+            !**/node_modules/**
+            !**/venv/**
+            !**/.venv/**
+            !**/__pycache__/**
+            !**/*.log
+            !**/.env
           target: ${{ secrets.DEPLOY_PATH }}
           overwrite: true
 
