@@ -12,12 +12,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show workspace snapshot
-        run: |
-          pwd
-          git status || true
-          ls -la
-
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -26,52 +20,52 @@ jobs:
       - name: Add deploy host to known_hosts
         run: ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Copy project to server (SCP)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: |
-            ./**
-            !.git/**
-            !.github/**
-            !**/node_modules/**
-            !**/venv/**
-            !**/.venv/**
-            !**/__pycache__/**
-            !**/*.log
-            !**/.env
-            !.DS_Store
-            !**/*.pyc
-            !**/.pytest_cache/**
-          target: ${{ secrets.DEPLOY_PATH }}
-          overwrite: true
+      - name: Upload with rsync (no scp action)
+        run: |
+          set -euo pipefail
+          # rsync 설치 (GitHub ubuntu 러너엔 보통 없어서 설치)
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+          # 원격 경로 준비
+          ssh -o StrictHostKeyChecking=yes \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "mkdir -p '${{ secrets.DEPLOY_PATH }}'"
+
+          # 제외 규칙 적용해서 동기화
+          rsync -az --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='venv/' \
+            --exclude='.venv/' \
+            --exclude='**/__pycache__/' \
+            --exclude='*.log' \
+            --exclude='.DS_Store' \
+            --exclude='**/*.pyc' \
+            --exclude='**/.pytest_cache/' \
+            --exclude='.env' \
+            ./ \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:'${{ secrets.DEPLOY_PATH }}/'"
 
       - name: Restart runserver (no systemd)
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -euo pipefail
-            cd "$DEPLOY_PATH"
+        run: |
+          set -euo pipefail
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -lc "
+            cd '${{ secrets.DEPLOY_PATH }}'
 
-            # .venv 준비(없으면 생성)
-            if [ ! -d ".venv" ]; then
+            # .venv 준비
+            if [ ! -d '.venv' ]; then
               python3 -m venv .venv
             fi
             . .venv/bin/activate
 
-            # 필요 시 의존성 (원하면 주석 해제)
+            # 필요 시 주석 해제
             # pip install --upgrade pip
             # pip install -r requirements.txt
 
             # 기존 runserver 종료(있으면)
-            pkill -f "manage.py runserver 0.0.0.0:3001" || true
+            pkill -f 'manage.py runserver 0.0.0.0:3001' || true
             sleep 1
 
             # 백그라운드 실행
