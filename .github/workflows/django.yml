@@ -21,7 +21,7 @@ jobs:
       - name: Update code on server and restart
         run: |
           set -euo pipefail
-          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -lc '
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
             set -euo pipefail
             REPO_SSH="git@github.com:${{ github.repository }}.git"
             APP_DIR="${{ secrets.DEPLOY_PATH }}"
@@ -35,6 +35,10 @@ jobs:
             fi
 
             cd "$APP_DIR"
+
+            # ★추가: origin을 SSH로 강제(https 잔재 제거)
+            git remote set-url origin "$REPO_SSH"
+
             # 안전하게 원격 기준으로 맞춤
             git fetch origin
             git checkout main
