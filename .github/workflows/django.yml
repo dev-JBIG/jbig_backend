@@ -50,8 +50,8 @@ jobs:
             # (필요 시 주석 해제)
             # pip install --upgrade pip
             pip install -r requirements.txt
-            # python3 manage.py migrate --noinput
-            # python3 manage.py collectstatic --noinput
+            python3 manage.py migrate --noinput
+            python3 manage.py collectstatic --noinput
 
             # 3) gunicorn으로 재가동 (systemd 미사용 시)
             pkill -f "gunicorn .*jbig_backend\.wsgi:application" || true
@@ -68,3 +68,45 @@ jobs:
             else
               echo "Gunicorn not found"
             fi
+
+      - name: Deploy static files
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: ./staticfiles/
+          target: ${{ secrets.DEPLOY_PATH }}
+
+      - name: Check build directory
+        run: |
+          echo "Files in ./build:"
+          ls -al ./build
+
+      - name: Copy project to deploy server (SCP)
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: ./build/
+          target: ${{ secrets.DEPLOY_PATH }}
+          overwrite: true
+          debug: true
+
+      - name: Restart service on deploy server
+        uses: appleboy/ssh-action@master
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SYSTEMD_SERVICE: ${{ secrets.SYSTEMD_SERVICE }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            rsync -a --delete "$DEPLOY_PATH/release/" "$DEPLOY_PATH/current/"
+            sudo systemctl daemon-reload || true
+            sudo systemctl restart "$SYSTEMD_SERVICE"
+            sudo systemctl is-active "$SYSTEMD_SERVICE"
