@@ -20,6 +20,8 @@ def get_env_list(key: str, default: list[str] | None = None) -> list[str]:
     return [item.strip() for item in val.split(',') if item.strip()]
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 
