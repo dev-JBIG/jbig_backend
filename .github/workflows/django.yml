@@ -7,7 +7,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+  
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4  
       # 서버 접속용 SSH 에이전트 준비 (서버로 SSH 접속하는 용도)
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -75,8 +78,8 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: ./staticfiles/
-          target: ${{ secrets.DEPLOY_PATH }}
+          source: "./statics/*"
+          target: "$HOME/${{ secrets.DEPLOY_PATH }}"
 
       - name: Check build directory
         run: |
