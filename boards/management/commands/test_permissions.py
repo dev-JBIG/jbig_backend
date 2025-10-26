@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from boards.models import Board, Post, Comment, Category
+from boards.models import Board, Post, Category
 from boards.permissions import IsBoardReadable, IsPostWritable, IsCommentWritable, PostDetailPermission
 from rest_framework.test import APIRequestFactory
 

@@ -5,12 +5,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAdminUser, AllowAny
-from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiParameter, extend_schema_view
+from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
-from rest_framework import generics
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
-from django.db.models import Q
 
 from .models import CalendarEvent
 from .serializers import CalendarEventSerializer

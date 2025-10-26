@@ -1,12 +1,7 @@
 import random
 import string
 from django.core.mail import send_mail
-from django.utils import timezone # Import timezone
-from django.contrib.auth.hashers import make_password, check_password # Import hashing utilities
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.contrib.auth.tokens import default_token_generator
-from django.urls import reverse
+from django.contrib.auth.hashers import make_password # Import hashing utilities
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer, TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
