@@ -564,10 +564,25 @@ class PasswordResetView(APIView):
         user.password_changed_at = timezone.now()
         user.save()
 
-        # Clean up the verification code
+        # 인증 코드 삭제
         EmailVerificationCode.objects.filter(user=user).delete()
 
-        return Response({"message": "비밀번호가 성공적으로 변경되었습니다."}, 
+        # 비밀번호 변경 시 모든 리프레시 토큰 블랙리스트 처리하여 강제 로그아웃
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+        try:
+            outstanding_tokens = OutstandingToken.objects.filter(user=user)
+            for token_obj in outstanding_tokens:
+                try:
+                    token = RefreshToken(token_obj.token)
+                    token.blacklist()
+                except Exception:
+                    # 이미 블랙리스트에 있거나 만료된 토큰은 무시
+                    pass
+        except Exception:
+            # 블랙리스트 앱이 없거나 오류 발생 시 무시
+            pass
+
+        return Response({"message": "비밀번호가 성공적으로 변경되었습니다."},
                         status=status.HTTP_200_OK)
 
 @extend_schema(
@@ -633,18 +648,18 @@ class PasswordChangeView(APIView):
         if user.password_changed_at:
             last_changed_kst = user.password_changed_at.astimezone(kst)
             if now.date() == last_changed_kst.date():
-                return Response({"error": "비밀번호는 하루에 한 번만 변경할 수 있습니다."}, 
+                return Response({"error": "비밀번호는 하루에 한 번만 변경할 수 있습니다."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
         serializer = PasswordChangeSerializer(data=request.data)
         if serializer.is_valid():
             if not user.check_password(serializer.validated_data['old_password']):
-                return Response({"error": "기존 비밀번호가 올바르지 않습니다."}, 
+                return Response({"error": "기존 비밀번호가 올바르지 않습니다."},
                                 status=status.HTTP_400_BAD_REQUEST)
-            
+
             from django.contrib.auth.password_validation import validate_password
             from django.core.exceptions import ValidationError
-            
+
             try:
                 validate_password(serializer.validated_data['new_password1'], user=user)
             except ValidationError as e:
@@ -653,6 +668,22 @@ class PasswordChangeView(APIView):
             user.set_password(serializer.validated_data['new_password1'])
             user.password_changed_at = timezone.now()
             user.save()
-            return Response({"message": "비밀번호가 성공적으로 변경되었습니다."}, 
+
+            # 비밀번호 변경 시 모든 리프레시 토큰 블랙리스트 처리하여 강제 로그아웃
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+            try:
+                outstanding_tokens = OutstandingToken.objects.filter(user=user)
+                for token_obj in outstanding_tokens:
+                    try:
+                        token = RefreshToken(token_obj.token)
+                        token.blacklist()
+                    except Exception:
+                        # 이미 블랙리스트에 있거나 만료된 토큰은 무시
+                        pass
+            except Exception:
+                # 블랙리스트 앱이 없거나 오류 발생 시 무시
+                pass
+
+            return Response({"message": "비밀번호가 성공적으로 변경되었습니다."},
                             status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
