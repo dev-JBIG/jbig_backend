@@ -86,7 +86,6 @@ class UserCommentListView(generics.ListAPIView):
         user = get_object_or_404(User, email__startswith=user_id + '@')
         return Comment.objects.filter(author=user).order_by('-created_at')
 
-
 @extend_schema(
     tags=["사용자"],
     summary="회원가입",

@@ -29,6 +29,6 @@ class CommentAdmin(admin.ModelAdmin):
 
 @admin.register(Attachment)
 class AttachmentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'filename', 'post')
-    search_fields = ('filename', 'post__title')
-    raw_id_fields = ('post',)
+    list_display = ('id', 'filename', 'file')
+    search_fields = ('filename',) #post__title 제거
+  #  raw_id_fields = ('post',)

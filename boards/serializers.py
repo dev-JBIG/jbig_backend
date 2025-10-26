@@ -1,20 +1,20 @@
-import bleach
-from bleach.css_sanitizer import CSSSanitizer
-import uuid
-import os
-from django.core.files.base import ContentFile
 from rest_framework import serializers
+import bleach
 from .models import Category, Board, Post, Comment, Attachment
+
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name']
+
 
 class RecursiveField(serializers.Serializer):
     def to_representation(self, value):
         serializer = self.parent.parent.__class__(value, context=self.context)
         return serializer.data
 
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = ['id', 'name']
 
 class BoardSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
@@ -69,6 +69,10 @@ class CommentSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     children = RecursiveField(many=True, read_only=True)
+   # children = serializers.ListSerializer(child=serializers.CharField(), read_only=True)
+
+
+
     is_owner = serializers.SerializerMethodField()
     post_id = serializers.IntegerField(source='post.id', read_only=True)
     post_title = serializers.CharField(source='post.title', read_only=True)
@@ -78,6 +82,7 @@ class CommentSerializer(serializers.ModelSerializer):
         model = Comment
         fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id']
         read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id')
+
 
     def get_user_id(self, obj):
         if obj.author:
@@ -106,101 +111,71 @@ class CommentSerializer(serializers.ModelSerializer):
         return representation
 
 class AttachmentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = Attachment
-        fields = ['id', 'file', 'filename']
-        read_only_fields = ('filename',)
+        fields = ['id', 'file', 'filename', 'file_url']
+        read_only_fields = ('filename', 'file_url')
+    
+    def get_file_url(self, obj):
+        if obj.file:
+            return obj.file.url
+        return None
 
 class PostListSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
-    attachments = AttachmentSerializer(many=True, read_only=True, help_text="게시글에 첨부된 파일 목록")
+    attachment_paths = serializers.JSONField(read_only=True, help_text="첨부파일 정보 목록 (url, name 포함)")
 
     class Meta:
         model = Post
-        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'attachments']
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'attachment_paths']
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
 
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
-    attachment_ids = serializers.ListField(
-        child=serializers.IntegerField(), write_only=True, required=False, help_text="첨부파일 ID 목록"
+    attachment_paths = serializers.ListField(
+        child=serializers.DictField(), write_only=True, required=False, help_text="첨부파일 정보 목록 (url, name 포함)"
     )
-    content_html = serializers.CharField(write_only=True, help_text="게시글 HTML 내용")
+    content_md = serializers.CharField(write_only=True, help_text="게시글 마크다운 내용")
 
     class Meta:
         model = Post
-        fields = ['title', 'content_html', 'attachment_ids', 'post_type']
+        fields = ['title', 'content_md', 'attachment_paths', 'post_type']
 
-    def _save_html_content(self, instance, html_string):
-        # Define allowed tags, attributes, and styles for sanitization to prevent XSS attacks
-        allowed_tags = [
-            'p', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'br', 'blockquote', 'li', 'ol', 'ul',
-            'a', 'img', 'pre', 'code', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'
-        ]
-        allowed_attributes = {
-            '*': ['class', 'style'],
-            'a': ['href', 'title', 'target'],
-            'img': ['src', 'alt', 'title', 'style', 'width', 'height'],
-        }
-        allowed_styles = [
-            'color', 'background-color', 'font-size', 'font-weight', 'font-style',
-            'text-align', 'text-decoration', 'list-style-type',
-            'margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
-            'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
-            'border', 'border-style', 'border-color', 'border-width',
-            'width', 'height'
-        ]
-
-        # Create a CSS sanitizer with the allowed styles
-        css_sanitizer = CSSSanitizer(allowed_css_properties=allowed_styles)
-
-        # Sanitize the input HTML
-        sanitized_html = bleach.clean(
-            html_string,
-            tags=allowed_tags,
-            attributes=allowed_attributes,
-            css_sanitizer=css_sanitizer,
-            strip=True  # Strip disallowed tags instead of escaping them
-        )
-
-        file_name = f"{uuid.uuid4()}.html"
-        instance.content_html.save(file_name, ContentFile(sanitized_html), save=False)
 
     def create(self, validated_data):
-        attachment_ids = validated_data.pop('attachment_ids', [])
-        html_content = validated_data.pop('content_html')
+        attachment_paths = validated_data.pop('attachment_paths', [])
+        content_md = validated_data.pop('content_md')
         post = Post(**validated_data)
-        self._save_html_content(post, html_content)
+        post.content_md = content_md
+        post.attachment_paths = attachment_paths
         post.save()
 
         # Update search vector after the file is saved.
         post.update_search_vector()
         post.save(update_fields=['search_vector'])
-
-        if attachment_ids:
-            attachments = Attachment.objects.filter(id__in=attachment_ids)
-            post.attachments.set(attachments)
         return post
 
     def update(self, instance, validated_data):
-        attachment_ids = validated_data.pop('attachment_ids', None)
-        html_content = validated_data.pop('content_html', None)
-        if html_content is not None:
-            self._save_html_content(instance, html_content)
-
+        attachment_paths = validated_data.pop('attachment_paths', None)
+        content_md = validated_data.pop('content_md', None)
+        
+        if content_md is not None:
+            instance.content_md = content_md
+        
+        if attachment_paths is not None:
+            instance.attachment_paths = attachment_paths
+            
         instance = super().update(instance, validated_data)
         
         # Update search vector after content is updated.
         instance.update_search_vector()
         instance.save(update_fields=['search_vector'])
-
-        if attachment_ids is not None:
-            attachments = Attachment.objects.filter(id__in=attachment_ids)
-            instance.attachments.set(attachments)
         return instance
 
 class PostDetailSerializer(serializers.ModelSerializer):
@@ -209,11 +184,11 @@ class PostDetailSerializer(serializers.ModelSerializer):
     author_semester = serializers.ReadOnlyField(source='author.semester')
     board = BoardSerializer(read_only=True)
     comments = CommentSerializer(many=True, read_only=True)
-    attachments = AttachmentSerializer(many=True, read_only=True)
+    attachment_paths = serializers.JSONField(read_only=True, help_text="첨부파일 정보 목록 (url, name 포함)")
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
-    content_html_url = serializers.URLField(source='content_html.url', read_only=True)
+    content_md = serializers.CharField(read_only=True)
     is_owner = serializers.SerializerMethodField()
     
     # user_can_edit = serializers.SerializerMethodField()
@@ -223,8 +198,8 @@ class PostDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = [
-            'id', 'board_post_id', 'title', 'content_html_url', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
-            'views', 'board', 'comments', 'attachments', 'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
+            'id', 'board_post_id', 'title', 'content_md', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
+            'views', 'board', 'comments', 'attachment_paths', 'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
             # 'user_can_edit', 'user_can_delete', 'user_can_comment'
         ]
 
