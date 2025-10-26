@@ -220,9 +220,12 @@ class BoardListAPIView(generics.ListAPIView):
                 summary='새로운 게시글을 작성하는 예시입니다.',
                 value={
                     "title": "새로운 게시글 제목",
-                    "content_html": "<p>여기에 게시글 내용이 HTML 형식으로 들어갑니다.</p>",
-                    "attachment_ids": [1, 2],
-                    "post_type": "DEFAULT"
+                    "content_md": "# 제목\n\n여기에 게시글 내용이 마크다운 형식으로 들어갑니다.\n\n- 목록1\n- 목록2",
+                    "attachment_paths": [
+                        {"url": "http://example.com/media/attachments/file1.pdf", "name": "file1.pdf"},
+                        {"url": "http://example.com/media/attachments/file2.jpg", "name": "file2.jpg"}
+                    ],
+                    "post_type": 1
                 }
             )
         ],
@@ -423,7 +426,8 @@ class AttachmentCreateAPIView(generics.CreateAPIView):
             'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
             'text/plain', 'application/zip', 'application/x-7z-compressed',
-            'application/x-hwp', 'application/haansofthwp'
+            'application/x-hwp', 'application/haansofthwp',
+            'video/mp4', 'video/quicktime'
         ]
         if file.content_type not in ALLOWED_MIME_TYPES:
             return Response(

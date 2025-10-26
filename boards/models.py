@@ -112,7 +112,9 @@ class Post(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
-    content_html = models.FileField(upload_to=post_upload_path, null=True, blank=True)
+   #  content_html = models.FileField(upload_to=post_upload_path, null=True, blank=True)
+   # content_md
+    content_md = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     views = models.PositiveIntegerField(default=0)
@@ -125,6 +127,7 @@ class Post(models.Model):
     post_type = models.IntegerField(choices=PostType.choices, default=PostType.DEFAULT)
     search_vector = SearchVectorField(null=True, editable=False)
     board_post_id = models.IntegerField(null=True, blank=True)
+    attachment_paths = models.JSONField(default=list, blank=True, help_text="첨부파일 경로 목록")
 
     objects = PostManager()
 
@@ -148,12 +151,12 @@ class Post(models.Model):
 
     def update_search_vector(self):
         content_text = ''
-        if self.content_html and hasattr(self.content_html, 'path') and os.path.exists(self.content_html.path):
+        if self.content_md: # 이제 파일이 아닌 텍스트 문자열이므로 .path 등이 필요 없습니다.
             try:
-                with open(self.content_html.path, 'r', encoding='utf-8') as f:
-                    soup = BeautifulSoup(f, 'html.parser')
-                    content_text = soup.get_text()
-            except (FileNotFoundError, Exception):
+                # 파일(f)을 여는 대신, 마크다운 문자열(self.content_md)을 직접 파싱합니다.
+                soup = BeautifulSoup(self.content_md, 'html.parser')
+                content_text = soup.get_text()
+            except Exception:
                 content_text = '' # In case of error, proceed with empty content
         
         # We use 'config='ko'' if a Korean stemmer is installed in PostgreSQL.
@@ -190,8 +193,9 @@ class Comment(models.Model):
     def __str__(self):
         return f'Comment by {self.author} on {self.post}'
 
-class Attachment(models.Model):
-    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='attachments', null=True, blank=True)
+class Attachment(models.Model): 
+    # post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='attachments', null=True, blank=True)  # 주석 처리: 직접적인 DB 관계 제거
+   
     file = models.FileField(upload_to='attachments/')
     filename = models.CharField(max_length=255)
 
