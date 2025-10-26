@@ -8,6 +8,11 @@ from django.contrib.postgres.search import SearchVector, SearchVectorField
 from bs4 import BeautifulSoup
 
 
+# DB 스키마 마이그레이션 완료 (2025-10-26):
+# Post.content_html -> Post.content_md (Markdown 텍스트 저장)
+# Attachment FK -> Post.attachment_paths (JSON 매핑)
+
+
 def post_upload_path(instance, filename):
     # e.g. media/boards/1/a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6.html
     return f'boards/{instance.board.id}/{filename}'
