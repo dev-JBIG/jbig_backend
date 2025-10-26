@@ -16,7 +16,7 @@ router.register(r'calendar', CalendarEventViewSet, basename='calendar')
 
 urlpatterns = [
     path('api/', include(router.urls)),
-    path('admin/', admin.site.urls),
+    path('django-admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
     path('api/', include('boards.urls')),
     path('api/html/', include('html_serving.urls')), # Added this line
