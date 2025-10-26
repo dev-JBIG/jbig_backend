@@ -1,19 +1,16 @@
-import os
 from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F, Q
-from bs4 import BeautifulSoup
 
 from .models import Board, Post, Comment, Category, Attachment
 from .serializers import (
     BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
-    CommentSerializer, CategoryWithBoardsSerializer, AttachmentSerializer,
+    CommentSerializer, AttachmentSerializer,
     CategoryListResponseSerializer, PostListResponseSerializer
 )
 from .permissions import (
@@ -300,7 +297,15 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
 @extend_schema_view(
     get=extend_schema(
         summary="게시글 상세 조회",
-        description='''''게시글의 상세 정보를 조회합니다.\n- **권한 (Board Level)**: 먼저 게시판의 `read_permission`을 확인합니다.\n- **권한 (Post Level)**: 그 다음, 게시글의 `post_type`에 따라 상세 조회 권한이 결정됩니다.\n  - `DEFAULT` (일반): 게시판 읽기 권한이 있으면 누구나 조회 가능\n  - `STAFF_ONLY` (스태프 전용): 스태프만 조회 가능\n  - `JUSTIFICATION_LETTER` (해명글): 작성자 또는 스태프만 조회 가능\n- **조회수 증가**: 이 API를 호출하면 해당 게시글의 조회수가 1 증가합니다.''''', 
+        description=(
+            "게시글의 상세 정보를 조회합니다.\n"
+            "- 권한 (Board Level): 먼저 게시판의 `read_permission`을 확인합니다.\n"
+            "- 권한 (Post Level): 게시글의 `post_type`에 따라 상세 조회 권한이 결정됩니다.\n"
+            "  - DEFAULT(일반): 게시판 읽기 권한이 있으면 누구나 조회 가능\n"
+            "  - STAFF_ONLY(스태프 전용): 스태프만 조회 가능\n"
+            "  - JUSTIFICATION_LETTER(해명글): 작성자 또는 스태프만 조회 가능\n"
+            "- 조회수 증가: 이 API를 호출하면 해당 게시글의 조회수가 1 증가합니다."
+        ),
         responses={
             200: PostDetailSerializer,
             403: OpenApiResponse(description="게시글을 읽을 권한이 없습니다."),
@@ -325,7 +330,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         instance.views += 1
         instance.save(update_fields=['views'])
-        
+
         serializer = self.get_serializer(instance, context={'request': request})
         return Response(serializer.data)
 

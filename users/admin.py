@@ -20,3 +20,4 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('semester', 'is_verified', 'password_changed_at')
         }),
     )
+

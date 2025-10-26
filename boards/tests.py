@@ -3,7 +3,6 @@ from rest_framework import status
 from django.urls import reverse
 from users.models import User
 from .models import Board, Post, Category
-from django.core.files.uploadedfile import SimpleUploadedFile
 
 class PostAPITestCase(APITestCase):
     def setUp(self):

@@ -29,7 +29,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 )
 @api_view(['GET'])
 def notion_view(request):
-    notion_dir = '/home/ubuntu/volume/jbig_backend/media/notion/'
+    notion_dir = os.path.join(settings.MEDIA_ROOT, settings.CONTENT_NOTION_SUBDIR)
     requested_file = request.query_params.get('file', None)
 
     file_to_serve = None
@@ -67,7 +67,7 @@ def notion_view(request):
         src = img.get('src')
         if src and not src.startswith(('http://', 'https://', '/')):
             decoded_src = unquote(src)
-            img['src'] = '/media/notion/' + quote(decoded_src)
+            img['src'] = settings.MEDIA_URL.rstrip('/') + '/' + settings.CONTENT_NOTION_SUBDIR.strip('/') + '/' + quote(decoded_src)
 
     # Update anchor hrefs pointing to images and other assets
     for a in soup.find_all('a', href=True):
@@ -75,7 +75,7 @@ def notion_view(request):
         if href and not href.startswith(('http://', 'https://', '#', '/')):
             if any(href.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp']):
                 decoded_href = unquote(href)
-                a['href'] = '/media/notion/' + quote(decoded_href)
+                a['href'] = settings.MEDIA_URL.rstrip('/') + '/' + settings.CONTENT_NOTION_SUBDIR.strip('/') + '/' + quote(decoded_href)
             elif href.lower().endswith('.html'):
                 decoded_href = unquote(href)
                 a['href'] = '/api/html/notion/?file=' + quote(decoded_href)
@@ -90,7 +90,11 @@ def notion_view(request):
 )
 @api_view(['GET'])
 def award_view(request):
-    file_path = '/home/ubuntu/volume/jbig_backend/media/awards/Awards 24c0b4f89da28059b565cbf910e6d6ad.html'
+    file_path = os.path.join(
+        settings.MEDIA_ROOT,
+        settings.CONTENT_AWARDS_SUBDIR,
+        settings.CONTENT_AWARD_HTML_FILENAME,
+    )
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -124,12 +128,11 @@ def award_upload_view(request):
     if not file.name.endswith('.html'):
         return Response({'error': 'Invalid file type. Please upload an HTML file.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    upload_dir = '/ubuntu/jbig_backend/media/awards/'
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir)
+    upload_dir = os.path.join(settings.MEDIA_ROOT, settings.CONTENT_AWARDS_SUBDIR)
+    os.makedirs(upload_dir, exist_ok=True)
         
     # For simplicity, we'll overwrite the existing file with a fixed name.
-    file_path = os.path.join(upload_dir, 'Awards 24c0b4f89da28059b565cbf910e6d6ad.html')
+    file_path = os.path.join(upload_dir, settings.CONTENT_AWARD_HTML_FILENAME)
     
     with open(file_path, 'wb+') as destination:
         for chunk in file.chunks():
@@ -164,12 +167,12 @@ def notion_upload_view(request):
     if not file.name.endswith('.zip'):
         return Response({'error': 'Invalid file type. Please upload a ZIP file.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    upload_dir = '/root/jbig_backend/media/notion/'
+    upload_dir = os.path.join(settings.MEDIA_ROOT, settings.CONTENT_NOTION_SUBDIR)
 
     # Clear the directory first
     if os.path.exists(upload_dir):
         shutil.rmtree(upload_dir)
-    os.makedirs(upload_dir)
+    os.makedirs(upload_dir, exist_ok=True)
 
     zip_path = os.path.join(upload_dir, file.name)
     with open(zip_path, 'wb+') as destination:
@@ -199,7 +202,7 @@ def notion_upload_view(request):
 )
 @api_view(['GET'])
 def banner_view(request):
-    file_path = '/home/ubuntu/volume/jbig_backend/media/banner/banner.jpg'
+    file_path = os.path.join(settings.MEDIA_ROOT, settings.CONTENT_BANNER_SUBPATH)
 
     if os.path.exists(file_path):
         return FileResponse(open(file_path, 'rb'))

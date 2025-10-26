@@ -1,9 +1,7 @@
-import uuid
 import os
 from django.db import models
 from django.conf import settings
 from django.db.models import Q
-from django.contrib.postgres.search import SearchVector
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from bs4 import BeautifulSoup
 
@@ -117,9 +115,14 @@ class Post(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
+<<<<<<< HEAD
    #  content_html = models.FileField(upload_to=post_upload_path, null=True, blank=True)
    # content_md ##
     content_md = models.TextField(null=True, blank=True)
+=======
+    # Store sanitized HTML directly in DB to avoid file dependency
+    content_html = models.TextField(null=True, blank=True)
+>>>>>>> main
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     views = models.PositiveIntegerField(default=0)
@@ -156,6 +159,7 @@ class Post(models.Model):
 
     def update_search_vector(self):
         content_text = ''
+
         if self.content_md: # 이제 파일이 아닌 텍스트 문자열이므로 .path 등이 필요 없습니다.
             try:
                 # 파일(f)을 여는 대신, 마크다운 문자열(self.content_md)을 직접 파싱합니다.

@@ -147,6 +147,42 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         model = Post
         fields = ['title', 'content_md', 'attachment_paths', 'post_type']
 
+<<<<<<< HEAD
+=======
+    def _save_html_content(self, instance, html_string):
+        # Define allowed tags, attributes, and styles for sanitization to prevent XSS attacks
+        allowed_tags = [
+            'p', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'br', 'blockquote', 'li', 'ol', 'ul',
+            'a', 'img', 'pre', 'code', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'
+        ]
+        allowed_attributes = {
+            '*': ['class', 'style'],
+            'a': ['href', 'title', 'target'],
+            'img': ['src', 'alt', 'title', 'style', 'width', 'height'],
+        }
+        allowed_styles = [
+            'color', 'background-color', 'font-size', 'font-weight', 'font-style',
+            'text-align', 'text-decoration', 'list-style-type',
+            'margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+            'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
+            'border', 'border-style', 'border-color', 'border-width',
+            'width', 'height'
+        ]
+
+        # Create a CSS sanitizer with the allowed styles
+        css_sanitizer = CSSSanitizer(allowed_css_properties=allowed_styles)
+
+        # Sanitize the input HTML
+        sanitized_html = bleach.clean(
+            html_string,
+            tags=allowed_tags,
+            attributes=allowed_attributes,
+            css_sanitizer=css_sanitizer,
+            strip=True  # Strip disallowed tags instead of escaping them
+        )
+        # Directly store sanitized HTML into DB-backed TextField
+        instance.content_html = sanitized_html
+>>>>>>> main
 
     def create(self, validated_data):
         attachment_paths = validated_data.pop('attachment_paths', [])
@@ -188,7 +224,11 @@ class PostDetailSerializer(serializers.ModelSerializer):
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
+<<<<<<< HEAD
     content_md = serializers.CharField(read_only=True)
+=======
+    content_html = serializers.CharField(read_only=True)
+>>>>>>> main
     is_owner = serializers.SerializerMethodField()
     
     # user_can_edit = serializers.SerializerMethodField()
@@ -198,9 +238,14 @@ class PostDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = [
+<<<<<<< HEAD
             'id', 'board_post_id', 'title', 'content_md', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
             'views', 'board', 'comments', 'attachment_paths', 'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
             # 'user_can_edit', 'user_can_delete', 'user_can_comment'
+=======
+            'id', 'board_post_id', 'title', 'content_html', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
+            'views', 'board', 'comments', 'attachments', 'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
+>>>>>>> main
         ]
 
     def get_user_id(self, obj):

@@ -3,7 +3,6 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from users.models import User, EmailVerificationCode
-from django.contrib.auth.hashers import check_password
 from unittest.mock import patch
 
 class UserEmailVerificationTest(TestCase):
