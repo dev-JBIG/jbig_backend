@@ -81,22 +81,16 @@ jobs:
           source: "./statics/*"
           target: "$HOME/${{ secrets.DEPLOY_PATH }}"
 
-      - name: Check build directory
-        run: |
-          echo "Files in ./build:"
-          ls -al ./build
-
-      - name: Copy project to deploy server (SCP)
-        uses: appleboy/scp-action@master
+      - name: Upload files to deploy server (SCP)
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          source: ./build/
-          target: ${{ secrets.DEPLOY_PATH }}
-          overwrite: true
-          debug: true
+          script: |
+            mkdir -p ${{ secrets.DEPLOY_PATH }}
+            rsync -av ./ ${{ secrets.DEPLOY_PATH }}
 
       - name: Restart service on deploy server
         uses: appleboy/ssh-action@master
@@ -109,7 +103,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            rsync -a --delete "$DEPLOY_PATH/release/" "$DEPLOY_PATH/current/"
             sudo systemctl daemon-reload || true
-            sudo systemctl restart "$SYSTEMD_SERVICE"
-            sudo systemctl is-active "$SYSTEMD_SERVICE"
+            sudo systemctl restart nginx
+            sudo systemctl is-active nginx
