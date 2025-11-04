@@ -6,6 +6,26 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F, Q
+from datetime import datetime
+
+from rest_framework.views import APIView # APIView 추가
+from rest_framework.response import Response # Response 추가
+from rest_framework import status # status 추가
+from rest_framework.permissions import IsAuthenticated # IsAuthenticated 추가
+
+
+## NCP 연동 위해 새로 추가 ##
+import boto3
+import uuid
+import os
+from django.conf import settings
+from botocore.client import Config
+from botocore.exceptions import ClientError
+import logging
+logger = logging.getLogger(__name__)
+
+
+
 
 from .models import Board, Post, Comment, Category, Attachment
 from .serializers import (
@@ -492,3 +512,123 @@ class BoardDetailAPIView(generics.RetrieveAPIView):
     lookup_field = 'id'
     lookup_url_kwarg = 'board_id'
     permission_classes = [IsBoardReadable]
+
+
+
+# 업로드 URL 발급해주는 GeneratePresignedURlAPIView 클래스
+
+@extend_schema(
+    tags=['파일'], # API 문서에서 '파일' 태그로 분류
+    summary="파일 업로드용 Presigned URL 생성",
+    description="NCP Object Storage에 파일을 직접 업로드할 수 있는 10분 만료 Presigned URL을 발급받습니다.",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'filename': {'type': 'string', 'example': 'example.png'}
+            },
+            'required': ['filename']
+        }
+    },
+    responses={
+        200: OpenApiResponse(
+            description="URL 발급 성공",
+            examples=[
+                OpenApiExample(
+                    'Success',
+                    value={
+                        "upload_url": "https://kr.object.ncloudstorage.com/jbig/uploads/2025/10/28/12/a1b2c3d4-....png?AWSAccessKeyId=...",
+                        "file_key": "uploads/2025/10/28/12/a1b2c3d4-....png"
+                    }
+                )
+            ]
+        ),
+        400: OpenApiResponse(description="파일 이름이 제공되지 않았습니다."),
+        500: OpenApiResponse(description="URL 생성에 실패했습니다."),
+    }
+)
+class GeneratePresignedURLAPIView(APIView):
+    """
+    파일 업로드를 위한 Presigned URL을 생성하는 API
+    """
+    permission_classes = [IsAuthenticated] # 로그인한 사용자만 이 API를 호출할 수 있음
+
+    def post(self, request, *args, **kwargs):
+        filename = request.data.get('filename')
+        if not filename:
+            return Response({"error": "No filename provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+
+        # 1. 파일 확장자 추출
+        try:
+            extension = os.path.splitext(filename)[1].lstrip('.')
+            if not extension:
+                 # 확장자가 없는 경우 기본값 (혹은 에러 처리)
+                extension = 'bin' 
+        except Exception:
+            extension = 'bin'
+
+        # 2. 서버에서 고유한 파일 경로(Key) 생성
+        # uploads/년/월/일/유저ID/고유ID.확장자
+        # 예: "uploads/2025/10/28/12/a1b2c3d4-e5f6-4a5b-8c7d-9e0f1a2b3c4d.png"
+        file_key = os.path.join(
+            "uploads",
+            f"{datetime.now():%Y/%m/%d}",
+            str(user.id),
+            f"{uuid.uuid4()}.{extension}"
+        )
+
+        # 3. boto3 클라이언트 생성
+        try:
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=settings.NCP_ENDPOINT_URL,
+                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.NCP_SECRET_KEY,
+                config=Config(
+                    signature_version='s3v4',
+                    s3={'addressing_style': 'path'},
+                    region_name=settings.NCP_REGION_NAME
+                )
+            )
+        except Exception as e:
+            logger.error(f"S3 클라이언트 생성 실패: {e}")
+            return Response({"error": "S3 client creation failed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 4. Presigned URL (업로드용) 생성
+        try:
+            # URL 만료 시간: 600초 (10분)
+            upload_url = s3_client.generate_presigned_url(
+                'put_object',
+                Params={
+                    'Bucket': settings.NCP_BUCKET_NAME,
+                    'Key': file_key,
+                    # 'ContentType': 'image/png' # 필요시 파일 타입 지정
+                },
+                ExpiresIn=600 
+            )
+
+            # [추가] 다운로드용 URL도 미리 생성 (1시간 만료)
+            download_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': settings.NCP_BUCKET_NAME,
+                    'Key': file_key,
+                }
+               # ExpiresIn=3600
+            )
+
+            # React에게 업로드할 URL과 DB에 저장할 Key를 함께 전달
+            return Response({
+                "upload_url": upload_url,
+                "file_key": file_key,
+                "download_url": download_url
+            }, status=status.HTTP_200_OK)
+
+        except ClientError as e:
+            logger.error(f"Presigned URL 생성 실패: {e}")
+            return Response({"error": "Failed to generate presigned URL."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.error(f"알 수 없는 에러: {e}")
+            return Response({"error": "An unknown error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
