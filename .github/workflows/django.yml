@@ -1,7 +1,7 @@
 name: Django Deploy
 
 on:
-  push:
+  pull_request:
     branches: ["main"]
 
 jobs:
@@ -11,98 +11,86 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4  
-      # 서버 접속용 SSH 에이전트 준비 (서버로 SSH 접속하는 용도)
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          python-version: "3.10"
 
-      - name: Add deploy host to known_hosts
-        run: ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
-
-      # 서버에서 git pull 하고 gunicorn 재가동
-      - name: Update code on server and restart
+      - name: Install dependencies
         run: |
-          set -x
-          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
-            set -x
-            REPO_SSH="git@github.com:${{ github.repository }}.git"
-            APP_DIR="$HOME/${{ secrets.DEPLOY_PATH }}"
-            
-            # 0) 디렉터리 준비
-            mkdir -p "$APP_DIR"
-            # 1) 레포 없으면 clone, 있으면 최신화
-            if [ ! -d "$APP_DIR/.git" ]; then
-              git clone "$REPO_SSH" "$APP_DIR"
-            fi
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
 
-            cd "$APP_DIR"
+      - name: Build static files and run tests
+        run: |
+          source .venv/bin/activate
+          python manage.py collectstatic --noinput
+          #python manage.py test
 
-            # ★추가: origin을 SSH로 강제(https 잔재 제거)
-            git remote set-url origin "$REPO_SSH"
+      - name: Create build archive
+        run: |
+          tar czf /tmp/build.tar.gz \
+            --exclude='.venv' \
+            --exclude='.git' \
+            --exclude='*.pyc' \
+            --exclude='__pycache__' \
+            .
+          mv /tmp/build.tar.gz build.tar.gz
 
-            # 안전하게 원격 기준으로 맞춤
-            git fetch origin
-            git checkout main
-            git reset --hard origin/main
-
-            # 2) 가상환경(.venv) 준비
-            [ -d .venv ] || python3 -m venv .venv
-            . .venv/bin/activate
-
-            # (필요 시 주석 해제)
-            # pip install --upgrade pip
-            pip install -r requirements.txt
-            python3 manage.py migrate --noinput
-            python3 manage.py collectstatic --noinput
-
-            # 3) gunicorn으로 재가동 (systemd 미사용 시)
-            pkill -f "gunicorn .*jbig_backend\.wsgi:application" || true
-            sleep 1
-            . .venv/bin/activate
-            nohup gunicorn jbig_backend.wsgi:application \
-              --bind 0.0.0.0:3001 --workers 3 --timeout 60 \
-              > gunicorn.out 2>&1 &
-
-            # 4) 간단 체크
-            sleep 2
-            if pgrep -f "gunicorn .*jbig_backend\.wsgi:application" >/dev/null; then 
-              echo "Gunicorn up on :3001"
-            else
-              echo "Gunicorn not found"
-            fi
-
-      - name: Deploy static files
+      - name: Upload build to server
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "./statics/*"
-          target: "$HOME/${{ secrets.DEPLOY_PATH }}"
+          source: "build.tar.gz"
+          target: $HOME/releases/
 
-      - name: Upload files to deploy server (SCP)
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            mkdir -p ${{ secrets.DEPLOY_PATH }}
-            rsync -av ./ ${{ secrets.DEPLOY_PATH }}
-
-      - name: Restart service on deploy server
+      - name: Deploy new release on server
         uses: appleboy/ssh-action@master
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          SYSTEMD_SERVICE: ${{ secrets.SYSTEMD_SERVICE }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            sudo systemctl daemon-reload || true
-            sudo systemctl restart nginx
-            sudo systemctl is-active nginx
+            APP_DIR="$HOME/${{ secrets.DEPLOY_PATH }}/current"
+            RELEASES_DIR="$HOME/releases"
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            NEW_RELEASE="$RELEASES_DIR/$TIMESTAMP"
+
+            mkdir -p "$NEW_RELEASE"
+            tar xzf "$RELEASES_DIR/build.tar.gz" -C "$NEW_RELEASE"
+
+            cd "$NEW_RELEASE"
+            [ -d .venv ] || python3 -m venv .venv
+            . .venv/bin/activate
+            pip install -r requirements.txt --no-cache-dir
+
+            python manage.py migrate --noinput
+            python manage.py collectstatic --noinput
+
+            ln -sfn "$NEW_RELEASE" "$APP_DIR"
+
+            cd "$APP_DIR"
+            GUNICORN_PID=$(pgrep -f "gunicorn .*wsgi:application" || true)
+            if [ -n "$GUNICORN_PID" ]; then
+              kill -HUP "$GUNICORN_PID" || true
+              sleep 3
+            else
+              .venv/bin/gunicorn jbig_backend.wsgi:application \
+                --bind 0.0.0.0:3001 --workers 3 --timeout 60 \
+                --daemon \
+                --pid /tmp/gunicorn.pid
+            fi
+            
+            # systemd로 등록된 경우(선택), 서비스 리로드 시도
+            sudo systemctl reload gunicorn-jbig || true
+           
+            sudo systemctl reload nginx
+
+            echo "Deployed new version: $TIMESTAMP"
