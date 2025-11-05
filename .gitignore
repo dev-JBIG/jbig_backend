@@ -2,8 +2,20 @@
 __pycache__/
 *.pyc
 
-# Environment variables
-.env
+# 로컬 환경 변수 파일 (절대 커밋하지 않음)
+jbig_backend.env
+*.env
+!*.env.example
 
+# 백업 파일
+*.bak
+*.backup
+*.old
 
-.venv/
+# 임시 스크립트
+*.sh
+!deploy.sh
+
+# 로그 파일
+*.log
+
