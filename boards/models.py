@@ -3,6 +3,7 @@ from django.db import models
 from django.conf import settings
 from django.db.models import Q
 from django.contrib.postgres.search import SearchVector, SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
 from bs4 import BeautifulSoup
 
 
@@ -141,7 +142,7 @@ class Post(models.Model):
         verbose_name = '게시글'
         verbose_name_plural = '게시글 목록'
         indexes = [
-            models.Index(fields=['search_vector']),
+            GinIndex(fields=['search_vector']),
         ]
         unique_together = ('board', 'board_post_id')
 

@@ -20,6 +20,16 @@ def get_env_list(key: str, default: list[str] | None = None) -> list[str]:
     return [item.strip() for item in val.split(',') if item.strip()]
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+## NCP 스토리지 설정 ##
+NCP_ACCESS_KEY_ID = os.getenv('NCP_ACCESS_KEY_ID')
+NCP_SECRET_KEY = os.getenv('NCP_SECRET_KEY')
+NCP_BUCKET_NAME = os.getenv('NCP_BUCKET_NAME')
+NCP_ENDPOINT_URL = os.getenv('NCP_ENDPOINT_URL')
+NCP_REGION_NAME = os.getenv('NCP_REGION_NAME')
+
+
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
