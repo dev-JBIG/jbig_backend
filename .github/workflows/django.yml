@@ -1,6 +1,8 @@
 name: Django Deploy
 
 on:
+  push:
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
@@ -76,21 +78,8 @@ jobs:
 
             ln -sfn "$NEW_RELEASE" "$APP_DIR"
 
-            cd "$APP_DIR"
-            GUNICORN_PID=$(pgrep -f "gunicorn .*wsgi:application" || true)
-            if [ -n "$GUNICORN_PID" ]; then
-              kill -HUP "$GUNICORN_PID" || true
-              sleep 3
-            else
-              .venv/bin/gunicorn jbig_backend.wsgi:application \
-                --bind 0.0.0.0:3001 --workers 3 --timeout 60 \
-                --daemon \
-                --pid /tmp/gunicorn.pid
-            fi
-            
-            # systemd로 등록된 경우(선택), 서비스 리로드 시도
-            sudo systemctl reload gunicorn-jbig || true
+            sudo systemctl restart gunicorn-jbig || echo "Gunicorn restart failed"
            
-            sudo systemctl reload nginx
+            sudo systemctl reload nginx || echo "nginx reload failed"
 
             echo "Deployed new version: $TIMESTAMP"
