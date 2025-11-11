@@ -1,5 +1,4 @@
 name: Django Deploy
-
 on:
   push:
     branches: ["main"]
@@ -12,25 +11,25 @@ jobs:
   
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4  
-
+        uses: actions/checkout@v4
+        
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
+          
       - name: Install dependencies
         run: |
           python -m venv .venv
           source .venv/bin/activate
           pip install -r requirements.txt
-
+          
       - name: Build static files and run tests
         run: |
           source .venv/bin/activate
           python manage.py collectstatic --noinput
           #python manage.py test
-
+          
       - name: Create build archive
         run: |
           tar czf /tmp/build.tar.gz \
@@ -40,7 +39,7 @@ jobs:
             --exclude='__pycache__' \
             .
           mv /tmp/build.tar.gz build.tar.gz
-
+          
       - name: Upload build to server
         uses: appleboy/scp-action@master
         with:
@@ -48,38 +47,46 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "build.tar.gz"
-          target: $HOME/releases/
-
+          target: "/tmp/"  # 임시 디렉토리로 변경
+          
       - name: Deploy new release on server
         uses: appleboy/ssh-action@master
-        env:
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_PATH  # 환경변수 전달
           script: |
             set -e
-            APP_DIR="$HOME/${{ secrets.DEPLOY_PATH }}/current"
-            RELEASES_DIR="$HOME/releases"
+            
+            APP_BASE_DIR="$HOME/${{ secrets.DEPLOY_PATH }}"
+            RELEASES_DIR="$APP_BASE_DIR/releases"
+            SHARED_DIR="$APP_BASE_DIR/shared"
             TIMESTAMP=$(date +%Y%m%d%H%M%S)
             NEW_RELEASE="$RELEASES_DIR/$TIMESTAMP"
-
+            
+            mkdir -p "$RELEASES_DIR"
+            mkdir -p "$SHARED_DIR"
+            
             mkdir -p "$NEW_RELEASE"
-            tar xzf "$RELEASES_DIR/build.tar.gz" -C "$NEW_RELEASE"
-
+            tar xzf "/tmp/build.tar.gz" -C "$NEW_RELEASE"
+            rm -f "/tmp/build.tar.gz"
+            
             cd "$NEW_RELEASE"
             [ -d .venv ] || python3 -m venv .venv
-            . .venv/bin/activate
+            source .venv/bin/activate
             pip install -r requirements.txt --no-cache-dir
-
+            
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
-
-            ln -sfn "$NEW_RELEASE" "$APP_DIR"
-
+            
+            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"
+            
             sudo systemctl restart gunicorn-jbig || echo "Gunicorn restart failed"
-           
-            sudo systemctl reload nginx || echo "nginx reload failed"
-
+            sudo systemctl reload nginx || echo "Nginx reload failed"
+            
+            cd "$RELEASES_DIR"
+            ls -t | tail -n +6 | xargs -r rm -rf
+            
             echo "Deployed new version: $TIMESTAMP"
+            echo "Release path: $NEW_RELEASE"
