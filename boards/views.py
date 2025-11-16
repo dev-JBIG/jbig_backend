@@ -117,13 +117,16 @@ class PostSearchView(generics.ListAPIView):
 
         queryset = base_queryset.visible_for_user(user)
 
-        search_query = SearchQuery(query, search_type='websearch')
-        search_filter = Q(search_vector=search_query) | Q(author__username__icontains=query)
-        
-        queryset = queryset.annotate(
-            rank=SearchRank(F('search_vector'), search_query)
-        ).filter(search_filter).order_by('-rank', '-created_at')
 
+
+        # 부분 검색 되게 수정
+        search_filter = (
+            Q(title__icontains=query) |
+            Q(content_md__icontains=query) |
+            Q(author__username__icontains=query)
+        )
+
+        queryset = queryset.filter(search_filter).distinct().order_by('-created_at')
         return queryset
 
 @extend_schema(
