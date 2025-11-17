@@ -1,4 +1,4 @@
-name: Django Deploy
+name: Django CI/CD
 on:
   push:
     branches: ["main"]
@@ -6,9 +6,8 @@ on:
     branches: ["main"]
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,21 +23,35 @@ jobs:
           source .venv/bin/activate
           pip install -r requirements.txt
 
-      - name: Build static files and run tests
+      - name: Collect static files
         run: |
           source .venv/bin/activate
           python manage.py collectstatic --noinput
-          #python manage.py test
 
-      - name: Create build archive
+      - name: Create build artifact
         run: |
-          tar czf /tmp/build.tar.gz \
+          tar czf back_build.tar.gz \
             --exclude='.venv' \
             --exclude='.git' \
             --exclude='*.pyc' \
             --exclude='__pycache__' \
             .
-          mv /tmp/build.tar.gz build.tar.gz
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: django-build
+          path: back_build.tar.gz
+          
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: django-build
+          path: build
 
       - name: Upload build to server
         uses: appleboy/scp-action@master
@@ -46,8 +59,8 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "build.tar.gz"
-          target: "/tmp/"
+          source: "back_build.tar.gz"
+          target: $HOME/releases
 
       - name: Deploy new release on server
         uses: appleboy/ssh-action@master
@@ -55,21 +68,20 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: "DEPLOY_PATH"
           script: |
             set -e
-
-            APP_BASE_DIR="$HOME/${{ secrets.DEPLOY_PATH }}"
-            RELEASES_DIR="$APP_BASE_DIR/releases"
-            SHARED_DIR="$APP_BASE_DIR/shared"
+            set -x
+            DEPLOY_PATH_VALUE="${{ secrets.DEPLOY_PATH }}"
+            
+            APP_BASE="$HOME/${DEPLOY_PATH_VALUE}"
+            APP_CURRENT="$HOME/${DEPLOY_PATH_VALUE}/current"
+            RELEASES_DIR="$HOME/releases"
             TIMESTAMP=$(date +%Y%m%d%H%M%S)
             NEW_RELEASE="$RELEASES_DIR/$TIMESTAMP"
 
-            mkdir -p "$RELEASES_DIR"
-            mkdir -p "$SHARED_DIR"
             mkdir -p "$NEW_RELEASE"
-            tar xzf "/tmp/build.tar.gz" -C "$NEW_RELEASE"
-            rm -f "/tmp/build.tar.gz"
+            tar xzf "$RELEASES_DIR/back_build.tar.gz" -C "$NEW_RELEASE"
+            #rm -f "/tmp/back_build.tar.gz"
 
             cd "$NEW_RELEASE"
             [ -d .venv ] || python3 -m venv .venv
@@ -79,12 +91,8 @@ jobs:
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
 
-            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"
-            CURRENT_DIR="$APP_BASE_DIR/current"
-
+            ln -sfn "$NEW_RELEASE" "$APP_CURRENT"
             SERVICE_NAME="gunicorn-jbig"
-            SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-            ENV_FILE="$SHARED_DIR/jbig_backend.env"
 
             sudo systemctl daemon-reload
             sudo systemctl enable "$SERVICE_NAME"
