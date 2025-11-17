@@ -8,29 +8,29 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-  
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-          
-      - name: Install dependencies
+
+      - name: Install dependencies 
         run: |
           python -m venv .venv
           source .venv/bin/activate
           pip install -r requirements.txt
-          
-      - name: Build static files and run tests
+
+      - name: Build static files and run tests 
         run: |
           source .venv/bin/activate
           python manage.py collectstatic --noinput
-          #python manage.py test
-          
-      - name: Create build archive
+          python manage.py test
+
+      - name: Create build archive 
         run: |
           tar czf /tmp/build.tar.gz \
             --exclude='.venv' \
@@ -39,8 +39,8 @@ jobs:
             --exclude='__pycache__' \
             .
           mv /tmp/build.tar.gz build.tar.gz
-          
-      - name: Upload build to server
+
+      - name: Upload build to server 
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -48,8 +48,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "build.tar.gz"
           target: "/tmp/"  # 임시 디렉토리로 변경
-          
-      - name: Deploy new release on server
+
+      - name: Deploy new release on server 
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -67,26 +67,64 @@ jobs:
             
             mkdir -p "$RELEASES_DIR"
             mkdir -p "$SHARED_DIR"
-            
             mkdir -p "$NEW_RELEASE"
-            tar xzf "/tmp/build.tar.gz" -C "$NEW_RELEASE"
+            tar xzf "/tmp/build.tar.gz" -C "$NEW_RELEASE"  # 새 릴리스 디렉토리에 빌드 전개
             rm -f "/tmp/build.tar.gz"
             
             cd "$NEW_RELEASE"
-            [ -d .venv ] || python3 -m venv .venv
+            [ -d .venv ] || python3 -m venv .venv  # 릴리스별 가상환경 생성
             source .venv/bin/activate
             pip install -r requirements.txt --no-cache-dir
             
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
             
-            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"
-            
-            sudo systemctl restart gunicorn-jbig || echo "Gunicorn restart failed"
-            sudo systemctl reload nginx || echo "Nginx reload failed"
-            
-            cd "$RELEASES_DIR"
-            ls -t | tail -n +6 | xargs -r rm -rf
-            
-            echo "Deployed new version: $TIMESTAMP"
-            echo "Release path: $NEW_RELEASE"
+            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"  # 현재 릴리스 심볼릭 링크 갱신
+            CURRENT_DIR="$APP_BASE_DIR/current"
+
+            SERVICE_NAME="gunicorn-jbig"
+            SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+            ENV_FILE="$SHARED_DIR/jbig_backend.env"
+
+            sudo tee "$SERVICE_FILE" > /dev/null <<'EOF'  # 최신 릴리스 경로 기준 systemd 서비스 정의
+[Unit]
+Description=Gunicorn service for JBIG Django backend
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+Group=www-data
+WorkingDirectory=$CURRENT_DIR
+Environment="DJANGO_SETTINGS_MODULE=jbig_backend.settings"
+EnvironmentFile=-$ENV_FILE
+ExecStart=$CURRENT_DIR/.venv/bin/gunicorn \
+  --bind 0.0.0.0:3001 \
+  --workers 3 \
+  --timeout 60 \
+  --pid /run/${SERVICE_NAME}.pid \
+  --pythonpath jbig_backend \
+  --access-logfile - \
+  jbig_backend.wsgi:application
+ExecReload=/bin/kill -HUP \$MAINPID
+ExecStop=/bin/kill -TERM \$MAINPID
+Restart=always
+RestartSec=3
+PIDFile=/run/${SERVICE_NAME}.pid
+RuntimeDirectory=${SERVICE_NAME}
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+              sudo systemctl daemon-reload  # 서비스 정의 변경 사항 반영
+              sudo systemctl enable "$SERVICE_NAME"  # 부팅 시 자동 기동 보장
+              sudo systemctl restart "$SERVICE_NAME" || echo "Gunicorn restart failed"
+              sudo systemctl reload nginx || echo "Nginx reload failed"
+              
+              cd "$RELEASES_DIR"
+              ls -t | tail -n +6 | xargs -r rm -rf
+              
+              echo "Deployed new version: $TIMESTAMP"
+              echo "Release path: $NEW_RELEASE"
