@@ -33,13 +33,19 @@ jobs:
         run: |
           mkdir -p build
           rsync -a --exclude='.git' --exclude='.venv' --exclude='build' ./ build/
-          
+
+      - name: Create tar build artifact
+        run: |
+          cd build
+          tar czf back_build.tar.gz --exclude='.git' --exclude='.venv' --exclude='*.pyc' --exclude='__pycache__' .
+          cd ..
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: django-build
-          path: build
-          
+          path: build/back_build.tar.gz
+
   deploy:
     name: Deploy to server
     needs: build
@@ -50,16 +56,6 @@ jobs:
         with:
           name: django-build
           path: build
-          
-      - name: Create build artifact
-        run: |
-          tar czf back_build.tar.gz \
-            --exclude='.venv' \
-            --exclude='.git' \
-            --exclude='*.pyc' \
-            --exclude='__pycache__' \
-            .
-          mv /tmp/back_build.tar.gz back_build.tar.gz
 
       - name: Upload build to server
         uses: appleboy/scp-action@master
@@ -67,7 +63,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "back_build.tar.gz"
+          source: "build/back_build.tar.gz"
           target: $HOME/releases
 
       - name: Deploy new release on server
@@ -78,7 +74,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            set -x
             DEPLOY_PATH_VALUE="${{ secrets.DEPLOY_PATH }}"
             
             APP_BASE="$HOME/${DEPLOY_PATH_VALUE}"
@@ -89,7 +84,6 @@ jobs:
 
             mkdir -p "$NEW_RELEASE"
             tar xzf "$RELEASES_DIR/back_build.tar.gz" -C "$NEW_RELEASE"
-            #rm -f "/tmp/back_build.tar.gz"
 
             cd "$NEW_RELEASE"
             [ -d .venv ] || python3 -m venv .venv
