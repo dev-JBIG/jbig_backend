@@ -1,6 +1,7 @@
 from django.http import HttpResponse, Http404
 from django.conf import settings
 import os
+from pathlib import Path
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, viewsets
@@ -114,3 +115,19 @@ class CalendarEventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return CalendarEvent.objects.all()
+
+
+class ReleaseInfoView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """
+        Returns metadata about the currently running release so deploy status can be verified.
+        """
+        base_dir = Path(settings.BASE_DIR).resolve()
+
+        data = {
+            "release_path": str(base_dir),
+            "release_name": base_dir.name,
+        }
+        return Response(data)
