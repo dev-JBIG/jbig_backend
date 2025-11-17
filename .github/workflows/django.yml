@@ -86,39 +86,6 @@ jobs:
             SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
             ENV_FILE="$SHARED_DIR/jbig_backend.env"
 
-            # systemd 서비스 파일 생성
-            sudo tee "$SERVICE_FILE" > /dev/null <<'EOF'
-[Unit]
-Description=Gunicorn service for JBIG Django backend
-After=network.target
-
-[Service]
-Type=simple
-User=$USER
-Group=www-data
-WorkingDirectory=$CURRENT_DIR
-Environment="DJANGO_SETTINGS_MODULE=jbig_backend.settings"
-EnvironmentFile=-$ENV_FILE
-ExecStart=$CURRENT_DIR/.venv/bin/gunicorn \
-  --bind 0.0.0.0:3001 \
-  --workers 3 \
-  --timeout 60 \
-  --pid /run/${SERVICE_NAME}.pid \
-  --pythonpath jbig_backend \
-  --access-logfile - \
-  jbig_backend.wsgi:application
-ExecReload=/bin/kill -HUP \$MAINPID
-ExecStop=/bin/kill -TERM \$MAINPID
-Restart=always
-RestartSec=3
-PIDFile=/run/${SERVICE_NAME}.pid
-RuntimeDirectory=${SERVICE_NAME}
-RuntimeDirectoryMode=0755
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
             sudo systemctl daemon-reload
             sudo systemctl enable "$SERVICE_NAME"
             sudo systemctl restart "$SERVICE_NAME" || echo "Gunicorn restart failed"
