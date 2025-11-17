@@ -19,3 +19,4 @@ jbig_backend.env
 # 로그 파일
 *.log
 
+.venv/
