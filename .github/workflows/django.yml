@@ -18,19 +18,19 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install dependencies 
+      - name: Install dependencies
         run: |
           python -m venv .venv
           source .venv/bin/activate
           pip install -r requirements.txt
 
-      - name: Build static files and run tests 
+      - name: Build static files and run tests
         run: |
           source .venv/bin/activate
           python manage.py collectstatic --noinput
           python manage.py test
 
-      - name: Create build archive 
+      - name: Create build archive
         run: |
           tar czf /tmp/build.tar.gz \
             --exclude='.venv' \
@@ -40,53 +40,54 @@ jobs:
             .
           mv /tmp/build.tar.gz build.tar.gz
 
-      - name: Upload build to server 
+      - name: Upload build to server
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "build.tar.gz"
-          target: "/tmp/"  # 임시 디렉토리로 변경
+          target: "/tmp/"
 
-      - name: Deploy new release on server 
+      - name: Deploy new release on server
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DEPLOY_PATH  # 환경변수 전달
+          envs: "DEPLOY_PATH"
           script: |
             set -e
-            
+
             APP_BASE_DIR="$HOME/${{ secrets.DEPLOY_PATH }}"
             RELEASES_DIR="$APP_BASE_DIR/releases"
             SHARED_DIR="$APP_BASE_DIR/shared"
             TIMESTAMP=$(date +%Y%m%d%H%M%S)
             NEW_RELEASE="$RELEASES_DIR/$TIMESTAMP"
-            
+
             mkdir -p "$RELEASES_DIR"
             mkdir -p "$SHARED_DIR"
             mkdir -p "$NEW_RELEASE"
-            tar xzf "/tmp/build.tar.gz" -C "$NEW_RELEASE"  # 새 릴리스 디렉토리에 빌드 전개
+            tar xzf "/tmp/build.tar.gz" -C "$NEW_RELEASE"
             rm -f "/tmp/build.tar.gz"
-            
+
             cd "$NEW_RELEASE"
-            [ -d .venv ] || python3 -m venv .venv  # 릴리스별 가상환경 생성
+            [ -d .venv ] || python3 -m venv .venv
             source .venv/bin/activate
             pip install -r requirements.txt --no-cache-dir
-            
+
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
-            
-            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"  # 현재 릴리스 심볼릭 링크 갱신
+
+            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"
             CURRENT_DIR="$APP_BASE_DIR/current"
 
             SERVICE_NAME="gunicorn-jbig"
             SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
             ENV_FILE="$SHARED_DIR/jbig_backend.env"
 
-            sudo tee "$SERVICE_FILE" > /dev/null <<'EOF'  # 최신 릴리스 경로 기준 systemd 서비스 정의
+            # systemd 서비스 파일 생성
+            sudo tee "$SERVICE_FILE" > /dev/null <<'EOF'
 [Unit]
 Description=Gunicorn service for JBIG Django backend
 After=network.target
@@ -118,13 +119,14 @@ RuntimeDirectoryMode=0755
 WantedBy=multi-user.target
 EOF
 
-              sudo systemctl daemon-reload  # 서비스 정의 변경 사항 반영
-              sudo systemctl enable "$SERVICE_NAME"  # 부팅 시 자동 기동 보장
-              sudo systemctl restart "$SERVICE_NAME" || echo "Gunicorn restart failed"
-              sudo systemctl reload nginx || echo "Nginx reload failed"
-              
-              cd "$RELEASES_DIR"
-              ls -t | tail -n +6 | xargs -r rm -rf
-              
-              echo "Deployed new version: $TIMESTAMP"
-              echo "Release path: $NEW_RELEASE"
+            sudo systemctl daemon-reload
+            sudo systemctl enable "$SERVICE_NAME"
+            sudo systemctl restart "$SERVICE_NAME" || echo "Gunicorn restart failed"
+            sudo systemctl reload nginx || echo "Nginx reload failed"
+
+            # 이전 릴리스 5개만 남기고 삭제
+            cd "$RELEASES_DIR"
+            ls -t | tail -n +6 | xargs -r rm -rf
+
+            echo "Deployed new version: $TIMESTAMP"
+            echo "Release path: $NEW_RELEASE"
