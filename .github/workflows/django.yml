@@ -1,4 +1,4 @@
-name: Django Deploy
+name: Django Deployy
 on:
   push:
     branches: ["main"]
