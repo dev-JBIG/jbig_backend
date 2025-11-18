@@ -5,9 +5,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 from django.contrib.postgres.search import SearchQuery, SearchRank
-from django.db.models import F, Q, Value, CharField
+from django.db.models import F, Q, Value, CharField, Func
 from django.db.models.functions import Replace
-from django.contrib.postgres.fields import Func
 from datetime import datetime
 
 from rest_framework.views import APIView # APIView 추가
