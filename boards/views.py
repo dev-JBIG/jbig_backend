@@ -25,9 +25,6 @@ from botocore.exceptions import ClientError
 import logging
 logger = logging.getLogger(__name__)
 
-
-
-
 from .models import Board, Post, Comment, Category, Attachment
 from .serializers import (
     BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
@@ -42,6 +39,20 @@ from .permissions import (
     PostDetailPermission
 )
 
+# 데코레이터가 뷰로 착각해서;; 맨 위로 뺌
+class RegexpReplace(Func):
+    function = 'REGEXP_REPLACE'
+    template = "%(function)s(%(expressions)s, '%(pattern)s', '%(replacement)s', 'g')"
+
+    def __init__(self, expression, pattern, replacement='', **extra):
+        super().__init__(
+            expression,
+            pattern=pattern,
+            replacement=replacement,
+            output_field=CharField(),
+            **extra
+        )
+        
 @extend_schema(
     tags=['게시판'],
     summary="게시글 좋아요/취소",
@@ -95,20 +106,6 @@ class PostLikeAPIView(generics.GenericAPIView):
         ),
     ]
 )
-
-
-class RegexpReplace(Func):
-    function = 'REGEXP_REPLACE'
-    template = "%(function)s(%(expressions)s, '%(pattern)s', '%(replacement)s', 'g')"
-
-    def __init__(self, expression, pattern, replacement='', **extra):
-        super().__init__(
-            expression,
-            pattern=pattern,
-            replacement=replacement,
-            output_field=CharField(),
-            **extra
-        )
 
 
 class PostSearchView(generics.ListAPIView):
