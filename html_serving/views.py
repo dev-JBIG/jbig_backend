@@ -98,6 +98,38 @@ def award_view(request):
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
+
+        # Awards HTML 내 링크 보정: 내부 .html은 노션 라우트로, 에셋은 미디어로
+        try:
+            soup = BeautifulSoup(content, 'html.parser')
+
+            # 이미지/미디어 src가 상대경로이면 MEDIA_URL로 보정
+            for tag in soup.find_all(src=True):
+                src = tag.get('src')
+                if src and not src.startswith(('http://', 'https://', '/', 'data:')):
+                    decoded_src = unquote(src)
+                    tag['src'] = (
+                        settings.MEDIA_URL.rstrip('/')
+                        + '/'
+                        + settings.CONTENT_AWARDS_SUBDIR.strip('/')
+                        + '/'
+                        + quote(decoded_src)
+                    )
+
+            # 앵커: 내부 .html은 /api/html/notion/?file=... 로 연결
+            for a in soup.find_all('a', href=True):
+                href = a.get('href')
+                if not href or href.startswith(('http://', 'https://', '#', '/')):
+                    continue
+                if href.lower().endswith('.html'):
+                    decoded_href = unquote(href)
+                    a['href'] = '/api/html/notion/?file=' + quote(decoded_href)
+
+            content = str(soup)
+        except Exception:
+            # 파싱 실패 시 원본 그대로 반환
+            pass
+
         return HttpResponse(content, content_type='text/html; charset=utf-8')
     return Response({"detail": "Award file not found."}, status=status.HTTP_404_NOT_FOUND)
 
