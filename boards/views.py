@@ -5,7 +5,9 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 from django.contrib.postgres.search import SearchQuery, SearchRank
-from django.db.models import F, Q
+from django.db.models import F, Q, Value, CharField
+from django.db.models.functions import Replace
+from django.contrib.postgres.fields import Func
 from datetime import datetime
 
 from rest_framework.views import APIView # APIView 추가
@@ -94,6 +96,22 @@ class PostLikeAPIView(generics.GenericAPIView):
         ),
     ]
 )
+
+
+class RegexpReplace(Func):
+    function = 'REGEXP_REPLACE'
+    template = "%(function)s(%(expressions)s, '%(pattern)s', '%(replacement)s', 'g')"
+
+    def __init__(self, expression, pattern, replacement='', **extra):
+        super().__init__(
+            expression,
+            pattern=pattern,
+            replacement=replacement,
+            output_field=CharField(),
+            **extra
+        )
+
+
 class PostSearchView(generics.ListAPIView):
     serializer_class = PostListSerializer
 
@@ -117,12 +135,18 @@ class PostSearchView(generics.ListAPIView):
 
         queryset = base_queryset.visible_for_user(user)
 
+        # URL/링크를 제거하는 정규식 패턴
+        url_pattern = r'!\[.*?\]\(.*?\)|\[.*?\]\(.*?\)|https?://[^\s]+|www\.[^\s]+'
+        
+        # content_md에서 URL 제거 후 검색
+        queryset = queryset.annotate(
+            clean_content=RegexpReplace('content_md', url_pattern, '')
+        )
 
-
-        # 부분 검색 되게 수정
+        # 부분 검색되게 수정
         search_filter = (
             Q(title__icontains=query) |
-            Q(content_md__icontains=query) |
+            Q(clean_content__icontains=query) |
             Q(author__username__icontains=query)
         )
 
