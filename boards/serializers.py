@@ -334,7 +334,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     board = BoardSerializer(read_only=True)
-    comments = CommentSerializer(many=True, read_only=True)
+    comments = serializers.SerializerMethodField()
    # attachment_paths = serializers.JSONField(read_only=True, help_text="첨부파일 정보 목록 (url, name 포함)")
     attachment_paths = serializers.SerializerMethodField(help_text="첨부파일 정보 목록 (실시간 생성된 다운로드 URL 포함)")
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
@@ -371,6 +371,24 @@ class PostDetailSerializer(serializers.ModelSerializer):
         if user and user.is_authenticated:
             return obj.author == user
         return False
+
+    def get_comments(self, obj):
+        """
+        대댓글이 최상위 comments 배열에 중복 노출되지 않도록
+        parent 가 없는 댓글만 직렬화한다.
+        """
+        top_level_qs = (
+            obj.comments
+            .filter(parent__isnull=True)
+            .order_by('created_at')
+            .prefetch_related('children')
+        )
+        serializer = CommentSerializer(
+            top_level_qs,
+            many=True,
+            context=self.context,
+        )
+        return serializer.data
 
 
 
