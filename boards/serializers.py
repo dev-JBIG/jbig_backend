@@ -106,12 +106,48 @@ class CommentSerializer(serializers.ModelSerializer):
             return obj.author == user
         return False
 
+    def _strip_leading_quote_block(self, text: str) -> str:
+        """
+        답글 작성 시 프론트에서 기존 댓글을 인용해 붙이는 경우가 있어
+        댓글 본문 앞단의 인용 블록(> 로 시작하는 줄 등)을 제거한다.
+        첫 번째 실제 답변 줄을 만난 이후에는 더 이상 제거하지 않는다.
+        """
+        lines = text.splitlines()
+        cleaned_lines = []
+        stripping = True
+
+        for line in lines:
+            normalized = line.lstrip()
+
+            if stripping:
+                if not normalized:
+                    # 공백 줄은 건너뛰며 계속 stripping
+                    continue
+                if normalized.startswith('>'):
+                    # Markdown 인용 형태
+                    continue
+                if normalized.startswith('답변:') or normalized.startswith('답변 '):
+                    # 프론트에서 붙일 수 있는 텍스트 패턴
+                    continue
+                stripping = False
+
+            cleaned_lines.append(line)
+
+        if not cleaned_lines:
+            return text
+        return '\n'.join(cleaned_lines).strip()
+
     def validate_content(self, value):
         # Strip all HTML tags from comments to prevent XSS.
         sanitized_content = bleach.clean(value, tags=[], strip=True).strip()
         if not sanitized_content:
             raise serializers.ValidationError("Content cannot be empty.")
-        return sanitized_content
+
+        stripped_content = self._strip_leading_quote_block(sanitized_content)
+        if not stripped_content:
+            raise serializers.ValidationError("Content cannot be empty.")
+
+        return stripped_content
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
