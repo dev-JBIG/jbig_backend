@@ -137,6 +137,29 @@ class CommentSerializer(serializers.ModelSerializer):
             return text
         return '\n'.join(cleaned_lines).strip()
 
+    def to_internal_value(self, data):
+        """
+        프론트에서 parentId / parent_id로 전달하는 경우를 parent 필드로 매핑하고,
+        빈 문자열로 들어오는 parent는 None 처리한다.
+        """
+        mutable_data = data.copy()
+
+        current_parent = mutable_data.get('parent')
+        if current_parent in ('', None):
+            mutable_data['parent'] = None
+
+        if 'parent' not in mutable_data or mutable_data.get('parent') is None:
+            parent_alias = None
+            if 'parentId' in mutable_data:
+                parent_alias = mutable_data.get('parentId')
+            elif 'parent_id' in mutable_data:
+                parent_alias = mutable_data.get('parent_id')
+
+            if parent_alias is not None:
+                mutable_data['parent'] = parent_alias
+
+        return super().to_internal_value(mutable_data)
+
     def validate_content(self, value):
         # Strip all HTML tags from comments to prevent XSS.
         sanitized_content = bleach.clean(value, tags=[], strip=True).strip()

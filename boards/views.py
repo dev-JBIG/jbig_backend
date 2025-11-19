@@ -1,6 +1,7 @@
 from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
@@ -399,6 +400,10 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
+        parent = serializer.validated_data.get('parent')
+        if parent and parent.post_id != post.id:
+            raise ValidationError("Parent comment does not belong to this post.")
+
         serializer.save(author=self.request.user, post=post)
 
 @extend_schema(tags=['댓글'])
