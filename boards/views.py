@@ -1,11 +1,12 @@
 from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 from django.contrib.postgres.search import SearchQuery, SearchRank
-from django.db.models import F, Q, Value, CharField, Func
+from django.db.models import F, Q, Value, CharField, Func, Prefetch
 from django.db.models.functions import Replace
 from datetime import datetime
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 from .models import Board, Post, Comment, Category, Attachment
 from .serializers import (
     BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
-    CommentSerializer, AttachmentSerializer,
+    CommentSerializer, CommentWriteSerializer, AttachmentSerializer,
     CategoryListResponseSerializer, PostListResponseSerializer
 )
 from .permissions import (
@@ -386,20 +387,51 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     )
 )
 class CommentListCreateAPIView(generics.ListCreateAPIView):
-    serializer_class = CommentSerializer
-
     def get_permissions(self):
         if self.request.method == 'POST':
             return [IsCommentWritable()]
         return [AllowAny()]
 
+    def get_post(self):
+        if not hasattr(self, '_post'):
+            self._post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
+        return self._post
+
     def get_queryset(self):
-        post_id = self.kwargs.get('post_id')
-        return Comment.objects.filter(post_id=post_id, parent__isnull=True).order_by('created_at')
+        post = self.get_post()
+        return (
+            Comment.objects.filter(post=post, parent__isnull=True)
+            .select_related('author', 'post', 'post__board')
+            .prefetch_related(
+                Prefetch(
+                    'children',
+                    queryset=Comment.objects.select_related('author').order_by('created_at')
+                )
+            )
+            .order_by('created_at')
+        )
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return CommentWriteSerializer
+        return CommentSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.request.method == 'POST':
+            context['post'] = self.get_post()
+        return context
 
     def perform_create(self, serializer):
-        post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
-        serializer.save(author=self.request.user, post=post)
+        serializer.save(author=self.request.user, post=self.get_post())
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        read_serializer = CommentSerializer(serializer.instance, context=self.get_serializer_context())
+        headers = self.get_success_headers(read_serializer.data)
+        return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 @extend_schema(tags=['댓글'])
 @extend_schema_view(
@@ -408,10 +440,31 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
     delete=extend_schema(summary="댓글 삭제", description="작성자 또는 스태프만 댓글을 삭제할 수 있습니다.")
 )
 class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Comment.objects.all()
-    serializer_class = CommentSerializer
+    queryset = Comment.objects.select_related('author', 'post', 'post__board').prefetch_related(
+        Prefetch(
+            'children',
+            queryset=Comment.objects.select_related('author').order_by('created_at')
+        )
+    )
+    serializer_class = CommentWriteSerializer
     permission_classes = [IsOwnerOrReadOnly]
     lookup_url_kwarg = 'comment_id'
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.request.method in ['PUT', 'PATCH']:
+            context['post'] = self.get_object().post
+        return context
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        read_serializer = CommentSerializer(instance, context={'request': request})
+        return Response(read_serializer.data)
 
     def perform_destroy(self, instance):
         instance.is_deleted = True

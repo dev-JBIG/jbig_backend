@@ -1,5 +1,6 @@
 from rest_framework import serializers
 import bleach
+from django.db.models import Prefetch
 from .models import Category, Board, Post, Comment, Attachment
 
 # NCP 연동 위해 추가
@@ -19,12 +20,6 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name']
-
-
-class RecursiveField(serializers.Serializer):
-    def to_representation(self, value):
-        serializer = self.parent.parent.__class__(value, context=self.context)
-        return serializer.data
 
 
 class BoardSerializer(serializers.ModelSerializer):
@@ -79,21 +74,24 @@ class CommentSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
-    children = RecursiveField(many=True, read_only=True)
-   # children = serializers.ListSerializer(child=serializers.CharField(), read_only=True)
-
-
-
+    children = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     post_id = serializers.IntegerField(source='post.id', read_only=True)
     post_title = serializers.CharField(source='post.title', read_only=True)
     board_id = serializers.IntegerField(source='post.board.id', read_only=True)
+    parent = serializers.IntegerField(source='parent_id', read_only=True)
 
     class Meta:
         model = Comment
-        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id']
-        read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id')
-
+        fields = [
+            'id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester',
+            'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted',
+            'board_id'
+        ]
+        read_only_fields = (
+            'user_id', 'author', 'author_semester', 'created_at', 'children',
+            'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id', 'parent'
+        )
 
     def get_user_id(self, obj):
         if obj.author:
@@ -106,12 +104,12 @@ class CommentSerializer(serializers.ModelSerializer):
             return obj.author == user
         return False
 
-    def validate_content(self, value):
-        # Strip all HTML tags from comments to prevent XSS.
-        sanitized_content = bleach.clean(value, tags=[], strip=True).strip()
-        if not sanitized_content:
-            raise serializers.ValidationError("Content cannot be empty.")
-        return sanitized_content
+    def get_children(self, obj):
+        child_qs = obj.children.all().order_by('created_at')
+        if not child_qs.exists():
+            return []
+        serializer = CommentSerializer(child_qs, many=True, context=self.context)
+        return serializer.data
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -120,6 +118,86 @@ class CommentSerializer(serializers.ModelSerializer):
             representation['author'] = '알 수 없는 사용자'
             representation['user_id'] = '알 수 없는 사용자'
         return representation
+
+
+class CommentWriteSerializer(serializers.ModelSerializer):
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=Comment.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
+    class Meta:
+        model = Comment
+        fields = ['id', 'content', 'parent']
+        read_only_fields = ['id']
+
+    def _strip_leading_quote_block(self, text: str) -> str:
+        lines = text.splitlines()
+        cleaned_lines = []
+        stripping = True
+
+        for line in lines:
+            normalized = line.lstrip()
+
+            if stripping:
+                if not normalized:
+                    continue
+                if normalized.startswith('>'):
+                    continue
+                if normalized.startswith('답변:') or normalized.startswith('답변 '):
+                    continue
+                stripping = False
+
+            cleaned_lines.append(line)
+
+        if not cleaned_lines:
+            return text
+        return '\n'.join(cleaned_lines).strip()
+
+    def to_internal_value(self, data):
+        mutable_data = data.copy()
+        current_parent = mutable_data.get('parent')
+
+        if current_parent in ('', None):
+            mutable_data['parent'] = None
+
+        if 'parent' not in mutable_data or mutable_data.get('parent') is None:
+            parent_alias = mutable_data.get('parentId') or mutable_data.get('parent_id')
+            if parent_alias is not None:
+                mutable_data['parent'] = parent_alias
+
+        return super().to_internal_value(mutable_data)
+
+    def validate_parent(self, parent):
+        if parent is None:
+            return None
+
+        post = self.context.get('post')
+        if not post and self.instance:
+            post = self.instance.post
+
+        if not post:
+            raise serializers.ValidationError("게시글 정보가 필요합니다.")
+
+        if parent.post_id != post.id:
+            raise serializers.ValidationError("Parent comment does not belong to this post.")
+
+        if parent.parent_id is not None:
+            raise serializers.ValidationError("대댓글에는 다시 답글을 달 수 없습니다.")
+
+        return parent
+
+    def validate_content(self, value):
+        sanitized_content = bleach.clean(value, tags=[], strip=True).strip()
+        if not sanitized_content:
+            raise serializers.ValidationError("Content cannot be empty.")
+
+        stripped_content = self._strip_leading_quote_block(sanitized_content)
+        if not stripped_content:
+            raise serializers.ValidationError("Content cannot be empty.")
+
+        return stripped_content
 
 class AttachmentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
@@ -275,7 +353,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     board = BoardSerializer(read_only=True)
-    comments = CommentSerializer(many=True, read_only=True)
+    comments = serializers.SerializerMethodField()
    # attachment_paths = serializers.JSONField(read_only=True, help_text="첨부파일 정보 목록 (url, name 포함)")
     attachment_paths = serializers.SerializerMethodField(help_text="첨부파일 정보 목록 (실시간 생성된 다운로드 URL 포함)")
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
@@ -312,6 +390,24 @@ class PostDetailSerializer(serializers.ModelSerializer):
         if user and user.is_authenticated:
             return obj.author == user
         return False
+
+    def get_comments(self, obj):
+        """
+        대댓글이 최상위 comments 배열에 중복 노출되지 않도록
+        parent 가 없는 댓글만 직렬화한다.
+        """
+        top_level_qs = (
+            obj.comments
+            .filter(parent__isnull=True)
+            .order_by('created_at')
+            .prefetch_related('children')
+        )
+        serializer = CommentSerializer(
+            top_level_qs,
+            many=True,
+            context=self.context,
+        )
+        return serializer.data
 
 
 
