@@ -1,5 +1,6 @@
 
 from django.utils import timezone
+from django.db.models import Count, Q
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import generics, status
 from rest_framework.response import Response
@@ -55,7 +56,14 @@ class UserPostListView(generics.ListAPIView):
     def get_queryset(self):
         username = self.kwargs['user_id']
         user = get_object_or_404(User, email__startswith=username + '@')
-        return Post.objects.filter(author=user).order_by('-created_at')
+        return (
+            Post.objects
+            .filter(author=user)
+            .annotate(
+                comments_count=Count('comments', filter=Q(comments__is_deleted=False))
+            )
+            .order_by('-created_at')
+        )
 
 
 @extend_schema(
