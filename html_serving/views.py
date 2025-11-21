@@ -235,7 +235,7 @@ def notion_upload_view(request):
 @api_view(['GET'])
 def banner_view(request):
     #file_path = os.path.join(settings.MEDIA_ROOT, settings.CONTENT_BANNER_SUBPATH)
-    file_path = '/home/ubuntu/volume/jbig_backend/media/banner/'
+    file_path = '/home/ubuntu/volume/jbig_backend/current/media/banner/banner.jpg'
     if os.path.exists(file_path):
         return FileResponse(open(file_path, 'rb'))
     else:
