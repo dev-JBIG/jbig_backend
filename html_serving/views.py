@@ -235,11 +235,14 @@ def notion_upload_view(request):
 @api_view(['GET'])
 def banner_view(request):
     #file_path = os.path.join(settings.MEDIA_ROOT, settings.CONTENT_BANNER_SUBPATH)
-    file_path = 'volume/jbig_backend/current/media/banner/banner.jpg'
+    file_path = 'jbig_backend/media/banner/banner.jpg'
     if os.path.exists(file_path):
         return FileResponse(open(file_path, 'rb'))
     else:
-        return Response({"detail": "Image not found."}, status=status.HTTP_404_NOT_FOUND)
+        if os.path.exists('media/banner/banner.jpg'):
+            return FileResponse(open('media/banner/banner.jpg', 'rb'))
+        else:
+            return Response({"detail": "Image not found."}, status=status.HTTP_404_NOT_FOUND)
 
 @staff_member_required
 def notion_admin_upload_view(request):
