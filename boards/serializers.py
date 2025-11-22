@@ -285,7 +285,10 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         content_md = validated_data.pop('content_md', None)
 
         if content_md is not None:
-            instance.content_md = normalize_ncp_urls(content_md)  # presigned URL → ncp-key:// 정규화
+            logger.info(f"[PostCreateUpdateSerializer.update] 정규화 전: {content_md[:200] if len(content_md) > 200 else content_md}")
+            normalized = normalize_ncp_urls(content_md)
+            logger.info(f"[PostCreateUpdateSerializer.update] 정규화 후: {normalized[:200] if len(normalized) > 200 else normalized}")
+            instance.content_md = normalized
         
         if attachment_paths is not None:
             instance.attachment_paths = attachment_paths
