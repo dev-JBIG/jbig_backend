@@ -1,4 +1,3 @@
-import os
 from django.db import models
 from django.conf import settings
 from django.db.models import Q
@@ -12,8 +11,8 @@ from bs4 import BeautifulSoup
 # Attachment FK -> Post.attachment_paths (JSON 매핑)
 
 
+# [Deprecated] 마이그레이션 호환성을 위해 유지 - 실제로 사용되지 않음
 def post_upload_path(instance, filename):
-    # e.g. media/boards/1/a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6.html
     return f'boards/{instance.board.id}/{filename}'
 
 
@@ -197,22 +196,16 @@ class Comment(models.Model):
     def __str__(self):
         return f'Comment by {self.author} on {self.post}'
 
-class Attachment(models.Model): 
-    # post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='attachments', null=True, blank=True)  # 주석 처리: 직접적인 DB 관계 제거
-   
+# [Deprecated] 레거시 모델 - 첨부파일은 이제 NCP Object Storage + Post.attachment_paths JSON 필드 사용
+# DB 스키마 호환성을 위해 유지하지만, 새 첨부파일에는 사용되지 않음
+class Attachment(models.Model):
     file = models.FileField(upload_to='attachments/')
     filename = models.CharField(max_length=255)
 
     class Meta:
         db_table = 'attachment'
-        verbose_name = '첨부파일'
-        verbose_name_plural = '첨부파일 목록'
-    
+        verbose_name = '[Deprecated] 첨부파일'
+        verbose_name_plural = '[Deprecated] 첨부파일 목록'
+
     def __str__(self):
         return self.filename
-
-    def delete(self, *args, **kwargs):
-        # Delete the file from the filesystem
-        if self.file and os.path.exists(self.file.path):
-            os.remove(self.file.path) # Use os.remove directly
-        super().delete(*args, **kwargs)

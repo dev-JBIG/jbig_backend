@@ -184,28 +184,3 @@ comment_viewset_schema = {
     ),
 }
 
-# ===================================================================
-# Attachment Schemas
-# ===================================================================
-attachment_viewset_schema = {
-    'list': extend_schema(
-        summary="[Attachment] 목록 조회",
-        description="업로드된 모든 파일의 목록을 반환합니다.",
-        tags=["Attachment"]
-    ),
-    'retrieve': extend_schema(
-        summary="[Attachment] 상세 조회",
-        description="ID를 사용하여 특정 파일의 상세 정보를 반환합니다.",
-        tags=["Attachment"]
-    ),
-    'create': extend_schema(
-        summary="[Attachment] 생성",
-        description="하나 이상의 파일을 서버에 업로드하고 파일 정보를 반환합니다.",
-        tags=["Attachment"]
-    ),
-    'destroy': extend_schema(
-        summary="[Attachment] 삭제",
-        description="ID를 사용하여 특정 파일을 삭제합니다.",
-        tags=["Attachment"]
-    ),
-}

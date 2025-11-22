@@ -1,7 +1,7 @@
 import os
 import json
 
-from django.http import HttpResponse, Http404, JsonResponse
+from django.http import JsonResponse
 from django.conf import settings
 
 from rest_framework import status, viewsets
@@ -29,36 +29,6 @@ def version_info(request):
         return JsonResponse({'error': 'VERSION.json not found', 'commit': 'unknown'}, status=404)
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid VERSION.json'}, status=500)
-
-def serve_html(request, file_path):
-    """
-    Reads an HTML file from the media directory and returns it as an HttpResponse.
-    """
-    # Path Traversal 방지: '..' 포함된 경로 거부
-    if '..' in file_path or file_path.startswith('/'):
-        raise Http404("Invalid file path")
-
-    # Construct the full path to the file
-    full_path = os.path.join(settings.MEDIA_ROOT, file_path)
-
-    # Path Traversal 방지: 실제 경로가 MEDIA_ROOT 내부인지 확인
-    real_path = os.path.realpath(full_path)
-    media_root = os.path.realpath(settings.MEDIA_ROOT)
-    if not real_path.startswith(media_root + os.sep):
-        raise Http404("Invalid file path")
-
-    # Check if the file exists and is a file
-    if not os.path.exists(real_path) or not os.path.isfile(real_path):
-        raise Http404("File not found")
-
-    # Read the file content
-    try:
-        with open(real_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-    except IOError:
-        raise Http404("Error reading file")
-
-    return HttpResponse(content, content_type='text/html; charset=utf-8')
 
 @extend_schema(
     summary="Quiz URL Management",

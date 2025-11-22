@@ -7,10 +7,9 @@ from .views import (
     PostRetrieveUpdateDestroyAPIView,
     CommentListCreateAPIView,
     CommentUpdateDestroyAPIView,
-    AttachmentCreateAPIView,
     AllPostListAPIView,
     PostSearchView,
-    AllPostSearchView,  # Ensure this is imported
+    AllPostSearchView,
     PostLikeAPIView,
     BoardDetailAPIView,
 )
@@ -30,5 +29,4 @@ urlpatterns = [
     path('posts/<int:post_id>/like/', PostLikeAPIView.as_view(), name='post-like'),
     path('posts/<int:post_id>/comments/', CommentListCreateAPIView.as_view(), name='comment-list-create'),
     path('comments/<int:comment_id>/', CommentUpdateDestroyAPIView.as_view(), name='comment-detail-update-destroy'),
-    path('attachment/', AttachmentCreateAPIView.as_view(), name='attachment-create'),
 ]

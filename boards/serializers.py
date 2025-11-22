@@ -1,4 +1,3 @@
-import os
 import re
 import logging
 
@@ -10,7 +9,7 @@ from botocore.exceptions import ClientError
 from django.conf import settings
 from rest_framework import serializers
 
-from .models import Category, Board, Post, Comment, Attachment
+from .models import Category, Board, Post, Comment
 
 logger = logging.getLogger(__name__)
 
@@ -121,19 +120,6 @@ class CommentSerializer(serializers.ModelSerializer):
             representation['user_id'] = '알 수 없는 사용자'
         return representation
 
-class AttachmentSerializer(serializers.ModelSerializer):
-    file_url = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Attachment
-        fields = ['id', 'file', 'filename', 'file_url']
-        read_only_fields = ('filename', 'file_url')
-    
-    def get_file_url(self, obj):
-        if obj.file:
-            return obj.file.url
-        return None
-
 class PostListSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.CharField(source='author.username', read_only=True)
@@ -179,58 +165,37 @@ class PostListSerializer(serializers.ModelSerializer):
             file_size = None # 파일 크기를 담을 변수
 
             try:
-                # 'uploads/'로 시작하면 '새 형식' (NCP)
-                if file_key_or_url.startswith("uploads/"):
-                    # 1. NCP에서 파일 크기(head_object) 가져오기
-                    meta = s3_client.head_object(
-                        Bucket=settings.NCP_BUCKET_NAME,
-                        Key=file_key_or_url
-                    )
-                    file_size = meta.get('ContentLength')
+                # NCP 파일만 지원 (uploads/로 시작)
+                if not file_key_or_url.startswith("uploads/"):
+                    logger.warning(f"[PostListSerializer] 레거시 로컬 파일 무시: {file_key_or_url}")
+                    continue
 
-                    # 2. 다운로드용 Presigned URL 발급
-                    download_url = s3_client.generate_presigned_url(
-                        'get_object',
-                        Params={
-                            'Bucket': settings.NCP_BUCKET_NAME,
-                            'Key': file_key_or_url,
-                        },
-                        ExpiresIn=3600  # 1시간
-                    )
+                # NCP에서 파일 크기 가져오기
+                meta = s3_client.head_object(
+                    Bucket=settings.NCP_BUCKET_NAME,
+                    Key=file_key_or_url
+                )
+                file_size = meta.get('ContentLength')
 
-                # 그 외에는 '옛날 형식' (/media/...)
-                else:
-                    download_url = file_key_or_url
-                    # 1. Django 서버 로컬에서 파일 크기 가져오기
-                    try:
-                        # Path Traversal 방지
-                        if '..' in file_key_or_url:
-                            logger.warning(f"[PostListSerializer] Path Traversal 시도 감지: {file_key_or_url}")
-                            continue
-
-                        local_path = os.path.join(settings.MEDIA_ROOT, file_key_or_url.lstrip('/'))
-                        real_path = os.path.realpath(local_path)
-                        media_root = os.path.realpath(settings.MEDIA_ROOT)
-
-                        # MEDIA_ROOT 내부 파일인지 확인
-                        if not real_path.startswith(media_root + os.sep):
-                            logger.warning(f"[PostListSerializer] Path Traversal 시도 감지: {file_key_or_url}")
-                            continue
-
-                        if os.path.exists(real_path):
-                            file_size = os.path.getsize(real_path)
-                    except Exception as e:
-                        logger.warning(f"옛날 파일 크기 조회 실패 ({file_key_or_url}): {e}")
+                # 다운로드용 Presigned URL 발급
+                download_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': settings.NCP_BUCKET_NAME,
+                        'Key': file_key_or_url,
+                    },
+                    ExpiresIn=3600  # 1시간
+                )
 
                 presigned_attachments.append({
                     "url": download_url,
                     "name": original_name,
-                    "size": file_size  # <-- 파일 크기 정보 추가
+                    "size": file_size
                 })
 
             except ClientError as e:
                 logger.error(f"S3 처리 중 에러 (Key: {file_key_or_url}): {e}")
-                continue # 실패 시 이 파일은 건너뜀
+                continue
 
         return presigned_attachments
 
@@ -420,53 +385,32 @@ class PostDetailSerializer(serializers.ModelSerializer):
             file_size = None # 파일 크기를 담을 변수
 
             try:
-                # 'uploads/'로 시작하면 '새 형식' (NCP)
-                if file_key_or_url.startswith("uploads/"):
-                    # 1. NCP에서 파일 크기(head_object) 가져오기
-                    meta = s3_client.head_object(
-                        Bucket=settings.NCP_BUCKET_NAME,
-                        Key=file_key_or_url
-                    )
-                    file_size = meta.get('ContentLength')
+                # NCP 파일만 지원 (uploads/로 시작)
+                if not file_key_or_url.startswith("uploads/"):
+                    logger.warning(f"[PostDetailSerializer] 레거시 로컬 파일 무시: {file_key_or_url}")
+                    continue
 
-                    # 2. 다운로드용 Presigned URL 발급
-                    download_url = s3_client.generate_presigned_url(
-                        'get_object',
-                        Params={
-                            'Bucket': settings.NCP_BUCKET_NAME,
-                            'Key': file_key_or_url,
-                        },
-                        ExpiresIn=3600  # 1시간
-                    )
+                # NCP에서 파일 크기 가져오기
+                meta = s3_client.head_object(
+                    Bucket=settings.NCP_BUCKET_NAME,
+                    Key=file_key_or_url
+                )
+                file_size = meta.get('ContentLength')
 
-                # 그 외에는 '옛날 형식' (/media/...)
-                else:
-                    download_url = file_key_or_url
-                    # 1. Django 서버 로컬에서 파일 크기 가져오기
-                    try:
-                        # Path Traversal 방지
-                        if '..' in file_key_or_url:
-                            logger.warning(f"[PostDetailSerializer] Path Traversal 시도 감지: {file_key_or_url}")
-                            continue
-
-                        local_path = os.path.join(settings.MEDIA_ROOT, file_key_or_url.lstrip('/'))
-                        real_path = os.path.realpath(local_path)
-                        media_root = os.path.realpath(settings.MEDIA_ROOT)
-
-                        # MEDIA_ROOT 내부 파일인지 확인
-                        if not real_path.startswith(media_root + os.sep):
-                            logger.warning(f"[PostDetailSerializer] Path Traversal 시도 감지: {file_key_or_url}")
-                            continue
-
-                        if os.path.exists(real_path):
-                            file_size = os.path.getsize(real_path)
-                    except Exception as e:
-                        logger.warning(f"옛날 파일 크기 조회 실패 ({file_key_or_url}): {e}")
+                # 다운로드용 Presigned URL 발급
+                download_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': settings.NCP_BUCKET_NAME,
+                        'Key': file_key_or_url,
+                    },
+                    ExpiresIn=3600  # 1시간
+                )
 
                 presigned_attachments.append({
                     "url": download_url,
                     "name": original_name,
-                    "size": file_size  # <-- 파일 크기 정보 추가
+                    "size": file_size
                 })
 
             except ClientError as e:

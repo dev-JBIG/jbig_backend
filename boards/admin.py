@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Board, Post, Comment, Attachment, Category
+from .models import Board, Post, Comment, Category
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -26,9 +26,3 @@ class CommentAdmin(admin.ModelAdmin):
     search_fields = ('post__title', 'author__username')
     list_filter = ('created_at', 'is_deleted')
     raw_id_fields = ('post', 'author', 'parent')
-
-@admin.register(Attachment)
-class AttachmentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'filename', 'file')
-    search_fields = ('filename',) #post__title 제거
-  #  raw_id_fields = ('post',)

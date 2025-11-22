@@ -23,11 +23,10 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResp
 
 logger = logging.getLogger(__name__)
 
-from .models import Board, Post, Comment, Category, Attachment
+from .models import Board, Post, Comment, Category
 from .serializers import (
     BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
-    CommentSerializer, AttachmentSerializer,
-    CategoryListResponseSerializer, PostListResponseSerializer
+    CommentSerializer, CategoryListResponseSerializer, PostListResponseSerializer
 )
 from .permissions import (
     IsOwnerOrReadOnly,
@@ -457,78 +456,6 @@ class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         instance.is_deleted = True
         instance.save()
-
-@extend_schema(
-    tags=['파일'],
-    summary="파일 첨부",
-    description="서버에 파일을 업로드하고 첨부파일 ID를 반환합니다. 파일 크기는 10MB로 제한되며, 허용된 파일 형식만 업로드할 수 있습니다.",
-    request={
-        'multipart/form-data': {
-            'type': 'object',
-            'properties': {
-                'file': {
-                    'type': 'string',
-                    'format': 'binary'
-                }
-            }
-        }
-    },
-    responses={
-        201: OpenApiResponse(
-            response=AttachmentSerializer,
-            examples=[
-                OpenApiExample(
-                    'Success',
-                    summary='파일 업로드 성공',
-                    value={
-                        "id": 123,
-                        "file": "/media/attachments/example.jpg",
-                        "filename": "example.jpg"
-                    }
-                )
-            ]
-        ),
-        400: OpenApiResponse(description="파일이 제공되지 않았거나, 파일 크기/형식이 올바르지 않습니다.")
-    }
-)
-class AttachmentCreateAPIView(generics.CreateAPIView):
-    queryset = Attachment.objects.all()
-    serializer_class = AttachmentSerializer
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
-
-    def create(self, request, *args, **kwargs):
-        file = request.data.get('file')
-        if not file:
-            return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
-
-        MAX_FILE_SIZE = 10 * 1024 * 1024
-        if file.size > MAX_FILE_SIZE:
-            return Response(
-                {"error": f"File size exceeds the limit of {MAX_FILE_SIZE // 1024 // 1024} MB."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        ALLOWED_MIME_TYPES = [
-            'image/jpeg', 'image/png', 'image/gif', 'application/pdf',
-            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'text/plain', 'application/zip', 'application/x-7z-compressed',
-            'application/x-hwp', 'application/haansofthwp',
-            'video/mp4', 'video/quicktime'
-        ]
-        if file.content_type not in ALLOWED_MIME_TYPES:
-            return Response(
-                {"error": f"File type '{file.content_type}' is not allowed."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        return super().create(request, *args, **kwargs)
-
-    def perform_create(self, serializer):
-        serializer.save(filename=self.request.data.get('file').name)
-
 
 @extend_schema(tags=['게시판'])
 @extend_schema_view(
