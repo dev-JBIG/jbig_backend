@@ -85,8 +85,9 @@ jobs:
             tar xzf "/tmp/build.tar.gz" -C "$NEW_RELEASE"
             rm -f "/tmp/build.tar.gz"
 
-            # 공유 디렉토리 심볼릭 링크 (media 등)
+            # 공유 디렉토리 심볼릭 링크 (media, .env 등)
             ln -sfn "$SHARED_DIR/media" "$NEW_RELEASE/media"
+            ln -sfn "$SHARED_DIR/.env" "$NEW_RELEASE/.env"
 
             # 가상환경 설정 및 의존성 설치
             cd "$NEW_RELEASE"
