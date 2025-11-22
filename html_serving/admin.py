@@ -1,17 +1,3 @@
-from django.contrib import admin
-from django.urls import path
-from .models import Notion
-from .views import notion_admin_upload_view
-
-@admin.register(Notion)
-class NotionAdmin(admin.ModelAdmin):
-    list_display = ('title', 'file_path')
-    search_fields = ('title', 'file_path')
-    change_list_template = 'admin/html_serving/notion/change_list.html'
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('upload_zip/', self.admin_site.admin_view(notion_admin_upload_view), name='upload_zip'),
-        ]
-        return custom_urls + urls
+# [Deprecated] html_serving 앱은 더 이상 사용되지 않음
+# Notion은 splitbee 프록시, 배너는 NCP CDN 사용
+# DB 호환성을 위해 모델만 유지
