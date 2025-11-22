@@ -1,4 +1,4 @@
-from django.http import HttpResponse, FileResponse
+from django.http import HttpResponse, FileResponse, JsonResponse
 from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -6,12 +6,14 @@ from rest_framework import status
 import os
 import shutil
 import zipfile
+import requests
 from bs4 import BeautifulSoup
 from urllib.parse import unquote, quote
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.csrf import csrf_exempt
 
 @extend_schema(
     tags=["Notion"],
@@ -286,3 +288,107 @@ def notion_admin_upload_view(request):
         return redirect('notion-admin-upload')
 
     return render(request, 'html_serving/notion_admin_upload.html', {'notion_dir': upload_dir})
+
+
+# Notion API 프록시 (react-notion-x용)
+NOTION_API_BASE = "https://www.notion.so/api/v3"
+
+
+@extend_schema(
+    tags=["Notion"],
+    summary="Notion Page Proxy",
+    description="Proxy for Notion's internal API to fetch page data for react-notion-x rendering.",
+)
+@csrf_exempt
+@api_view(['GET'])
+def notion_page_proxy(request, page_id):
+    """
+    Notion 페이지 데이터를 가져오는 프록시 엔드포인트.
+    react-notion-x에서 사용하는 형식으로 반환.
+    """
+    # page_id 정규화 (하이픈 제거)
+    page_id_clean = page_id.replace('-', '')
+
+    # Notion UUID 형식으로 변환
+    if len(page_id_clean) == 32:
+        page_uuid = f"{page_id_clean[:8]}-{page_id_clean[8:12]}-{page_id_clean[12:16]}-{page_id_clean[16:20]}-{page_id_clean[20:]}"
+    else:
+        page_uuid = page_id
+
+    try:
+        # Notion의 loadPageChunk API 호출
+        response = requests.post(
+            f"{NOTION_API_BASE}/loadPageChunk",
+            json={
+                "page": {"id": page_uuid},
+                "limit": 100,
+                "cursor": {"stack": []},
+                "chunkNumber": 0,
+                "verticalColumns": False,
+            },
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0",
+            },
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            return Response(
+                {"error": f"Notion API error: {response.status_code}"},
+                status=response.status_code
+            )
+
+        data = response.json()
+
+        # react-notion-x가 기대하는 ExtendedRecordMap 형식으로 변환
+        record_map = data.get("recordMap", {})
+
+        return Response(record_map)
+
+    except requests.Timeout:
+        return Response({"error": "Notion API timeout"}, status=504)
+    except requests.RequestException as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@extend_schema(
+    tags=["Notion"],
+    summary="Get Notion Page Info",
+    description="Get basic info about a Notion page.",
+)
+@api_view(['GET'])
+def notion_page_info(request, page_id):
+    """
+    Notion 페이지 기본 정보를 가져옵니다.
+    """
+    page_id_clean = page_id.replace('-', '')
+
+    if len(page_id_clean) == 32:
+        page_uuid = f"{page_id_clean[:8]}-{page_id_clean[8:12]}-{page_id_clean[12:16]}-{page_id_clean[16:20]}-{page_id_clean[20:]}"
+    else:
+        page_uuid = page_id
+
+    try:
+        response = requests.post(
+            f"{NOTION_API_BASE}/getRecordValues",
+            json={
+                "requests": [{"id": page_uuid, "table": "block"}]
+            },
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0",
+            },
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            return Response(
+                {"error": f"Notion API error: {response.status_code}"},
+                status=response.status_code
+            )
+
+        return Response(response.json())
+
+    except requests.RequestException as e:
+        return Response({"error": str(e)}, status=500)
