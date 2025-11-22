@@ -1,6 +1,3 @@
-# html_serving/views.py
-# 레거시 코드 정리됨 - Notion은 splitbee 프록시, 배너는 NCP CDN 사용
-
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status

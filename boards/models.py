@@ -6,13 +6,8 @@ from django.contrib.postgres.indexes import GinIndex
 from bs4 import BeautifulSoup
 
 
-# DB 스키마 마이그레이션 완료 (2025-10-26):
-# Post.content_html -> Post.content_md (Markdown 텍스트 저장)
-# Attachment FK -> Post.attachment_paths (JSON 매핑)
-
-
-# [Deprecated] 마이그레이션 호환성을 위해 유지 - 실제로 사용되지 않음
 def post_upload_path(instance, filename):
+    """Deprecated - 마이그레이션 호환성 위해 유지"""
     return f'boards/{instance.board.id}/{filename}'
 
 
@@ -75,25 +70,18 @@ class PostQuerySet(models.QuerySet):
         if user.is_authenticated and user.is_staff:
             return self
         
-        # TODO: 추후 프론트엔드에 기능 구현 시 아래 주석 해제하여 활성화
-        # # Exclude staff-only posts for non-staff
-        # queryset = self.exclude(post_type=Post.PostType.STAFF_ONLY)
-
-        # 현재는 STAFF_ONLY 글도 일반 글처럼 취급
         queryset = self
 
         if user.is_authenticated:
-            # Authenticated non-staff can see default/staff_only posts and their own justification letters
             queryset = queryset.filter(
                 Q(post_type=Post.PostType.DEFAULT) |
-                Q(post_type=Post.PostType.STAFF_ONLY) | # STAFF_ONLY 글도 목록에 포함
+                Q(post_type=Post.PostType.STAFF_ONLY) |
                 Q(post_type=Post.PostType.JUSTIFICATION_LETTER, author__id=user.id)
             )
         else:
-            # Anonymous users can only see default/staff_only posts
             queryset = queryset.filter(
                 Q(post_type=Post.PostType.DEFAULT) |
-                Q(post_type=Post.PostType.STAFF_ONLY) # STAFF_ONLY 글도 목록에 포함
+                Q(post_type=Post.PostType.STAFF_ONLY)
             )
             
         return queryset
@@ -153,20 +141,14 @@ class Post(models.Model):
 
     def update_search_vector(self):
         content_text = ''
-
-        if self.content_md: # 이제 파일이 아닌 텍스트 문자열이므로 .path 등이 필요 없습니다.
+        if self.content_md:
             try:
-                # 파일(f)을 여는 대신, 마크다운 문자열(self.content_md)을 직접 파싱합니다.
                 soup = BeautifulSoup(self.content_md, 'html.parser')
                 content_text = soup.get_text()
             except Exception:
-                content_text = '' # In case of error, proceed with empty content
-        
-        # We use 'config='ko'' if a Korean stemmer is installed in PostgreSQL.
-        # Otherwise, use the default.
+                content_text = ''
         self.search_vector = SearchVector('title', weight='A') + SearchVector(models.Value(content_text), weight='B')
 
-    
 
 
 class PostLike(models.Model):
@@ -196,16 +178,15 @@ class Comment(models.Model):
     def __str__(self):
         return f'Comment by {self.author} on {self.post}'
 
-# [Deprecated] 레거시 모델 - 첨부파일은 이제 NCP Object Storage + Post.attachment_paths JSON 필드 사용
-# DB 스키마 호환성을 위해 유지하지만, 새 첨부파일에는 사용되지 않음
 class Attachment(models.Model):
+    """Deprecated - DB 호환성 위해 유지"""
     file = models.FileField(upload_to='attachments/')
     filename = models.CharField(max_length=255)
 
     class Meta:
         db_table = 'attachment'
         verbose_name = '[Deprecated] 첨부파일'
-        verbose_name_plural = '[Deprecated] 첨부파일 목록'
+        verbose_name_plural = '[Deprecated] 첨부파일'
 
     def __str__(self):
         return self.filename

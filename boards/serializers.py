@@ -79,10 +79,6 @@ class CommentSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     children = RecursiveField(many=True, read_only=True)
-   # children = serializers.ListSerializer(child=serializers.CharField(), read_only=True)
-
-
-
     is_owner = serializers.SerializerMethodField()
     post_id = serializers.IntegerField(source='post.id', read_only=True)
     post_title = serializers.CharField(source='post.title', read_only=True)
@@ -106,7 +102,6 @@ class CommentSerializer(serializers.ModelSerializer):
         return False
 
     def validate_content(self, value):
-        # Strip all HTML tags from comments to prevent XSS.
         sanitized_content = bleach.clean(value, tags=[], strip=True).strip()
         if not sanitized_content:
             raise serializers.ValidationError("Content cannot be empty.")
@@ -125,8 +120,7 @@ class PostListSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
-   # attachment_paths = serializers.JSONField(read_only=True, help_text="첨부파일 정보 목록 (url, name 포함)")
-    attachment_paths = serializers.SerializerMethodField(help_text="첨부파일 정보 목록 (실시간 생성된 다운로드 URL 포함)")
+    attachment_paths = serializers.SerializerMethodField()
 
 
     class Meta:
@@ -161,32 +155,23 @@ class PostListSerializer(serializers.ModelSerializer):
             if not file_key_or_url or not original_name:
                 continue
 
-            download_url = ""
-            file_size = None # 파일 크기를 담을 변수
-
             try:
-                # NCP 파일만 지원 (uploads/로 시작)
                 if not file_key_or_url.startswith("uploads/"):
-                    logger.warning(f"[PostListSerializer] 레거시 로컬 파일 무시: {file_key_or_url}")
                     continue
 
-                # NCP에서 파일 크기 가져오기
                 meta = s3_client.head_object(
                     Bucket=settings.NCP_BUCKET_NAME,
                     Key=file_key_or_url
                 )
                 file_size = meta.get('ContentLength')
-
-                # 다운로드용 Presigned URL 발급
                 download_url = s3_client.generate_presigned_url(
                     'get_object',
                     Params={
                         'Bucket': settings.NCP_BUCKET_NAME,
                         'Key': file_key_or_url,
                     },
-                    ExpiresIn=3600  # 1시간
+                    ExpiresIn=3600
                 )
-
                 presigned_attachments.append({
                     "url": download_url,
                     "name": original_name,
@@ -201,28 +186,17 @@ class PostListSerializer(serializers.ModelSerializer):
 
 
 
-
-
-
 def normalize_ncp_urls(content):
-    """
-    content_md 내의 NCP presigned URL을 ncp-key:// 형식으로 정규화.
-    https://kr.object.ncloudstorage.com/jbig/uploads/... → ncp-key://uploads/...
-    """
+    """NCP presigned URL을 ncp-key:// 형식으로 정규화"""
     if not content:
         return content
-
-    # NCP presigned URL 패턴을 ncp-key:// 형식으로 변환
-    # ?Signature=... 등의 쿼리 파라미터도 제거
     pattern = r'https://kr\.object\.ncloudstorage\.com/jbig/(uploads/[^?\s\)]+)(?:\?[^\s\)]*)?'
     return re.sub(pattern, r'ncp-key://\1', content)
 
 
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
-    attachment_paths = serializers.ListField(
-        child=serializers.DictField(), write_only=True, required=False, help_text="첨부파일 정보 목록 (url, name 포함)"
-    )
-    content_md = serializers.CharField(write_only=True, help_text="게시글 마크다운 내용")
+    attachment_paths = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
+    content_md = serializers.CharField(write_only=True)
 
     class Meta:
         model = Post
@@ -233,11 +207,9 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         attachment_paths = validated_data.pop('attachment_paths', [])
         content_md = validated_data.pop('content_md')
         post = Post(**validated_data)
-        post.content_md = normalize_ncp_urls(content_md)  # presigned URL → ncp-key:// 정규화
+        post.content_md = normalize_ncp_urls(content_md)
         post.attachment_paths = attachment_paths
         post.save()
-
-        # Update search vector after the file is saved.
         post.update_search_vector()
         post.save(update_fields=['search_vector'])
         return post
@@ -253,8 +225,6 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
             instance.attachment_paths = attachment_paths
             
         instance = super().update(instance, validated_data)
-        
-        # Update search vector after content is updated.
         instance.update_search_vector()
         instance.save(update_fields=['search_vector'])
         return instance
@@ -265,28 +235,19 @@ class PostDetailSerializer(serializers.ModelSerializer):
     author_semester = serializers.ReadOnlyField(source='author.semester')
     board = BoardSerializer(read_only=True)
     comments = CommentSerializer(many=True, read_only=True)
-   # attachment_paths = serializers.JSONField(read_only=True, help_text="첨부파일 정보 목록 (url, name 포함)")
-    attachment_paths = serializers.SerializerMethodField(help_text="첨부파일 정보 목록 (실시간 생성된 다운로드 URL 포함)")
+    attachment_paths = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
-
-   # content_md = serializers.CharField(read_only=True)
-    
     content_md = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
-    
-    # user_can_edit = serializers.SerializerMethodField()
-    # user_can_delete = serializers.SerializerMethodField()
-    # user_can_comment = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
-            'id', 'board_post_id', 'title', 'content_md', 'user_id', 'author', 'author_semester', 'created_at', 'updated_at',
-            'views', 'board', 'comments', 'attachment_paths', 'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
-            # 'user_can_edit', 'user_can_delete', 'user_can_comment'
-
+            'id', 'board_post_id', 'title', 'content_md', 'user_id', 'author', 'author_semester',
+            'created_at', 'updated_at', 'views', 'board', 'comments', 'attachment_paths',
+            'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
         ]
 
     def get_user_id(self, obj):
@@ -302,17 +263,12 @@ class PostDetailSerializer(serializers.ModelSerializer):
             return obj.author == user
         return False
 
-
     def get_content_md(self, obj):
-        """
-        DB에 저장된 content_md에서 'ncp-key://...' 태그를 찾아
-        실시간으로 다운로드용 Presigned URL로 변환합니다.
-        """
+        """ncp-key:// URL을 presigned URL로 변환"""
         raw_md = obj.content_md
         if not raw_md:
             return ""
 
-        # S3 클라이언트 한 번만 생성 (실패 시 원본 반환)
         try:
             s3_client = boto3.client(
                 's3',
@@ -322,39 +278,27 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
             )
         except Exception:
-            return raw_md 
+            return raw_md
 
-        # 'ncp-key://(파일경로)' 패턴을 찾는 함수
         def replace_with_presigned_url(match):
-            # match.group(1)은 (ncp-key://...) 전체
-            # match.group(2)는 ( ) 안의 ncp-key://...
-           # file_key = match.group(3) # 세 번째 ( ) 안의 파일 경로(Key)
-            file_key = match.group(4) 
-  
+            file_key = match.group(4)
             if not file_key:
-                return match.group(0) # 매치 실패 시 원본 문자열 반환 (예: "![alt](url)")
-
+                return match.group(0)
             try:
-                # 1시간짜리 새 URL 발급
                 download_url = s3_client.generate_presigned_url(
                     'get_object',
                     Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
-                    ExpiresIn=3600  # 1시간
+                    ExpiresIn=3600
                 )
-                # () 괄호와 URL 전체를 교체
-                return f"({download_url})" 
+                return f"({download_url})"
             except Exception:
-                return match.group(0) # URL 발급 실패 시 원본 문자열 반환
+                return match.group(0)
 
-        # 정규표현식을 사용해 모든 "](ncp-key://...)"를 찾아 'replace_with_presigned_url' 함수로 처리
-        # 예: ![alt](ncp-key://uploads/...) -> ![alt](https://...Signature=...)
-        processed_md = re.sub(
-            r"(\!\[[^\]]*\])(\((ncp-key:\/\/([^\)]+))\))", # ![alt](ncp-key://경로)
-            lambda m: m.group(1) + replace_with_presigned_url(m), # alt 부분(group 1)은 놔두고 URL 부분(group 2)만 교체
+        return re.sub(
+            r"(\!\[[^\]]*\])(\((ncp-key:\/\/([^\)]+))\))",
+            lambda m: m.group(1) + replace_with_presigned_url(m),
             raw_md
         )
-
-        return processed_md
 
     def get_attachment_paths(self, obj):
         attachments_list = obj.attachment_paths
@@ -396,17 +340,14 @@ class PostDetailSerializer(serializers.ModelSerializer):
                     Key=file_key_or_url
                 )
                 file_size = meta.get('ContentLength')
-
-                # 다운로드용 Presigned URL 발급
                 download_url = s3_client.generate_presigned_url(
                     'get_object',
                     Params={
                         'Bucket': settings.NCP_BUCKET_NAME,
                         'Key': file_key_or_url,
                     },
-                    ExpiresIn=3600  # 1시간
+                    ExpiresIn=3600
                 )
-
                 presigned_attachments.append({
                     "url": download_url,
                     "name": original_name,

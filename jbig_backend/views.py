@@ -7,15 +7,13 @@ from django.conf import settings
 from rest_framework import status, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser, AllowAny
+from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 
-from .models import CalendarEvent
+from .models import CalendarEvent, SiteSettings
 from .serializers import CalendarEventSerializer
 from .permissions import IsStaffOrReadOnly
-
-QUIZ_URL_FILE_PATH = os.path.join(settings.MEDIA_ROOT, 'quiz_url.txt')
 
 
 def version_info(request):
@@ -38,12 +36,10 @@ class QuizUrlView(APIView):
     def get_permissions(self):
         if self.request.method == 'PUT':
             return [IsAdminUser()]
-        return [AllowAny()]
+        return [IsAuthenticated()]
 
     @extend_schema(
-        responses={
-            200: OpenApiTypes.OBJECT,
-        },
+        responses={200: OpenApiTypes.OBJECT},
         examples=[
             OpenApiExample(
                 "Example Response",
@@ -53,50 +49,76 @@ class QuizUrlView(APIView):
         ]
     )
     def get(self, request):
-        """Retrieve the current quiz URL."""
-        try:
-            if os.path.exists(QUIZ_URL_FILE_PATH):
-                with open(QUIZ_URL_FILE_PATH, 'r') as f:
-                    url = f.read().strip()
-                return Response({'quiz_url': url})
-            return Response({'quiz_url': None}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        url = SiteSettings.get('quiz_url', '')
+        return Response({'quiz_url': url or None})
+
+    @extend_schema(
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {'quiz_url': {'type': 'string', 'format': 'uri'}},
+                'required': ['quiz_url']
+            }
+        },
+        responses={200: OpenApiTypes.OBJECT}
+    )
+    def put(self, request):
+        url = request.data.get('quiz_url')
+        if not url:
+            return Response({'error': 'quiz_url is required'}, status=status.HTTP_400_BAD_REQUEST)
+        SiteSettings.set('quiz_url', url)
+        return Response({'message': 'Quiz URL updated successfully', 'quiz_url': url})
+
+
+@extend_schema(
+    summary="Site Settings Management",
+    description="Retrieve or update site settings. Only admins can update.",
+)
+class SiteSettingsView(APIView):
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return [IsAdminUser()]
+        return [AllowAny()]
+
+    @extend_schema(
+        responses={200: OpenApiTypes.OBJECT},
+        examples=[
+            OpenApiExample(
+                "Example Response",
+                value={"notion_page_id": "abc123", "quiz_url": "https://forms.gle/..."},
+                response_only=True
+            )
+        ]
+    )
+    def get(self, request):
+        return Response({
+            'notion_page_id': SiteSettings.get('notion_page_id', ''),
+            'quiz_url': SiteSettings.get('quiz_url', ''),
+        })
 
     @extend_schema(
         request={
             'application/json': {
                 'type': 'object',
                 'properties': {
+                    'notion_page_id': {'type': 'string'},
                     'quiz_url': {'type': 'string', 'format': 'uri'}
-                },
-                'required': ['quiz_url']
+                }
             }
         },
-        examples=[
-            OpenApiExample(
-                "Example Request",
-                value={"quiz_url": "https://forms.gle/new_quiz_url"},
-                request_only=True
-            )
-        ],
-        responses={
-            200: OpenApiTypes.OBJECT,
-        }
+        responses={200: OpenApiTypes.OBJECT}
     )
     def put(self, request):
-        """Update the quiz URL. (Admin only)"""
-        url = request.data.get('quiz_url')
-        if not url:
-            return Response({'error': 'quiz_url is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            os.makedirs(os.path.dirname(QUIZ_URL_FILE_PATH), exist_ok=True)
-            with open(QUIZ_URL_FILE_PATH, 'w') as f:
-                f.write(url)
-            return Response({'message': 'Quiz URL updated successfully', 'quiz_url': url})
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        updated = {}
+        if 'notion_page_id' in request.data:
+            SiteSettings.set('notion_page_id', request.data['notion_page_id'])
+            updated['notion_page_id'] = request.data['notion_page_id']
+        if 'quiz_url' in request.data:
+            SiteSettings.set('quiz_url', request.data['quiz_url'])
+            updated['quiz_url'] = request.data['quiz_url']
+        if not updated:
+            return Response({'error': 'No valid fields provided'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message': 'Settings updated', **updated})
 
 @extend_schema(tags=['Calendar'])
 class CalendarEventViewSet(viewsets.ModelViewSet):
