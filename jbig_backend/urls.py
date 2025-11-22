@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 from users.views import LogoutView
-from .views import QuizUrlView, CalendarEventViewSet
+from .views import QuizUrlView, CalendarEventViewSet, version_info
 
 from boards.views import GeneratePresignedURLAPIView
 from rest_framework.routers import DefaultRouter
@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/logout/', LogoutView.as_view(), name='logout'),
     path('api/boards/files/generate-upload-url/', GeneratePresignedURLAPIView.as_view(), name='file-generate-upload-url'),
+    path('api/version/', version_info, name='version-info'),
 ]
 
 if settings.DEBUG:

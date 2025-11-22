@@ -116,9 +116,6 @@ class Post(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
-
-   #  content_html = models.FileField(upload_to=post_upload_path, null=True, blank=True)
-   # content_md ##
     content_md = models.TextField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

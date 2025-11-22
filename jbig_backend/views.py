@@ -1,9 +1,12 @@
-from django.http import HttpResponse, Http404
-from django.conf import settings
 import os
+import json
+
+from django.http import HttpResponse, Http404, JsonResponse
+from django.conf import settings
+
+from rest_framework import status, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, viewsets
 from rest_framework.permissions import IsAdminUser, AllowAny
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
@@ -12,8 +15,20 @@ from .models import CalendarEvent
 from .serializers import CalendarEventSerializer
 from .permissions import IsStaffOrReadOnly
 
-
 QUIZ_URL_FILE_PATH = os.path.join(settings.MEDIA_ROOT, 'quiz_url.txt')
+
+
+def version_info(request):
+    """배포된 버전 정보 반환 (commit hash, branch, deploy time)"""
+    version_file = os.path.join(settings.BASE_DIR, 'VERSION.json')
+    try:
+        with open(version_file, 'r') as f:
+            data = json.load(f)
+            return JsonResponse(data)
+    except FileNotFoundError:
+        return JsonResponse({'error': 'VERSION.json not found', 'commit': 'unknown'}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid VERSION.json'}, status=500)
 
 def serve_html(request, file_path):
     """

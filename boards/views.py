@@ -1,29 +1,26 @@
-from rest_framework import generics, status, viewsets
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.parsers import MultiPartParser, FormParser
+import os
+import re
+import uuid
+import logging
+from datetime import datetime
+
+import boto3
+from botocore.client import Config
+from botocore.exceptions import ClientError
+
+from django.conf import settings
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F, Q, Value, CharField, Func
 from django.db.models.functions import Replace
-from datetime import datetime
 
-from rest_framework.views import APIView # APIView 추가
-from rest_framework.response import Response # Response 추가
-from rest_framework import status # status 추가
-from rest_framework.permissions import IsAuthenticated # IsAuthenticated 추가
+from rest_framework import generics, status, viewsets
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.parsers import MultiPartParser, FormParser
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 
-
-## NCP 연동 위해 새로 추가 ##
-import boto3
-import uuid
-import os
-import re
-from django.conf import settings
-from botocore.client import Config
-from botocore.exceptions import ClientError
-import logging
 logger = logging.getLogger(__name__)
 
 from .models import Board, Post, Comment, Category, Attachment
@@ -682,8 +679,8 @@ class GeneratePresignedURLAPIView(APIView):
                 Params={
                     'Bucket': settings.NCP_BUCKET_NAME,
                     'Key': file_key,
-                }
-               # ExpiresIn=3600
+                },
+                ExpiresIn=3600  # 1시간
             )
 
             # React에게 업로드할 URL과 DB에 저장할 Key를 함께 전달

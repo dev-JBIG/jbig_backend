@@ -1,18 +1,18 @@
-from rest_framework import serializers
-import bleach
-from .models import Category, Board, Post, Comment, Attachment
-
-# NCP 연동 위해 추가
-import boto3
 import os
 import re
-from django.conf import settings
+import logging
+
+import boto3
+import bleach
 from botocore.client import Config
 from botocore.exceptions import ClientError
-import logging
+
+from django.conf import settings
+from rest_framework import serializers
+
+from .models import Category, Board, Post, Comment, Attachment
+
 logger = logging.getLogger(__name__)
-
-
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -149,10 +149,7 @@ class PostListSerializer(serializers.ModelSerializer):
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
-   
 
-    # NCP 위해 메소드 추가
-    # PostListSerializer의 get_attachment_paths 함수
     def get_attachment_paths(self, obj):
         attachments_list = obj.attachment_paths
         if not attachments_list or not isinstance(attachments_list, list):
@@ -197,8 +194,8 @@ class PostListSerializer(serializers.ModelSerializer):
                         Params={
                             'Bucket': settings.NCP_BUCKET_NAME,
                             'Key': file_key_or_url,
-                        }
-                       #  ExpiresIn=3600 # 1시간
+                        },
+                        ExpiresIn=3600  # 1시간
                     )
 
                 # 그 외에는 '옛날 형식' (/media/...)
@@ -341,14 +338,6 @@ class PostDetailSerializer(serializers.ModelSerializer):
         return False
 
 
-
-
-
-
-
-# ... (get_is_owner 함수 다음, 같은 들여쓰기 레벨)
-
-    # NCP 위해 메소드 추가
     def get_content_md(self, obj):
         """
         DB에 저장된 content_md에서 'ncp-key://...' 태그를 찾아
@@ -384,8 +373,8 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 # 1시간짜리 새 URL 발급
                 download_url = s3_client.generate_presigned_url(
                     'get_object',
-                    Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}
-                   #  ExpiresIn=3600
+                    Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
+                    ExpiresIn=3600  # 1시간
                 )
                 # () 괄호와 URL 전체를 교체
                 return f"({download_url})" 
@@ -402,11 +391,6 @@ class PostDetailSerializer(serializers.ModelSerializer):
 
         return processed_md
 
-
-
-
-
-    # NCP 위해 메소드 추가
     def get_attachment_paths(self, obj):
         attachments_list = obj.attachment_paths
         if not attachments_list or not isinstance(attachments_list, list):
@@ -451,8 +435,8 @@ class PostDetailSerializer(serializers.ModelSerializer):
                         Params={
                             'Bucket': settings.NCP_BUCKET_NAME,
                             'Key': file_key_or_url,
-                        }
-                      #  ExpiresIn=3600 # 1시간
+                        },
+                        ExpiresIn=3600  # 1시간
                     )
 
                 # 그 외에는 '옛날 형식' (/media/...)
@@ -490,24 +474,6 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 continue # 실패 시 이 파일은 건너뜀
 
         return presigned_attachments
-
-    # def get_user_can_edit(self, obj):
-    #     user = self.context['request'].user
-    #     return user.is_authenticated and obj.author.id == user.id
-
-    # def get_user_can_delete(self, obj):
-    #     user = self.context['request'].user
-    #     return user.is_authenticated and obj.author.id == user.id
-
-    # def get_user_can_comment(self, obj):
-    #     user = self.context['request'].user
-    #     if not user.is_authenticated:
-    #         return False
-    #     perm = getattr(obj.board, 'comment_permission', 'staff')
-    #     if perm == 'all':
-    #         return True
-    #     return user.is_staff
-
 
 
 class PostListResponseSerializer(serializers.Serializer):
