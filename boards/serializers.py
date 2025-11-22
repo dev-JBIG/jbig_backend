@@ -202,16 +202,28 @@ class PostListSerializer(serializers.ModelSerializer):
                     )
 
                 # 그 외에는 '옛날 형식' (/media/...)
-                else: 
+                else:
                     download_url = file_key_or_url
                     # 1. Django 서버 로컬에서 파일 크기 가져오기
                     try:
-                        # /media/attachments/file.pdf -> /home/ubuntu/jbig-project/jbig_backend/media/attachments/file.pdf
+                        # Path Traversal 방지
+                        if '..' in file_key_or_url:
+                            logger.warning(f"[PostListSerializer] Path Traversal 시도 감지: {file_key_or_url}")
+                            continue
+
                         local_path = os.path.join(settings.MEDIA_ROOT, file_key_or_url.lstrip('/'))
-                        if os.path.exists(local_path):
-                            file_size = os.path.getsize(local_path)
+                        real_path = os.path.realpath(local_path)
+                        media_root = os.path.realpath(settings.MEDIA_ROOT)
+
+                        # MEDIA_ROOT 내부 파일인지 확인
+                        if not real_path.startswith(media_root + os.sep):
+                            logger.warning(f"[PostListSerializer] Path Traversal 시도 감지: {file_key_or_url}")
+                            continue
+
+                        if os.path.exists(real_path):
+                            file_size = os.path.getsize(real_path)
                     except Exception as e:
-                        logger.warn(f"옛날 파일 크기 조회 실패 ({file_key_or_url}): {e}")
+                        logger.warning(f"옛날 파일 크기 조회 실패 ({file_key_or_url}): {e}")
 
                 presigned_attachments.append({
                     "url": download_url,
@@ -229,6 +241,21 @@ class PostListSerializer(serializers.ModelSerializer):
 
 
 
+
+def normalize_ncp_urls(content):
+    """
+    content_md 내의 NCP presigned URL을 ncp-key:// 형식으로 정규화.
+    https://kr.object.ncloudstorage.com/jbig/uploads/... → ncp-key://uploads/...
+    """
+    if not content:
+        return content
+
+    # NCP presigned URL 패턴을 ncp-key:// 형식으로 변환
+    # ?Signature=... 등의 쿼리 파라미터도 제거
+    pattern = r'https://kr\.object\.ncloudstorage\.com/jbig/(uploads/[^?\s\)]+)(?:\?[^\s\)]*)?'
+    return re.sub(pattern, r'ncp-key://\1', content)
+
+
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
     attachment_paths = serializers.ListField(
         child=serializers.DictField(), write_only=True, required=False, help_text="첨부파일 정보 목록 (url, name 포함)"
@@ -244,7 +271,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         attachment_paths = validated_data.pop('attachment_paths', [])
         content_md = validated_data.pop('content_md')
         post = Post(**validated_data)
-        post.content_md = content_md
+        post.content_md = normalize_ncp_urls(content_md)  # presigned URL → ncp-key:// 정규화
         post.attachment_paths = attachment_paths
         post.save()
 
@@ -256,9 +283,9 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         attachment_paths = validated_data.pop('attachment_paths', None)
         content_md = validated_data.pop('content_md', None)
-        
+
         if content_md is not None:
-            instance.content_md = content_md
+            instance.content_md = normalize_ncp_urls(content_md)  # presigned URL → ncp-key:// 정규화
         
         if attachment_paths is not None:
             instance.attachment_paths = attachment_paths
@@ -429,16 +456,28 @@ class PostDetailSerializer(serializers.ModelSerializer):
                     )
 
                 # 그 외에는 '옛날 형식' (/media/...)
-                else: 
+                else:
                     download_url = file_key_or_url
                     # 1. Django 서버 로컬에서 파일 크기 가져오기
                     try:
-                        # /media/attachments/file.pdf -> /home/ubuntu/jbig-project/jbig_backend/media/attachments/file.pdf
+                        # Path Traversal 방지
+                        if '..' in file_key_or_url:
+                            logger.warning(f"[PostDetailSerializer] Path Traversal 시도 감지: {file_key_or_url}")
+                            continue
+
                         local_path = os.path.join(settings.MEDIA_ROOT, file_key_or_url.lstrip('/'))
-                        if os.path.exists(local_path):
-                            file_size = os.path.getsize(local_path)
+                        real_path = os.path.realpath(local_path)
+                        media_root = os.path.realpath(settings.MEDIA_ROOT)
+
+                        # MEDIA_ROOT 내부 파일인지 확인
+                        if not real_path.startswith(media_root + os.sep):
+                            logger.warning(f"[PostDetailSerializer] Path Traversal 시도 감지: {file_key_or_url}")
+                            continue
+
+                        if os.path.exists(real_path):
+                            file_size = os.path.getsize(real_path)
                     except Exception as e:
-                        logger.warn(f"옛날 파일 크기 조회 실패 ({file_key_or_url}): {e}")
+                        logger.warning(f"옛날 파일 크기 조회 실패 ({file_key_or_url}): {e}")
 
                 presigned_attachments.append({
                     "url": download_url,

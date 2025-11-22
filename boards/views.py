@@ -19,6 +19,7 @@ from rest_framework.permissions import IsAuthenticated # IsAuthenticated 추가
 import boto3
 import uuid
 import os
+import re
 from django.conf import settings
 from botocore.client import Config
 from botocore.exceptions import ClientError
@@ -376,6 +377,49 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
 
         serializer = self.get_serializer(instance, context={'request': request})
         return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """게시글 삭제 시 NCP에 저장된 파일들도 함께 삭제"""
+        instance = self.get_object()
+
+        # 삭제할 파일 키 수집
+        keys_to_delete = []
+
+        # 1. attachment_paths에서 파일 키 수집
+        if instance.attachment_paths and isinstance(instance.attachment_paths, list):
+            for att in instance.attachment_paths:
+                if isinstance(att, dict) and 'path' in att:
+                    file_key = att['path']
+                    if file_key.startswith('uploads/'):
+                        keys_to_delete.append(file_key)
+
+        # 2. content_md에서 ncp-key:// 이미지 키 수집
+        if instance.content_md:
+            ncp_keys = re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md)
+            keys_to_delete.extend(ncp_keys)
+
+        # 3. NCP에서 파일 삭제
+        if keys_to_delete:
+            try:
+                s3_client = boto3.client(
+                    's3',
+                    endpoint_url=settings.NCP_ENDPOINT_URL,
+                    aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
+                    aws_secret_access_key=settings.NCP_SECRET_KEY,
+                    config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
+                )
+
+                for key in keys_to_delete:
+                    try:
+                        s3_client.delete_object(Bucket=settings.NCP_BUCKET_NAME, Key=key)
+                        logger.info(f"NCP 파일 삭제 완료: {key}")
+                    except ClientError as e:
+                        logger.error(f"NCP 파일 삭제 실패 (Key: {key}): {e}")
+            except Exception as e:
+                logger.error(f"S3 클라이언트 생성 실패: {e}")
+
+        # 4. DB에서 게시글 삭제
+        return super().destroy(request, *args, **kwargs)
 
 @extend_schema(tags=['댓글'])
 @extend_schema_view(
