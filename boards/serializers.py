@@ -13,6 +13,20 @@ from .models import Category, Board, Post, Comment
 
 logger = logging.getLogger(__name__)
 
+_s3_client = None
+
+def get_s3_client():
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client(
+            's3',
+            endpoint_url=settings.NCP_ENDPOINT_URL,
+            aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.NCP_SECRET_KEY,
+            config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
+        )
+    return _s3_client
+
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -136,54 +150,27 @@ class PostListSerializer(serializers.ModelSerializer):
             return []
 
         try:
-            s3_client = boto3.client(
-                's3',
-                endpoint_url=settings.NCP_ENDPOINT_URL,
-                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.NCP_SECRET_KEY,
-                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-            )
+            s3_client = get_s3_client()
         except Exception as e:
-            logger.error(f"S3 클라이언트 생성 실패 (Serializer): {e}")
+            logger.error(f"S3 클라이언트 생성 실패: {e}")
             return []
 
         presigned_attachments = []
         for item in attachments_list:
-            file_key_or_url = item.get('path') or item.get('url')
-            original_name = item.get('name')
-
-            if not file_key_or_url or not original_name:
+            file_key = item.get('path') or item.get('url')
+            name = item.get('name')
+            if not file_key or not name or not file_key.startswith("uploads/"):
                 continue
-
             try:
-                if not file_key_or_url.startswith("uploads/"):
-                    continue
-
-                meta = s3_client.head_object(
-                    Bucket=settings.NCP_BUCKET_NAME,
-                    Key=file_key_or_url
-                )
-                file_size = meta.get('ContentLength')
-                download_url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={
-                        'Bucket': settings.NCP_BUCKET_NAME,
-                        'Key': file_key_or_url,
-                    },
-                    ExpiresIn=3600
-                )
+                meta = s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
                 presigned_attachments.append({
-                    "url": download_url,
-                    "name": original_name,
-                    "size": file_size
+                    "url": s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600),
+                    "name": name,
+                    "size": meta.get('ContentLength')
                 })
-
             except ClientError as e:
-                logger.error(f"S3 처리 중 에러 (Key: {file_key_or_url}): {e}")
-                continue
-
+                logger.error(f"S3 에러 (Key: {file_key}): {e}")
         return presigned_attachments
-
 
 
 def normalize_ncp_urls(content):
@@ -264,19 +251,11 @@ class PostDetailSerializer(serializers.ModelSerializer):
         return False
 
     def get_content_md(self, obj):
-        """ncp-key:// URL을 presigned URL로 변환"""
         raw_md = obj.content_md
         if not raw_md:
             return ""
-
         try:
-            s3_client = boto3.client(
-                's3',
-                endpoint_url=settings.NCP_ENDPOINT_URL,
-                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.NCP_SECRET_KEY,
-                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-            )
+            s3_client = get_s3_client()
         except Exception:
             return raw_md
 
@@ -285,79 +264,38 @@ class PostDetailSerializer(serializers.ModelSerializer):
             if not file_key:
                 return match.group(0)
             try:
-                download_url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
-                    ExpiresIn=3600
-                )
-                return f"({download_url})"
+                url = s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600)
+                return f"({url})"
             except Exception:
                 return match.group(0)
 
-        return re.sub(
-            r"(\!\[[^\]]*\])(\((ncp-key:\/\/([^\)]+))\))",
-            lambda m: m.group(1) + replace_with_presigned_url(m),
-            raw_md
-        )
+        return re.sub(r"(\!\[[^\]]*\])(\((ncp-key:\/\/([^\)]+))\))", lambda m: m.group(1) + replace_with_presigned_url(m), raw_md)
 
     def get_attachment_paths(self, obj):
         attachments_list = obj.attachment_paths
         if not attachments_list or not isinstance(attachments_list, list):
             return []
-
         try:
-            s3_client = boto3.client(
-                's3',
-                endpoint_url=settings.NCP_ENDPOINT_URL,
-                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.NCP_SECRET_KEY,
-                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-            )
+            s3_client = get_s3_client()
         except Exception as e:
-            logger.error(f"S3 클라이언트 생성 실패 (Serializer): {e}")
+            logger.error(f"S3 클라이언트 생성 실패: {e}")
             return []
 
         presigned_attachments = []
         for item in attachments_list:
-            file_key_or_url = item.get('path') or item.get('url')
-            original_name = item.get('name')
-
-            if not file_key_or_url or not original_name:
+            file_key = item.get('path') or item.get('url')
+            name = item.get('name')
+            if not file_key or not name or not file_key.startswith("uploads/"):
                 continue
-
-            download_url = ""
-            file_size = None # 파일 크기를 담을 변수
-
             try:
-                # NCP 파일만 지원 (uploads/로 시작)
-                if not file_key_or_url.startswith("uploads/"):
-                    logger.warning(f"[PostDetailSerializer] 레거시 로컬 파일 무시: {file_key_or_url}")
-                    continue
-
-                # NCP에서 파일 크기 가져오기
-                meta = s3_client.head_object(
-                    Bucket=settings.NCP_BUCKET_NAME,
-                    Key=file_key_or_url
-                )
-                file_size = meta.get('ContentLength')
-                download_url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={
-                        'Bucket': settings.NCP_BUCKET_NAME,
-                        'Key': file_key_or_url,
-                    },
-                    ExpiresIn=3600
-                )
+                meta = s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
                 presigned_attachments.append({
-                    "url": download_url,
-                    "name": original_name,
-                    "size": file_size
+                    "url": s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600),
+                    "name": name,
+                    "size": meta.get('ContentLength')
                 })
-
             except ClientError as e:
-                logger.error(f"S3 처리 중 에러 (Key: {file_key_or_url}): {e}")
-                continue # 실패 시 이 파일은 건너뜀
-
+                logger.error(f"S3 에러 (Key: {file_key}): {e}")
         return presigned_attachments
 
 
