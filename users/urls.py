@@ -13,6 +13,8 @@ from .views import (
     PasswordResetView,
     UserProfileView,
     PasswordChangeView,
+    PublicProfileView,
+    ResumeUpdateView,
 )
 
 urlpatterns = [
@@ -22,6 +24,8 @@ urlpatterns = [
     path('resend-verify-email/', ResendVerificationEmailView.as_view(), name='resend-verify-email'),
     path('token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     path('logout/', LogoutView.as_view(), name='logout'),
+    path('profile/<str:username>/', PublicProfileView.as_view(), name='public-profile'),
+    path('profile/', ResumeUpdateView.as_view(), name='resume-update'),
     path('<str:user_id>/posts/', UserPostListView.as_view(), name='user-posts'),
     path('<str:user_id>/comments/', UserCommentListView.as_view(), name='user-comments'),
     path('password/reset/request/', PasswordResetRequestView.as_view(), name='password-reset-request'),

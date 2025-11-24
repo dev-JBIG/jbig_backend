@@ -15,7 +15,9 @@ from .serializers import (
     PasswordChangeSerializer,
     PasswordResetRequestSerializer,
     VerifyPasswordCodeSerializer,
-    PasswordResetSerializer
+    PasswordResetSerializer,
+    PublicProfileSerializer,
+    ResumeUpdateSerializer
 )
 from .models import User, EmailVerificationCode
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -687,3 +689,45 @@ class PasswordChangeView(APIView):
             return Response({"message": "비밀번호가 성공적으로 변경되었습니다."},
                             status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(
+    tags=["사용자"],
+    summary="공개 프로필 조회",
+    description="이메일 ID(@ 앞부분)로 사용자의 공개 프로필을 조회합니다. 로그인 없이 접근 가능합니다.",
+    parameters=[
+        OpenApiParameter(
+            name='username',
+            type=str,
+            location=OpenApiParameter.PATH,
+            description="사용자 ID (이메일의 '@' 앞 부분, 예: bjl5029)"
+        )
+    ]
+)
+class PublicProfileView(generics.RetrieveAPIView):
+    queryset = User.objects.all()
+    serializer_class = PublicProfileSerializer
+    permission_classes = [AllowAny]
+
+    def get_object(self):
+        username = self.kwargs['username']
+        obj = get_object_or_404(self.get_queryset(), email__istartswith=username + '@')
+        return obj
+
+
+@extend_schema(
+    tags=["사용자"],
+    summary="프로필(Resume) 수정",
+    description="본인의 프로필 정보(resume)를 수정합니다.",
+    request=ResumeUpdateSerializer
+)
+class ResumeUpdateView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = ResumeUpdateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)

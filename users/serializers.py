@@ -199,3 +199,46 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_comment_count(self, obj):
         return obj.comments.count()
+
+
+class PublicProfileSerializer(serializers.ModelSerializer):
+    email_id = serializers.SerializerMethodField()
+    is_self = serializers.SerializerMethodField()
+    date_joined = serializers.DateTimeField(format="%Y-%m-%d", read_only=True)
+    posts = serializers.SerializerMethodField()
+    comments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ('username', 'email_id', 'semester', 'resume', 'date_joined', 'is_self', 'posts', 'comments')
+
+    def get_email_id(self, obj):
+        return obj.email.split('@')[0] if obj.email else ''
+
+    def get_is_self(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return request.user == obj
+        return False
+
+    def get_posts(self, obj):
+        from boards.serializers import PostListSerializer
+        posts = obj.posts.order_by('-created_at')[:10]
+        return PostListSerializer(posts, many=True, context=self.context).data
+
+    def get_comments(self, obj):
+        from boards.models import Comment
+        comments = Comment.objects.filter(author=obj, is_deleted=False).order_by('-created_at')[:10]
+        return [{
+            'id': c.id,
+            'content': c.content,
+            'post_id': c.post_id,
+            'post_title': c.post.title if c.post else '',
+            'created_at': c.created_at.strftime('%Y-%m-%d %H:%M'),
+        } for c in comments]
+
+
+class ResumeUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('resume',)

@@ -39,6 +39,7 @@ class User(AbstractUser):
     )
     is_verified = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(null=True, blank=True)
+    resume = models.TextField(blank=True, default='', verbose_name='자기소개')
 
     # groups and user_permissions are inherited from AbstractUser, no need to set to None
 
