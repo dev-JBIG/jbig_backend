@@ -222,17 +222,25 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         return False
 
     def get_posts(self, obj):
-        from boards.serializers import PostListSerializer
         posts = obj.posts.order_by('-created_at')[:10]
-        return PostListSerializer(posts, many=True, context=self.context).data
+        return [{
+            'id': p.id,
+            'board_id': p.board_id,
+            'board_post_id': p.board_post_id,
+            'title': p.title,
+            'created_at': p.created_at.strftime('%Y-%m-%d'),
+            'views': p.views,
+        } for p in posts]
 
     def get_comments(self, obj):
         from boards.models import Comment
-        comments = Comment.objects.filter(author=obj, is_deleted=False).order_by('-created_at')[:10]
+        comments = Comment.objects.filter(author=obj, is_deleted=False).select_related('post').order_by('-created_at')[:10]
         return [{
             'id': c.id,
             'content': c.content,
             'post_id': c.post_id,
+            'board_id': c.post.board_id if c.post else None,
+            'board_post_id': c.post.board_post_id if c.post else None,
             'post_title': c.post.title if c.post else '',
             'created_at': c.created_at.strftime('%Y-%m-%d %H:%M'),
         } for c in comments]
