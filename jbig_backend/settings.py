@@ -37,7 +37,10 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = get_env_bool('DEBUG', True)
 
 ALLOWED_HOSTS = [
-	'*'
+    'jbig.co.kr',
+    'www.jbig.co.kr',
+    'localhost',
+    '127.0.0.1',
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -177,13 +180,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
 # CORS settings
-CORS_ALLOW_CREDENTIALS = get_env_bool('CORS_ALLOW_CREDENTIALS', True)
-# 개발 환경에서는 모든 출처를 허용합니다.
-# 운영 환경에서는 보안을 위해 특정 도메인 목록을 사용하는 것이 좋습니다.
-CORS_ALLOW_ALL_ORIGINS = get_env_bool('CORS_ALLOW_ALL_ORIGINS', True)
-
-# If not allowing all origins, allow specific origins from env (comma-separated)
-CORS_ALLOWED_ORIGINS = get_env_list('CORS_ALLOWED_ORIGINS', [])
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    'https://jbig.co.kr',
+    'https://www.jbig.co.kr',
+    'http://localhost:3000',
+]
 
 CORS_ALLOW_HEADERS = [
     'Accept',
