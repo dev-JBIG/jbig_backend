@@ -222,7 +222,17 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         return False
 
     def get_posts(self, obj):
-        posts = obj.posts.order_by('-created_at')[:10]
+        request = self.context.get('request')
+        is_self = request and request.user.is_authenticated and request.user == obj
+
+        posts = obj.posts.order_by('-created_at')
+
+        # 본인이 아닌 경우 비공개 게시글(post_type=3) 제외
+        if not is_self:
+            posts = posts.exclude(post_type=3)
+
+        posts = posts[:10]
+
         return [{
             'id': p.id,
             'board_id': p.board_id,
@@ -234,7 +244,17 @@ class PublicProfileSerializer(serializers.ModelSerializer):
 
     def get_comments(self, obj):
         from boards.models import Comment
-        comments = Comment.objects.filter(author=obj, is_deleted=False).select_related('post').order_by('-created_at')[:10]
+        request = self.context.get('request')
+        is_self = request and request.user.is_authenticated and request.user == obj
+
+        comments = Comment.objects.filter(author=obj, is_deleted=False).select_related('post').order_by('-created_at')
+
+        # 본인이 아닌 경우 비공개 게시글(post_type=3)의 댓글 제외
+        if not is_self:
+            comments = comments.exclude(post__post_type=3)
+
+        comments = comments[:10]
+
         return [{
             'id': c.id,
             'content': c.content,
