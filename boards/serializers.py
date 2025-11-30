@@ -123,6 +123,26 @@ class CommentSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
+        
+        # 대댓글(children)을 created_at 기준으로 정렬 (오래된 순, 최신 댓글이 아래에)
+        if 'children' in representation and representation['children']:
+            from datetime import datetime
+            def get_sort_key(x):
+                created_at = x.get('created_at', '')
+                if isinstance(created_at, str):
+                    try:
+                        # ISO 8601 형식 문자열을 datetime으로 변환
+                        return datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    except (ValueError, AttributeError):
+                        return datetime.min
+                return created_at if created_at else datetime.min
+            
+            representation['children'] = sorted(
+                representation['children'],
+                key=get_sort_key,
+                reverse=False
+            )
+        
         if instance.is_deleted:
             representation['content'] = '삭제된 댓글입니다.'
             representation['author'] = '알 수 없는 사용자'
@@ -221,10 +241,10 @@ class PostDetailSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     board = BoardSerializer(read_only=True)
-    comments = CommentSerializer(many=True, read_only=True)
+    comments = serializers.SerializerMethodField()
     attachment_paths = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
-    comments_count = serializers.IntegerField(source='comments.count', read_only=True)
+    comments_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
     content_md = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
@@ -239,6 +259,14 @@ class PostDetailSerializer(serializers.ModelSerializer):
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
+
+    def get_comments(self, obj):
+        # 최상위 댓글만 가져오고 created_at 기준 오래된 순으로 정렬 (최신 댓글이 아래에)
+        comments = obj.comments.filter(parent__isnull=True).order_by('created_at')
+        return CommentSerializer(comments, many=True, context=self.context).data
+
+    def get_comments_count(self, obj):
+        return obj.comments.count()
 
     def get_is_liked(self, obj):
         user = self.context['request'].user
