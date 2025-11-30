@@ -155,11 +155,13 @@ class PostListSerializer(serializers.ModelSerializer):
     author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     attachment_paths = serializers.SerializerMethodField()
+    board_id = serializers.IntegerField(source='board.id', read_only=True)
+    board_name = serializers.CharField(source='board.name', read_only=True)
 
 
     class Meta:
         model = Post
-        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'attachment_paths']
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'attachment_paths', 'board_id', 'board_name']
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
