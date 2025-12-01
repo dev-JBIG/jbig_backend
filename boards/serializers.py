@@ -154,6 +154,7 @@ class PostListSerializer(serializers.ModelSerializer):
     author = serializers.CharField(source='author.username', read_only=True)
     author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
+    comment_count = serializers.SerializerMethodField()
     attachment_paths = serializers.SerializerMethodField()
     board_id = serializers.IntegerField(source='board.id', read_only=True)
     board_name = serializers.CharField(source='board.name', read_only=True)
@@ -161,10 +162,13 @@ class PostListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Post
-        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'attachment_paths', 'board_id', 'board_name']
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name']
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()
 
     def get_attachment_paths(self, obj):
         attachments_list = obj.attachment_paths
