@@ -23,10 +23,10 @@ from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResp
 
 logger = logging.getLogger(__name__)
 
-from .models import Board, Post, Comment, Category
+from .models import Board, Post, Comment, Category, Notification
 from .serializers import (
     BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
-    CommentSerializer, CategoryListResponseSerializer, PostListResponseSerializer
+    CommentSerializer, CategoryListResponseSerializer, PostListResponseSerializer, NotificationSerializer
 )
 from .permissions import (
     IsOwnerOrReadOnly,
@@ -84,6 +84,13 @@ class PostLikeAPIView(generics.GenericAPIView):
         except post.likes.through.DoesNotExist:
             post.likes.add(user)
             is_liked = True
+            # 좋아요 추가 시에만 알림 생성
+            create_notification(
+                recipient=post.author,
+                actor=user,
+                notification_type=Notification.NotificationType.LIKE,
+                post=post
+            )
 
         likes_count = post.likes.count()
         return Response({'likes_count': likes_count, 'is_liked': is_liked}, status=status.HTTP_200_OK)
@@ -439,7 +446,27 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
-        serializer.save(author=self.request.user, post=post)
+        comment = serializer.save(author=self.request.user, post=post)
+
+        # 알림 생성
+        if comment.parent:
+            # 대댓글인 경우: 부모 댓글 작성자에게 알림
+            create_notification(
+                recipient=comment.parent.author,
+                actor=self.request.user,
+                notification_type=Notification.NotificationType.REPLY,
+                post=post,
+                comment=comment
+            )
+        else:
+            # 일반 댓글인 경우: 게시글 작성자에게 알림
+            create_notification(
+                recipient=post.author,
+                actor=self.request.user,
+                notification_type=Notification.NotificationType.COMMENT,
+                post=post,
+                comment=comment
+            )
 
 @extend_schema(tags=['댓글'])
 @extend_schema_view(
@@ -623,3 +650,69 @@ class GeneratePresignedURLAPIView(APIView):
         except Exception as e:
             logger.error(f"알 수 없는 에러: {e}")
             return Response({"error": "An unknown error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# 알림 생성 헬퍼 함수
+def create_notification(recipient, actor, notification_type, post, comment=None):
+    """알림을 생성합니다. 본인에게는 알림을 보내지 않습니다."""
+    if recipient == actor:
+        return None
+    return Notification.objects.create(
+        recipient=recipient,
+        actor=actor,
+        notification_type=notification_type,
+        post=post,
+        comment=comment
+    )
+
+
+@extend_schema(tags=['알림'])
+@extend_schema_view(
+    get=extend_schema(
+        summary="알림 목록 조회",
+        description="로그인한 사용자의 알림 목록을 조회합니다.",
+    )
+)
+class NotificationListAPIView(generics.ListAPIView):
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(recipient=self.request.user).order_by('-created_at')[:50]
+
+
+@extend_schema(tags=['알림'])
+class NotificationUnreadCountAPIView(APIView):
+    """읽지 않은 알림 개수를 반환합니다."""
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="읽지 않은 알림 개수",
+        description="로그인한 사용자의 읽지 않은 알림 개수를 반환합니다.",
+    )
+    def get(self, request):
+        count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+        return Response({'unread_count': count})
+
+
+@extend_schema(tags=['알림'])
+class NotificationMarkReadAPIView(APIView):
+    """알림을 읽음으로 표시합니다."""
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="알림 읽음 처리",
+        description="특정 알림 또는 전체 알림을 읽음으로 표시합니다.",
+    )
+    def post(self, request, notification_id=None):
+        if notification_id:
+            # 특정 알림 읽음 처리
+            notification = get_object_or_404(
+                Notification, id=notification_id, recipient=request.user
+            )
+            notification.is_read = True
+            notification.save()
+        else:
+            # 전체 알림 읽음 처리
+            Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+        return Response({'success': True})

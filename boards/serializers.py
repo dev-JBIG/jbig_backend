@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 from django.conf import settings
 from rest_framework import serializers
 
-from .models import Category, Board, Post, Comment
+from .models import Category, Board, Post, Comment, Notification
 
 logger = logging.getLogger(__name__)
 
@@ -343,3 +343,27 @@ class PostListResponseSerializer(serializers.Serializer):
 class CategoryListResponseSerializer(serializers.Serializer):
     total_post_count = serializers.IntegerField()
     categories = CategoryWithBoardsSerializer(many=True)
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source='actor.username', read_only=True)
+    actor_semester = serializers.IntegerField(source='actor.semester', read_only=True)
+    post_title = serializers.CharField(source='post.title', read_only=True)
+    post_id = serializers.IntegerField(source='post.id', read_only=True)
+    board_id = serializers.IntegerField(source='post.board.id', read_only=True)
+    notification_type_display = serializers.CharField(source='get_notification_type_display', read_only=True)
+    comment_content = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'notification_type', 'notification_type_display',
+            'actor_name', 'actor_semester', 'post_id', 'post_title', 'board_id',
+            'comment_content', 'is_read', 'created_at'
+        ]
+
+    def get_comment_content(self, obj):
+        if obj.comment and not obj.comment.is_deleted:
+            content = obj.comment.content
+            return content[:50] + '...' if len(content) > 50 else content
+        return None

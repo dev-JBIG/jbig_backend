@@ -12,6 +12,9 @@ from .views import (
     AllPostSearchView,
     PostLikeAPIView,
     BoardDetailAPIView,
+    NotificationListAPIView,
+    NotificationUnreadCountAPIView,
+    NotificationMarkReadAPIView,
 )
 
 router = DefaultRouter()
@@ -29,4 +32,9 @@ urlpatterns = [
     path('posts/<int:post_id>/like/', PostLikeAPIView.as_view(), name='post-like'),
     path('posts/<int:post_id>/comments/', CommentListCreateAPIView.as_view(), name='comment-list-create'),
     path('comments/<int:comment_id>/', CommentUpdateDestroyAPIView.as_view(), name='comment-detail-update-destroy'),
+    # 알림 API
+    path('notifications/', NotificationListAPIView.as_view(), name='notification-list'),
+    path('notifications/unread-count/', NotificationUnreadCountAPIView.as_view(), name='notification-unread-count'),
+    path('notifications/mark-read/', NotificationMarkReadAPIView.as_view(), name='notification-mark-all-read'),
+    path('notifications/<int:notification_id>/mark-read/', NotificationMarkReadAPIView.as_view(), name='notification-mark-read'),
 ]

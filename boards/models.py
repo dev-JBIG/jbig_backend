@@ -190,3 +190,52 @@ class Attachment(models.Model):
 
     def __str__(self):
         return self.filename
+
+
+class Notification(models.Model):
+    class NotificationType(models.IntegerChoices):
+        COMMENT = 1, '댓글'           # 내 글에 댓글이 달림
+        REPLY = 2, '대댓글'            # 내 댓글에 대댓글이 달림
+        LIKE = 3, '좋아요'             # 내 글에 좋아요가 달림
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name='알림 받는 사용자'
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notifications_sent',
+        verbose_name='알림 발생시킨 사용자'
+    )
+    notification_type = models.IntegerField(
+        choices=NotificationType.choices,
+        verbose_name='알림 유형'
+    )
+    post = models.ForeignKey(
+        Post,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name='관련 게시글'
+    )
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+        verbose_name='관련 댓글'
+    )
+    is_read = models.BooleanField(default=False, verbose_name='읽음 여부')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'notification'
+        verbose_name = '알림'
+        verbose_name_plural = '알림 목록'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.recipient}에게 {self.get_notification_type_display()} 알림'
