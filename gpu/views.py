@@ -1,5 +1,5 @@
 import json
-import logging
+import requests
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 from vastai_sdk import VastAI
 
-logger = logging.getLogger(__name__)
+VAST_API_BASE = "https://console.vast.ai/api/v0"
 
 
 def get_vast_client():
@@ -93,34 +93,36 @@ class InstanceView(APIView):
             )
 
         try:
-            client = get_vast_client()
+            # REST API 직접 호출
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {settings.VAST_API_KEY}",
+            }
 
-            # 환경변수 문자열로 변환
-            env_str = " ".join([f"-e {k}={v}" for k, v in env.items()]) if env else ""
+            payload = {
+                "client_id": "me",
+                "image": image,
+                "disk": disk_gb,
+                "onstart": onstart,
+                "env": env,
+            }
 
-            logger.info(f"Creating instance: id={bundle_id}, image={image}, disk={disk_gb}")
-
-            result = client.create_instance(
-                id=bundle_id,
-                image=image,
-                disk=disk_gb,
-                onstart=onstart,
-                env=env_str if env_str else None,
+            resp = requests.put(
+                f"{VAST_API_BASE}/asks/{bundle_id}/",
+                headers=headers,
+                json=payload,
+                timeout=60,
             )
 
-            logger.info(f"create_instance result: {result}, type: {type(result)}")
+            if not resp.ok:
+                return Response(
+                    {"detail": f"Vast.ai API 오류: {resp.status_code} - {resp.text}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
-            # 응답 파싱
-            if isinstance(result, str):
-                if result.strip():
-                    result = json.loads(result)
-                else:
-                    result = {}
-
-            if isinstance(result, dict):
-                instance_id = result.get("new_contract") or result.get("id") or result.get("instance_id")
-            else:
-                instance_id = None
+            result = resp.json() if resp.text else {}
+            instance_id = result.get("new_contract") or result.get("id") or result.get("instance_id")
 
             if not instance_id:
                 return Response(
