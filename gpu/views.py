@@ -32,13 +32,12 @@ class OfferListView(APIView):
         try:
             client = get_vast_client()
 
-            # search_offers 쿼리 구성 (가격 제한 + Jupyter 태그)
+            # search_offers 쿼리 구성 (가격 제한만)
             query_parts = [
                 "verified=true",
                 "rentable=true",
                 f"dph_total<={max_hourly_price}",
                 "reliability>0.9",
-                "jupyter=true",
             ]
 
             query = " ".join(query_parts)
@@ -105,8 +104,9 @@ class InstanceView(APIView):
                 "client_id": "me",
                 "image": image,
                 "disk": disk_gb,
-                "onstart": onstart,
-                "env": env,
+                "runtype": "jupyter_direct",
+                "use_jupyter_lab": True,
+                "jupyter_dir": "/workspace",
             }
 
             resp = requests.put(
@@ -170,6 +170,7 @@ class InstanceDetailView(APIView):
                         "status": inst.get("actual_status", "unknown"),
                         "public_ip": inst.get("public_ipaddr"),
                         "ports": inst.get("ports", {}),
+                        "jupyter_url": inst.get("jupyter_url"),
                     })
 
             return Response(
