@@ -134,9 +134,10 @@ class InstanceView(APIView):
             })
 
         except Exception as e:
-            logger.exception(f"인스턴스 생성 실패: {e}")
+            import traceback
+            tb = traceback.format_exc()
             return Response(
-                {"detail": f"인스턴스 생성 실패: {str(e)}"},
+                {"detail": f"인스턴스 생성 실패: {str(e)}", "traceback": tb},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
