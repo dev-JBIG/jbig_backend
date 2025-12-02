@@ -1,7 +1,8 @@
 import random
 import string
 from django.core.mail import send_mail
-from django.contrib.auth.hashers import make_password # Import hashing utilities
+from django.contrib.auth.hashers import make_password
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer, TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -51,7 +52,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 "message": "계정이 비활성화 상태입니다. 관리자에게 문의해주세요."
             }, code='authentication')
 
-        # 모든 검증을 통과한 후, 수동으로 토큰 생성
+        # 모든 검증을 통과한 후, last_login 업데이트
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+
+        # 수동으로 토큰 생성
         refresh = RefreshToken.for_user(user)
 
         data = {
@@ -205,15 +210,21 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     email_id = serializers.SerializerMethodField()
     is_self = serializers.SerializerMethodField()
     date_joined = serializers.DateTimeField(format="%Y-%m-%d", read_only=True)
+    last_login = serializers.SerializerMethodField()
     posts = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('username', 'email_id', 'semester', 'resume', 'date_joined', 'is_self', 'posts', 'comments')
+        fields = ('username', 'email_id', 'semester', 'resume', 'date_joined', 'last_login', 'is_self', 'posts', 'comments')
 
     def get_email_id(self, obj):
         return obj.email.split('@')[0] if obj.email else ''
+
+    def get_last_login(self, obj):
+        if not obj.last_login:
+            return None
+        return obj.last_login.isoformat()
 
     def get_is_self(self, obj):
         request = self.context.get('request')
