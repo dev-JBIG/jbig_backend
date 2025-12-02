@@ -177,6 +177,7 @@ class InstanceDetailView(APIView):
                     public_ip = inst.get("public_ipaddr")
                     ports = inst.get("ports", {})
                     actual_status = inst.get("actual_status", "unknown")
+                    jupyter_token = inst.get("jupyter_token", "")
 
                     jupyter_url = inst.get("jupyter_url")
                     if not jupyter_url and public_ip and ports:
@@ -185,6 +186,11 @@ class InstanceDetailView(APIView):
                         if port_key and ports[port_key]:
                             host_port = ports[port_key][0].get("HostPort", "8080")
                             jupyter_url = f"https://{public_ip}:{host_port}/"
+
+                    # URL에 토큰이 없으면 추가
+                    if jupyter_url and jupyter_token and "token=" not in jupyter_url:
+                        separator = "&" if "?" in jupyter_url else "?"
+                        jupyter_url = f"{jupyter_url}{separator}token={jupyter_token}"
 
                     return Response({
                         "id": inst.get("id"),
