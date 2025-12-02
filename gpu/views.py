@@ -185,7 +185,7 @@ class InstanceDetailView(APIView):
             return Response({"detail": "인스턴스 없음"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            get_vast_client().destroy_instance(ID=instance_id)
+            get_vast_client().destroy_instance(ID=int(instance_id))
             gpu_inst.status, gpu_inst.terminated_at = "terminated", timezone.now()
             gpu_inst.save(update_fields=['status', 'terminated_at'])
             return Response({"detail": "종료됨"})
