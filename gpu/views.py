@@ -1,4 +1,5 @@
 import json
+import logging
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -6,6 +7,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 from vastai_sdk import VastAI
+
+logger = logging.getLogger(__name__)
 
 
 def get_vast_client():
@@ -95,6 +98,8 @@ class InstanceView(APIView):
             # 환경변수 문자열로 변환
             env_str = " ".join([f"-e {k}={v}" for k, v in env.items()]) if env else ""
 
+            logger.info(f"Creating instance: id={bundle_id}, image={image}, disk={disk_gb}")
+
             result = client.create_instance(
                 id=bundle_id,
                 image=image,
@@ -102,6 +107,8 @@ class InstanceView(APIView):
                 onstart=onstart,
                 env=env_str if env_str else None,
             )
+
+            logger.info(f"create_instance result: {result}, type: {type(result)}")
 
             # 응답 파싱
             if isinstance(result, str):
@@ -127,6 +134,7 @@ class InstanceView(APIView):
             })
 
         except Exception as e:
+            logger.exception(f"인스턴스 생성 실패: {e}")
             return Response(
                 {"detail": f"인스턴스 생성 실패: {str(e)}"},
                 status=status.HTTP_502_BAD_GATEWAY,
