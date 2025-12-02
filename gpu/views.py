@@ -47,7 +47,7 @@ class OfferListView(APIView):
 
             offer_list = result if isinstance(result, list) else result.get("offers", [])
 
-            for o in offer_list[:50]:
+            for o in offer_list:
                 offers.append({
                     "id": o.get("id"),
                     "gpu_name": o.get("gpu_name", "Unknown"),
@@ -57,9 +57,9 @@ class OfferListView(APIView):
                     "hostname": o.get("hostname", ""),
                 })
 
-            # 가격순 정렬
+            # 가격순 정렬 후 최대 10개
             offers.sort(key=lambda x: x["hourly_price"])
-            return Response(offers)
+            return Response(offers[:10])
 
         except Exception as e:
             return Response(
