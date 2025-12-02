@@ -32,12 +32,13 @@ class OfferListView(APIView):
         try:
             client = get_vast_client()
 
-            # search_offers 쿼리 구성 (가격 제한만 필수)
+            # search_offers 쿼리 구성 (가격 제한 + Jupyter 태그)
             query_parts = [
                 "verified=true",
                 "rentable=true",
                 f"dph_total<={max_hourly_price}",
                 "reliability>0.9",
+                "jupyter=true",
             ]
 
             query = " ".join(query_parts)
