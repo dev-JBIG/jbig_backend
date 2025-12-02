@@ -28,6 +28,34 @@ def get_s3_client():
     return _s3_client
 
 
+def get_presigned_attachments(attachments_list):
+    """첨부파일 목록에 대해 presigned URL을 생성하는 공통 함수"""
+    if not attachments_list or not isinstance(attachments_list, list):
+        return []
+    try:
+        s3_client = get_s3_client()
+    except Exception as e:
+        logger.error(f"S3 클라이언트 생성 실패: {e}")
+        return []
+
+    presigned_attachments = []
+    for item in attachments_list:
+        file_key = item.get('path') or item.get('url')
+        name = item.get('name')
+        if not file_key or not name or not file_key.startswith("uploads/"):
+            continue
+        try:
+            meta = s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
+            presigned_attachments.append({
+                "url": s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600),
+                "name": name,
+                "size": meta.get('ContentLength')
+            })
+        except ClientError as e:
+            logger.error(f"S3 에러 (Key: {file_key}): {e}")
+    return presigned_attachments
+
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -171,32 +199,7 @@ class PostListSerializer(serializers.ModelSerializer):
         return obj.comments.count()
 
     def get_attachment_paths(self, obj):
-        attachments_list = obj.attachment_paths
-        if not attachments_list or not isinstance(attachments_list, list):
-            return []
-
-        try:
-            s3_client = get_s3_client()
-        except Exception as e:
-            logger.error(f"S3 클라이언트 생성 실패: {e}")
-            return []
-
-        presigned_attachments = []
-        for item in attachments_list:
-            file_key = item.get('path') or item.get('url')
-            name = item.get('name')
-            if not file_key or not name or not file_key.startswith("uploads/"):
-                continue
-            try:
-                meta = s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
-                presigned_attachments.append({
-                    "url": s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600),
-                    "name": name,
-                    "size": meta.get('ContentLength')
-                })
-            except ClientError as e:
-                logger.error(f"S3 에러 (Key: {file_key}): {e}")
-        return presigned_attachments
+        return get_presigned_attachments(obj.attachment_paths)
 
 
 def normalize_ncp_urls(content):
@@ -306,31 +309,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
         return re.sub(r"(\!\[[^\]]*\])(\((ncp-key:\/\/([^\)]+))\))", lambda m: m.group(1) + replace_with_presigned_url(m), raw_md)
 
     def get_attachment_paths(self, obj):
-        attachments_list = obj.attachment_paths
-        if not attachments_list or not isinstance(attachments_list, list):
-            return []
-        try:
-            s3_client = get_s3_client()
-        except Exception as e:
-            logger.error(f"S3 클라이언트 생성 실패: {e}")
-            return []
-
-        presigned_attachments = []
-        for item in attachments_list:
-            file_key = item.get('path') or item.get('url')
-            name = item.get('name')
-            if not file_key or not name or not file_key.startswith("uploads/"):
-                continue
-            try:
-                meta = s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
-                presigned_attachments.append({
-                    "url": s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600),
-                    "name": name,
-                    "size": meta.get('ContentLength')
-                })
-            except ClientError as e:
-                logger.error(f"S3 에러 (Key: {file_key}): {e}")
-        return presigned_attachments
+        return get_presigned_attachments(obj.attachment_paths)
 
 
 class PostListResponseSerializer(serializers.Serializer):

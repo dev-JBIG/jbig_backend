@@ -34,7 +34,6 @@ from boards.serializers import PostListSerializer, CommentSerializer
 from boards.models import Post, Comment
 
 
-from rest_framework.parsers import JSONParser, FormParser
 
 
 @extend_schema(

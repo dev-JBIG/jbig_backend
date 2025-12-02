@@ -10,15 +10,12 @@ from botocore.exceptions import ClientError
 
 from django.conf import settings
 from django.shortcuts import get_object_or_404
-from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F, Q, Value, CharField, Func
-from django.db.models.functions import Replace
 
 from rest_framework import generics, status, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.parsers import MultiPartParser, FormParser
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 
 logger = logging.getLogger(__name__)
