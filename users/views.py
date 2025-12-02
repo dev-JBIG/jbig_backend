@@ -261,9 +261,13 @@ class CustomTokenRefreshView(APIView):
             except User.DoesNotExist:
                 raise AuthenticationFailed('User not found', code='user_not_found')
 
+            # last_login 업데이트
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+
             # 새로운 리프레시 토큰 생성
             new_refresh_token = RefreshToken.for_user(user)
-            
+
             try:
                 old_token.blacklist()
             except AttributeError:
