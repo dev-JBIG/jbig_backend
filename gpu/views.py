@@ -100,6 +100,10 @@ class InstanceView(APIView):
                 "Authorization": f"Bearer {settings.VAST_API_KEY}",
             }
 
+            # Jupyter 토큰 생성
+            import secrets
+            jupyter_token = secrets.token_hex(32)
+
             payload = {
                 "client_id": "me",
                 "image": image,
@@ -107,6 +111,9 @@ class InstanceView(APIView):
                 "runtype": "jupyter_direct",
                 "use_jupyter_lab": True,
                 "jupyter_dir": "/workspace",
+                "extra_env": {
+                    "JUPYTER_TOKEN": jupyter_token,
+                },
             }
 
             resp = requests.put(
@@ -134,6 +141,7 @@ class InstanceView(APIView):
             return Response({
                 "id": instance_id,
                 "status": "starting",
+                "jupyter_token": jupyter_token,
             })
 
         except Exception as e:
@@ -165,12 +173,25 @@ class InstanceDetailView(APIView):
 
             for inst in instances:
                 if str(inst.get("id")) == str(instance_id):
+                    # Jupyter URL 구성
+                    public_ip = inst.get("public_ipaddr")
+                    ports = inst.get("ports", {})
+                    actual_status = inst.get("actual_status", "unknown")
+
+                    jupyter_url = inst.get("jupyter_url")
+                    if not jupyter_url and public_ip and ports:
+                        # 포트 매핑에서 8080 찾기
+                        port_key = next((k for k in ports.keys() if "8080" in k), None)
+                        if port_key and ports[port_key]:
+                            host_port = ports[port_key][0].get("HostPort", "8080")
+                            jupyter_url = f"https://{public_ip}:{host_port}/"
+
                     return Response({
                         "id": inst.get("id"),
-                        "status": inst.get("actual_status", "unknown"),
-                        "public_ip": inst.get("public_ipaddr"),
-                        "ports": inst.get("ports", {}),
-                        "jupyter_url": inst.get("jupyter_url"),
+                        "status": actual_status,
+                        "public_ip": public_ip,
+                        "ports": ports,
+                        "jupyter_url": jupyter_url,
                     })
 
             return Response(
