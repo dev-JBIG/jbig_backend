@@ -9,7 +9,10 @@ from vastai_sdk import VastAI
 
 
 def get_vast_client():
-    return VastAI(api_key=settings.VAST_API_KEY)
+    api_key = settings.VAST_API_KEY
+    if not api_key:
+        raise ValueError("VAST_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
+    return VastAI(api_key=api_key)
 
 
 @extend_schema(tags=["GPU"])
