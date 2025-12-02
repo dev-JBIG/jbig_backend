@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'boards',
     'jbig_backend',
     'html_serving',
+    'gpu',
 ]
 
 MIDDLEWARE = [
@@ -169,6 +170,9 @@ MEDIA_ROOT = Path(_MEDIA_ROOT) if _MEDIA_ROOT else Path('/home/ubuntu/volume/jbi
 # App content paths configurable via environment
 CONTENT_NOTION_SUBDIR = os.getenv('CONTENT_NOTION_SUBDIR', 'notion')
 CONTENT_BANNER_SUBPATH = os.getenv('CONTENT_BANNER_SUBPATH', 'banner/banner.jpg')
+
+# Vast.ai GPU rental
+VAST_API_KEY = os.getenv('VAST_API_KEY', '')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
