@@ -24,25 +24,18 @@ class OfferListView(APIView):
         description="조건에 맞는 Vast.ai GPU 오퍼를 검색합니다.",
     )
     def post(self, request):
-        gpu_name = request.data.get("gpu_name", "")
-        min_vram_gb = request.data.get("min_vram_gb", 0)
-        num_gpus = request.data.get("num_gpus", 1)
-        max_hourly_price = request.data.get("max_hourly_price", 10.0)
+        max_hourly_price = request.data.get("max_hourly_price", 1.0)
 
         try:
             client = get_vast_client()
 
-            # search_offers 쿼리 구성
+            # search_offers 쿼리 구성 (가격 제한만 필수)
             query_parts = [
                 "verified=true",
                 "rentable=true",
-                f"num_gpus>={num_gpus}",
-                f"gpu_ram>={min_vram_gb * 1024}",  # MB 단위
                 f"dph_total<={max_hourly_price}",
                 "reliability>0.9",
             ]
-            if gpu_name:
-                query_parts.append(f"gpu_name=~{gpu_name}")
 
             query = " ".join(query_parts)
             result = client.search_offers(query=query, limit=50)
