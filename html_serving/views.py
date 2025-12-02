@@ -20,20 +20,6 @@ def notion_view(request):
 
 @extend_schema(
     tags=["Deprecated"],
-    summary="[Deprecated] Award HTML",
-    description="This endpoint is deprecated.",
-    deprecated=True,
-)
-@api_view(['GET'])
-def award_view(request):
-    return Response(
-        {"detail": "This endpoint is deprecated."},
-        status=status.HTTP_410_GONE
-    )
-
-
-@extend_schema(
-    tags=["Deprecated"],
     summary="[Deprecated] Banner Image",
     description="This endpoint is deprecated. Banner is now served via NCP CDN.",
     deprecated=True,

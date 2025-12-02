@@ -168,8 +168,6 @@ MEDIA_ROOT = Path(_MEDIA_ROOT) if _MEDIA_ROOT else Path('/home/ubuntu/volume/jbi
 
 # App content paths configurable via environment
 CONTENT_NOTION_SUBDIR = os.getenv('CONTENT_NOTION_SUBDIR', 'notion')
-CONTENT_AWARDS_SUBDIR = os.getenv('CONTENT_AWARDS_SUBDIR', 'awards')
-CONTENT_AWARD_HTML_FILENAME = os.getenv('CONTENT_AWARD_HTML_FILENAME', 'Awards 24c0b4f89da28059b565cbf910e6d6ad.html')
 CONTENT_BANNER_SUBPATH = os.getenv('CONTENT_BANNER_SUBPATH', 'banner/banner.jpg')
 
 # Default primary key field type
