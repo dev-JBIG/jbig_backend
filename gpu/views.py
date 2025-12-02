@@ -96,17 +96,30 @@ class InstanceView(APIView):
             env_str = " ".join([f"-e {k}={v}" for k, v in env.items()]) if env else ""
 
             result = client.create_instance(
-                ID=bundle_id,
+                id=bundle_id,
                 image=image,
                 disk=disk_gb,
                 onstart=onstart,
                 env=env_str if env_str else None,
             )
 
+            # 응답 파싱
             if isinstance(result, str):
-                result = json.loads(result)
+                if result.strip():
+                    result = json.loads(result)
+                else:
+                    result = {}
 
-            instance_id = result.get("new_contract") or result.get("id")
+            if isinstance(result, dict):
+                instance_id = result.get("new_contract") or result.get("id") or result.get("instance_id")
+            else:
+                instance_id = None
+
+            if not instance_id:
+                return Response(
+                    {"detail": f"인스턴스 생성 응답 오류: {result}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
             return Response({
                 "id": instance_id,
