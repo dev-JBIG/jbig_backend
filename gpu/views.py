@@ -1,0 +1,179 @@
+import json
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
+from vastai_sdk import VastAI
+
+
+def get_vast_client():
+    return VastAI(api_key=settings.VAST_API_KEY)
+
+
+@extend_schema(tags=["GPU"])
+class OfferListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="GPU 오퍼 검색",
+        description="조건에 맞는 Vast.ai GPU 오퍼를 검색합니다.",
+    )
+    def post(self, request):
+        gpu_name = request.data.get("gpu_name", "")
+        min_vram_gb = request.data.get("min_vram_gb", 0)
+        num_gpus = request.data.get("num_gpus", 1)
+        max_hourly_price = request.data.get("max_hourly_price", 10.0)
+
+        try:
+            client = get_vast_client()
+
+            # search_offers 쿼리 구성
+            query_parts = [
+                "verified=true",
+                "rentable=true",
+                f"num_gpus>={num_gpus}",
+                f"gpu_ram>={min_vram_gb * 1024}",  # MB 단위
+                f"dph_total<={max_hourly_price}",
+                "reliability>0.9",
+            ]
+            if gpu_name:
+                query_parts.append(f"gpu_name=~{gpu_name}")
+
+            query = " ".join(query_parts)
+            result = client.search_offers(query=query, limit=50)
+
+            # 결과 파싱
+            offers = []
+            if isinstance(result, str):
+                result = json.loads(result)
+
+            offer_list = result if isinstance(result, list) else result.get("offers", [])
+
+            for o in offer_list[:50]:
+                offers.append({
+                    "id": o.get("id"),
+                    "gpu_name": o.get("gpu_name", "Unknown"),
+                    "vram_gb": round(o.get("gpu_ram", 0) / 1024, 1),
+                    "hourly_price": o.get("dph_total", 0),
+                    "reliability": o.get("reliability", 0),
+                    "hostname": o.get("hostname", ""),
+                })
+
+            # 가격순 정렬
+            offers.sort(key=lambda x: x["hourly_price"])
+            return Response(offers)
+
+        except Exception as e:
+            return Response(
+                {"detail": f"Vast.ai API 오류: {str(e)}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+
+@extend_schema(tags=["GPU"])
+class InstanceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="GPU 인스턴스 생성",
+        description="선택한 오퍼로 Vast.ai 인스턴스를 생성합니다.",
+    )
+    def post(self, request):
+        bundle_id = request.data.get("bundle_id")
+        image = request.data.get("image", "pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime")
+        disk_gb = request.data.get("disk", 50)
+        onstart = request.data.get("onstart", "")
+        env = request.data.get("env", {})
+
+        if not bundle_id:
+            return Response(
+                {"detail": "bundle_id가 필요합니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            client = get_vast_client()
+
+            # 환경변수 문자열로 변환
+            env_str = " ".join([f"-e {k}={v}" for k, v in env.items()]) if env else ""
+
+            result = client.create_instance(
+                ID=bundle_id,
+                image=image,
+                disk=disk_gb,
+                onstart=onstart,
+                env=env_str if env_str else None,
+            )
+
+            if isinstance(result, str):
+                result = json.loads(result)
+
+            instance_id = result.get("new_contract") or result.get("id")
+
+            return Response({
+                "id": instance_id,
+                "status": "starting",
+            })
+
+        except Exception as e:
+            return Response(
+                {"detail": f"인스턴스 생성 실패: {str(e)}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+
+@extend_schema(tags=["GPU"])
+class InstanceDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="GPU 인스턴스 조회",
+        description="인스턴스 상태와 IP 정보를 조회합니다.",
+    )
+    def get(self, request, instance_id):
+        try:
+            client = get_vast_client()
+            result = client.show_instances()
+
+            if isinstance(result, str):
+                result = json.loads(result)
+
+            instances = result if isinstance(result, list) else result.get("instances", [])
+
+            for inst in instances:
+                if str(inst.get("id")) == str(instance_id):
+                    return Response({
+                        "id": inst.get("id"),
+                        "status": inst.get("actual_status", "unknown"),
+                        "public_ip": inst.get("public_ipaddr"),
+                        "ports": inst.get("ports", {}),
+                    })
+
+            return Response(
+                {"detail": "인스턴스를 찾을 수 없습니다."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        except Exception as e:
+            return Response(
+                {"detail": f"인스턴스 조회 실패: {str(e)}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+    @extend_schema(
+        summary="GPU 인스턴스 종료",
+        description="인스턴스를 완전히 삭제합니다.",
+    )
+    def delete(self, request, instance_id):
+        try:
+            client = get_vast_client()
+            client.destroy_instance(ID=instance_id)
+            return Response({"detail": "인스턴스가 종료되었습니다."})
+
+        except Exception as e:
+            return Response(
+                {"detail": f"인스턴스 종료 실패: {str(e)}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
