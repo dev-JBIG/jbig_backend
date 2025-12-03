@@ -44,6 +44,7 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(null=True, blank=True)
     resume = models.TextField(blank=True, default='', verbose_name='자기소개')
+    can_use_gpu = models.BooleanField(default=False, verbose_name='GPU 대여 권한')
 
     objects = UserManager()
 
