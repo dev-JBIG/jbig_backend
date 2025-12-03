@@ -1,4 +1,4 @@
-import json, secrets, logging, requests
+import json, logging, requests
 from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
@@ -104,7 +104,6 @@ class InstanceView(APIView):
             return Response({"detail": f"최대 {MAX_INSTANCES_PER_USER}개 제한"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            jupyter_token = secrets.token_hex(32)
             resp = requests.put(
                 f"{VAST_API_BASE}/asks/{bundle_id}/",
                 headers={"Authorization": f"Bearer {settings.VAST_API_KEY}", "Content-Type": "application/json"},
@@ -115,7 +114,6 @@ class InstanceView(APIView):
                     "runtype": "jupyter_direct",
                     "use_jupyter_lab": True,
                     "jupyter_dir": "/workspace",
-                    "extra_env": {"JUPYTER_TOKEN": jupyter_token},
                 },
                 timeout=60,
             )
@@ -133,9 +131,9 @@ class InstanceView(APIView):
             GpuInstance.objects.create(
                 user=user, vast_instance_id=str(instance_id), offer_id=str(bundle_id),
                 gpu_name=request.data.get("gpu_name", ""), hourly_price=request.data.get("hourly_price", 0),
-                jupyter_token=jupyter_token, expires_at=expires_at,
+                expires_at=expires_at,
             )
-            return Response({"id": instance_id, "status": "starting", "jupyter_token": jupyter_token, "expires_at": expires_at.isoformat()})
+            return Response({"id": instance_id, "status": "starting", "expires_at": expires_at.isoformat()})
         except Exception:
             logger.exception("인스턴스 생성 실패")
             return Response({"detail": "인스턴스 생성 오류"}, status=status.HTTP_502_BAD_GATEWAY)
@@ -169,19 +167,8 @@ class InstanceDetailView(APIView):
                         gpu_inst.status = "running"
                         gpu_inst.save(update_fields=['status'])
 
-                    # jupyter url 구성
+                    # Vast.ai가 제공하는 jupyter_url 사용 (토큰 포함됨)
                     jupyter_url = inst.get("jupyter_url") or ""
-                    if not jupyter_url:
-                        ip, ports = inst.get("public_ipaddr"), inst.get("ports", {})
-                        if ip and ports:
-                            port_key = next((k for k in ports if "8080" in k), None)
-                            if port_key and ports[port_key]:
-                                jupyter_url = f"https://{ip}:{ports[port_key][0].get('HostPort', '8080')}/"
-
-                    # 토큰 추가
-                    token = gpu_inst.jupyter_token or inst.get("jupyter_token", "")
-                    if jupyter_url and token and "token=" not in jupyter_url:
-                        jupyter_url += ("&" if "?" in jupyter_url else "?") + f"token={token}"
 
                     return Response({
                         "id": inst.get("id"), "status": actual_status, "jupyter_url": jupyter_url,
