@@ -28,6 +28,26 @@ def check_gpu_permission(user):
     return None
 
 
+def sync_user_instances(user):
+    """DB의 활성 인스턴스를 Vast.ai와 동기화. 없으면 terminated 처리"""
+    active = GpuInstance.objects.filter(user=user, status__in=['starting', 'running'])
+    if not active.exists():
+        return
+
+    try:
+        result = get_vast_client().show_instances()
+        if isinstance(result, str):
+            result = json.loads(result)
+        vast_ids = {str(i.get("id")) for i in (result if isinstance(result, list) else result.get("instances", []))}
+
+        for inst in active:
+            if inst.vast_instance_id not in vast_ids:
+                inst.status, inst.terminated_at = "terminated", timezone.now()
+                inst.save(update_fields=['status', 'terminated_at'])
+    except Exception:
+        logger.exception("인스턴스 동기화 실패")
+
+
 @extend_schema(tags=["GPU"])
 class OfferListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -35,6 +55,9 @@ class OfferListView(APIView):
     def post(self, request):
         if err := check_gpu_permission(request.user):
             return err
+
+        # 기존 인스턴스 상태 동기화
+        sync_user_instances(request.user)
 
         try:
             client = get_vast_client()
@@ -69,6 +92,9 @@ class InstanceView(APIView):
         user = request.user
         if err := check_gpu_permission(user):
             return err
+
+        # 기존 인스턴스 상태 동기화
+        sync_user_instances(user)
 
         bundle_id = request.data.get("bundle_id")
         if not bundle_id:
