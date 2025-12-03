@@ -13,19 +13,26 @@ from .models import Category, Board, Post, Comment, Notification
 
 logger = logging.getLogger(__name__)
 
-_s3_client = None
+# Thread-local storage for S3 client (process/fork 안전)
+import threading
+_thread_local = threading.local()
+
 
 def get_s3_client():
-    global _s3_client
-    if _s3_client is None:
-        _s3_client = boto3.client(
+    """
+    Thread-local S3 클라이언트 반환.
+    각 스레드/프로세스별로 독립적인 클라이언트를 유지하여
+    gunicorn prefork 등 멀티프로세스 환경에서도 안전하게 동작.
+    """
+    if not hasattr(_thread_local, 's3_client'):
+        _thread_local.s3_client = boto3.client(
             's3',
             endpoint_url=settings.NCP_ENDPOINT_URL,
             aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
             aws_secret_access_key=settings.NCP_SECRET_KEY,
             config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
         )
-    return _s3_client
+    return _thread_local.s3_client
 
 
 def get_presigned_attachments(attachments_list):
@@ -203,10 +210,16 @@ class PostListSerializer(serializers.ModelSerializer):
 
 
 def normalize_ncp_urls(content):
-    """NCP presigned URL을 ncp-key:// 형식으로 정규화"""
+    """NCP presigned URL을 ncp-key:// 형식으로 정규화
+
+    다양한 NCP 엔드포인트/버킷명을 지원하도록 유연한 패턴 사용
+    """
     if not content:
         return content
-    pattern = r'https://kr\.object\.ncloudstorage\.com/jbig/(uploads/[^?\s\)]+)(?:\?[^\s\)]*)?'
+    # 다양한 NCP Object Storage URL 패턴 지원:
+    # - https://kr.object.ncloudstorage.com/버킷명/uploads/...
+    # - https://*.ncloudstorage.com/버킷명/uploads/...
+    pattern = r'https://[^/]+\.ncloudstorage\.com/[^/]+/(uploads/[^?\s\)]+)(?:\?[^\s\)]*)?'
     return re.sub(pattern, r'ncp-key://\1', content)
 
 
@@ -297,16 +310,29 @@ class PostDetailSerializer(serializers.ModelSerializer):
             return raw_md
 
         def replace_with_presigned_url(match):
-            file_key = match.group(4)
+            """ncp-key:// URL을 presigned URL로 교체"""
+            alt_text = match.group(1)  # ![alt text]
+            file_key = match.group(2)  # uploads/... 경로
             if not file_key:
                 return match.group(0)
             try:
-                url = s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600)
-                return f"({url})"
+                url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
+                    ExpiresIn=3600
+                )
+                return f"{alt_text}({url})"
             except Exception:
                 return match.group(0)
 
-        return re.sub(r"(\!\[[^\]]*\])(\((ncp-key:\/\/([^\)]+))\))", lambda m: m.group(1) + replace_with_presigned_url(m), raw_md)
+        # 정규식 패턴:
+        # - !\[.*?\] : 마크다운 이미지 alt 텍스트 (대괄호 포함 가능, non-greedy)
+        # - \(ncp-key://(uploads/...)\) : ncp-key:// 프로토콜 URL
+        # 주의: .*?는 non-greedy이므로 가능한 짧게 매칭하되,
+        #       전체 패턴이 매칭되도록 백트래킹하여 올바른 ]를 찾음
+        # re.DOTALL: .이 줄바꿈도 매칭하도록 함 (멀티라인 alt 텍스트 지원)
+        pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
+        return re.sub(pattern, replace_with_presigned_url, raw_md, flags=re.DOTALL)
 
     def get_attachment_paths(self, obj):
         return get_presigned_attachments(obj.attachment_paths)

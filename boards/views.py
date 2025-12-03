@@ -378,6 +378,71 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         serializer = self.get_serializer(instance, context={'request': request})
         return Response(serializer.data)
 
+    def update(self, request, *args, **kwargs):
+        """게시글 수정 시 제거된 파일들을 NCP에서 삭제"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        # 수정 전 파일 키 수집
+        old_attachment_keys = set()
+        if instance.attachment_paths and isinstance(instance.attachment_paths, list):
+            for att in instance.attachment_paths:
+                if isinstance(att, dict) and 'path' in att:
+                    file_key = att['path']
+                    if file_key.startswith('uploads/'):
+                        old_attachment_keys.add(file_key)
+
+        old_content_keys = set()
+        if instance.content_md:
+            old_content_keys = set(re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md))
+
+        # 실제 수정 수행
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        # 수정 후 파일 키 수집
+        instance.refresh_from_db()
+        new_attachment_keys = set()
+        if instance.attachment_paths and isinstance(instance.attachment_paths, list):
+            for att in instance.attachment_paths:
+                if isinstance(att, dict) and 'path' in att:
+                    file_key = att['path']
+                    if file_key.startswith('uploads/'):
+                        new_attachment_keys.add(file_key)
+
+        new_content_keys = set()
+        if instance.content_md:
+            new_content_keys = set(re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md))
+
+        # 삭제할 파일 키 계산 (기존에 있었지만 새로운 버전에 없는 것)
+        keys_to_delete = (old_attachment_keys - new_attachment_keys) | (old_content_keys - new_content_keys)
+
+        # NCP에서 삭제된 파일 제거
+        if keys_to_delete:
+            try:
+                s3_client = boto3.client(
+                    's3',
+                    endpoint_url=settings.NCP_ENDPOINT_URL,
+                    aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
+                    aws_secret_access_key=settings.NCP_SECRET_KEY,
+                    config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
+                )
+
+                for key in keys_to_delete:
+                    try:
+                        s3_client.delete_object(Bucket=settings.NCP_BUCKET_NAME, Key=key)
+                        logger.info(f"NCP 파일 삭제 완료 (수정 시 제거됨): {key}")
+                    except ClientError as e:
+                        logger.error(f"NCP 파일 삭제 실패 (Key: {key}): {e}")
+            except Exception as e:
+                logger.error(f"S3 클라이언트 생성 실패: {e}")
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+
+        return Response(serializer.data)
+
     def destroy(self, request, *args, **kwargs):
         """게시글 삭제 시 NCP에 저장된 파일들도 함께 삭제"""
         instance = self.get_object()
@@ -532,6 +597,11 @@ class BoardDetailAPIView(generics.RetrieveAPIView):
 
 # 업로드 URL 발급해주는 GeneratePresignedURlAPIView 클래스
 
+# 파일 업로드 제한 상수 (프론트엔드와 동일하게 유지)
+BLOCKED_EXTENSIONS = {'jsp', 'php', 'asp', 'cgi', 'exe', 'sh', 'bat', 'cmd', 'ps1'}
+MAX_EXTENSION_LENGTH = 10  # 확장자 최대 길이
+
+
 @extend_schema(
     tags=['파일'], # API 문서에서 '파일' 태그로 분류
     summary="파일 업로드용 Presigned URL 생성",
@@ -558,7 +628,7 @@ class BoardDetailAPIView(generics.RetrieveAPIView):
                 )
             ]
         ),
-        400: OpenApiResponse(description="파일 이름이 제공되지 않았습니다."),
+        400: OpenApiResponse(description="파일 이름이 제공되지 않았거나 허용되지 않는 확장자입니다."),
         500: OpenApiResponse(description="URL 생성에 실패했습니다."),
     }
 )
@@ -573,26 +643,38 @@ class GeneratePresignedURLAPIView(APIView):
         if not filename:
             return Response({"error": "No filename provided."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 파일명 검증: 빈 문자열, 너무 긴 이름 체크
+        filename = str(filename).strip()
+        if not filename or len(filename) > 255:
+            return Response({"error": "Invalid filename."}, status=status.HTTP_400_BAD_REQUEST)
+
         user = request.user
 
-        # 1. 파일 확장자 추출
+        # 1. 파일 확장자 추출 및 검증
         try:
-            extension = os.path.splitext(filename)[1].lstrip('.')
+            extension = os.path.splitext(filename)[1].lstrip('.').lower()
             if not extension:
-                 # 확장자가 없는 경우 기본값 (혹은 에러 처리)
-                extension = 'bin' 
+                extension = 'bin'
+
+            # 확장자 길이 검증
+            if len(extension) > MAX_EXTENSION_LENGTH:
+                return Response({"error": "Extension too long."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 차단된 확장자 검증
+            if extension in BLOCKED_EXTENSIONS:
+                return Response(
+                    {"error": f"File extension '.{extension}' is not allowed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         except Exception:
             extension = 'bin'
 
         # 2. 서버에서 고유한 파일 경로(Key) 생성
         # uploads/년/월/일/유저ID/고유ID.확장자
         # 예: "uploads/2025/10/28/12/a1b2c3d4-e5f6-4a5b-8c7d-9e0f1a2b3c4d.png"
-        file_key = os.path.join(
-            "uploads",
-            f"{datetime.now():%Y/%m/%d}",
-            str(user.id),
-            f"{uuid.uuid4()}.{extension}"
-        )
+        # 주의: S3는 슬래시(/)만 사용하므로 os.path.join 대신 직접 조합
+        now = datetime.now()
+        file_key = f"uploads/{now:%Y}/{now:%m}/{now:%d}/{user.id}/{uuid.uuid4()}.{extension}"
 
         # 3. boto3 클라이언트 생성
         try:
