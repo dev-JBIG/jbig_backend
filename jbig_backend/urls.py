@@ -10,7 +10,7 @@ from rest_framework_simplejwt.views import (
 from users.views import LogoutView
 from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView
 
-from boards.views import GeneratePresignedURLAPIView
+from boards.views import GeneratePresignedURLAPIView, DeleteFileAPIView
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/logout/', LogoutView.as_view(), name='logout'),
     path('api/boards/files/generate-upload-url/', GeneratePresignedURLAPIView.as_view(), name='file-generate-upload-url'),
+    path('api/boards/files/delete/', DeleteFileAPIView.as_view(), name='file-delete'),
     path('api/version/', version_info, name='version-info'),
 ]
 

@@ -603,6 +603,89 @@ MAX_EXTENSION_LENGTH = 10  # 확장자 최대 길이
 
 
 @extend_schema(
+    tags=['파일'],
+    summary="업로드된 파일 삭제",
+    description="NCP Object Storage에 업로드된 파일을 삭제합니다. 본인이 업로드한 파일만 삭제할 수 있습니다.",
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'path': {'type': 'string', 'example': 'uploads/2025/01/01/12/uuid.png'}
+            },
+            'required': ['path']
+        }
+    },
+    responses={
+        200: OpenApiResponse(description="파일 삭제 성공"),
+        400: OpenApiResponse(description="잘못된 파일 경로"),
+        403: OpenApiResponse(description="본인이 업로드한 파일이 아닙니다"),
+        404: OpenApiResponse(description="파일을 찾을 수 없습니다"),
+    }
+)
+class DeleteFileAPIView(APIView):
+    """업로드된 파일을 NCP에서 삭제하는 API"""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, *args, **kwargs):
+        file_key = request.data.get('path')
+
+        # 파일 경로 유효성 검사
+        if not file_key or not isinstance(file_key, str):
+            return Response({"error": "No file path provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        file_key = file_key.strip()
+        if not file_key.startswith('uploads/'):
+            return Response({"error": "Invalid file path."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 파일 경로에서 사용자 ID 추출하여 본인 파일인지 확인
+        # 경로 형식: uploads/년/월/일/유저ID/uuid.확장자
+        try:
+            parts = file_key.split('/')
+            if len(parts) >= 5:
+                file_owner_id = int(parts[4])  # uploads/년/월/일/유저ID/...
+                if file_owner_id != request.user.id:
+                    return Response(
+                        {"error": "You can only delete your own files."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, IndexError):
+            return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # NCP에서 파일 삭제
+        try:
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=settings.NCP_ENDPOINT_URL,
+                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.NCP_SECRET_KEY,
+                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
+            )
+
+            # 파일 존재 여부 확인
+            try:
+                s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
+            except ClientError as e:
+                if e.response['Error']['Code'] == '404':
+                    return Response({"error": "File not found."}, status=status.HTTP_404_NOT_FOUND)
+                raise
+
+            # 파일 삭제
+            s3_client.delete_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
+            logger.info(f"NCP 파일 삭제 완료 (사용자 요청): {file_key}")
+
+            return Response({"message": "File deleted successfully."}, status=status.HTTP_200_OK)
+
+        except ClientError as e:
+            logger.error(f"NCP 파일 삭제 실패 (Key: {file_key}): {e}")
+            return Response({"error": "Failed to delete file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.error(f"알 수 없는 에러: {e}")
+            return Response({"error": "An unknown error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@extend_schema(
     tags=['파일'], # API 문서에서 '파일' 태그로 분류
     summary="파일 업로드용 Presigned URL 생성",
     description="NCP Object Storage에 파일을 직접 업로드할 수 있는 10분 만료 Presigned URL을 발급받습니다.",
