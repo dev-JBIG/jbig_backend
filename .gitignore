@@ -19,4 +19,7 @@ jbig_backend.env
 # 로그 파일
 *.log
 
+# Media files (using NCP Object Storage)
+media/
+
 .venv/

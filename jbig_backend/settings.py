@@ -163,14 +163,6 @@ USE_TZ = True
 
 STATIC_URL = os.getenv('STATIC_URL', 'static/')
 
-MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
-_MEDIA_ROOT = os.getenv('MEDIA_ROOT')
-MEDIA_ROOT = Path(_MEDIA_ROOT) if _MEDIA_ROOT else Path('/home/ubuntu/volume/jbig_backend/current/media')
-
-# App content paths configurable via environment
-CONTENT_NOTION_SUBDIR = os.getenv('CONTENT_NOTION_SUBDIR', 'notion')
-CONTENT_BANNER_SUBPATH = os.getenv('CONTENT_BANNER_SUBPATH', 'banner/banner.jpg')
-
 # Vast.ai GPU rental
 VAST_API_KEY = os.getenv('VAST_API_KEY', '')
 

@@ -35,5 +35,4 @@ urlpatterns = [
     path('api/version/', version_info, name='version-info'),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# MEDIA 서빙 제거 - NCP Object Storage 사용
