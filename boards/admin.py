@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Board, Post, Comment, Category
+from .models import Board, Post, Comment, Category, CommentLike
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -25,4 +25,11 @@ class CommentAdmin(admin.ModelAdmin):
     list_display = ('id', 'author', 'post', 'created_at', 'is_deleted')
     search_fields = ('post__title', 'author__username')
     list_filter = ('created_at', 'is_deleted')
-    raw_id_fields = ('post', 'author', 'parent')
+    raw_id_fields = ('post', 'author', 'parent', 'likes')
+
+@admin.register(CommentLike)
+class CommentLikeAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'comment', 'created_at')
+    search_fields = ('user__username', 'comment__content')
+    list_filter = ('created_at',)
+    raw_id_fields = ('user', 'comment')

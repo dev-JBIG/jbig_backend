@@ -11,6 +11,7 @@ from .views import (
     PostSearchView,
     AllPostSearchView,
     PostLikeAPIView,
+    CommentLikeAPIView,
     BoardDetailAPIView,
     NotificationListAPIView,
     NotificationUnreadCountAPIView,
@@ -32,6 +33,7 @@ urlpatterns = [
     path('posts/<int:post_id>/like/', PostLikeAPIView.as_view(), name='post-like'),
     path('posts/<int:post_id>/comments/', CommentListCreateAPIView.as_view(), name='comment-list-create'),
     path('comments/<int:comment_id>/', CommentUpdateDestroyAPIView.as_view(), name='comment-detail-update-destroy'),
+    path('comments/<int:comment_id>/like/', CommentLikeAPIView.as_view(), name='comment-like'),
     # 알림 API
     path('notifications/', NotificationListAPIView.as_view(), name='notification-list'),
     path('notifications/unread-count/', NotificationUnreadCountAPIView.as_view(), name='notification-unread-count'),

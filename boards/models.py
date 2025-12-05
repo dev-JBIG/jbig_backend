@@ -169,6 +169,7 @@ class Comment(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
+    likes = models.ManyToManyField(settings.AUTH_USER_MODEL, through='CommentLike', related_name='liked_comments')
 
     class Meta:
         db_table = 'comment'
@@ -177,6 +178,15 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'Comment by {self.author} on {self.post}'
+
+class CommentLike(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'comment_like'
+        unique_together = ('user', 'comment')
 
 class Attachment(models.Model):
     """Deprecated - DB 호환성 위해 유지"""
@@ -197,6 +207,7 @@ class Notification(models.Model):
         COMMENT = 1, '댓글'           # 내 글에 댓글이 달림
         REPLY = 2, '대댓글'            # 내 댓글에 대댓글이 달림
         LIKE = 3, '좋아요'             # 내 글에 좋아요가 달림
+        COMMENT_LIKE = 4, '댓글 좋아요'  # 내 댓글에 좋아요가 달림
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,

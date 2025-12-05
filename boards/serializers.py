@@ -132,11 +132,13 @@ class CommentSerializer(serializers.ModelSerializer):
     post_id = serializers.IntegerField(source='post.id', read_only=True)
     post_title = serializers.CharField(source='post.title', read_only=True)
     board_id = serializers.IntegerField(source='post.board.id', read_only=True)
+    likes = serializers.SerializerMethodField()
+    isLiked = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id']
-        read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id')
+        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id', 'likes', 'isLiked']
+        read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id', 'likes', 'isLiked')
 
 
     def get_user_id(self, obj):
@@ -148,6 +150,15 @@ class CommentSerializer(serializers.ModelSerializer):
         user = self.context.get('request').user
         if user and user.is_authenticated:
             return obj.author == user
+        return False
+
+    def get_likes(self, obj):
+        return obj.likes.count()
+
+    def get_isLiked(self, obj):
+        user = self.context.get('request').user
+        if user and user.is_authenticated:
+            return obj.likes.filter(pk=user.pk).exists()
         return False
 
     def validate_content(self, value):
@@ -284,7 +295,8 @@ class PostDetailSerializer(serializers.ModelSerializer):
 
     def get_comments(self, obj):
         # 최상위 댓글만 가져오고 created_at 기준 오래된 순으로 정렬 (최신 댓글이 아래에)
-        comments = obj.comments.filter(parent__isnull=True).order_by('created_at')
+        # likes와 children(답글)의 likes도 함께 prefetch
+        comments = obj.comments.filter(parent__isnull=True).prefetch_related('likes', 'children__likes').order_by('created_at')
         return CommentSerializer(comments, many=True, context=self.context).data
 
     def get_comments_count(self, obj):

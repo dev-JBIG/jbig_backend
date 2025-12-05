@@ -94,6 +94,53 @@ class PostLikeAPIView(generics.GenericAPIView):
 
 
 @extend_schema(
+    tags=['댓글'],
+    summary="댓글 좋아요/취소",
+    description="특정 댓글에 좋아요를 추가하거나 취소합니다. 이미 좋아요를 누른 상태에서 요청하면 좋아요가 취소됩니다. 좋아요 추가 시 댓글 작성자에게 알림이 전송됩니다.",
+    responses={
+        200: {
+            'description': '좋아요 상태 변경 성공',
+            'examples': {
+                '좋아요 추가': {
+                    'value': {'likes': 5, 'isLiked': True}
+                },
+                '좋아요 취소': {
+                    'value': {'likes': 4, 'isLiked': False}
+                }
+            }
+        }
+    }
+)
+class CommentLikeAPIView(generics.GenericAPIView):
+    queryset = Comment.objects.all()
+    permission_classes = [IsAuthenticated]
+    lookup_url_kwarg = 'comment_id'
+
+    def post(self, request, *args, **kwargs):
+        comment = self.get_object()
+        user = request.user
+
+        try:
+            like = comment.likes.through.objects.get(user=user, comment=comment)
+            like.delete()
+            is_liked = False
+        except comment.likes.through.DoesNotExist:
+            comment.likes.add(user)
+            is_liked = True
+            # 댓글 좋아요 추가 시에만 알림 생성
+            create_notification(
+                recipient=comment.author,
+                actor=user,
+                notification_type=Notification.NotificationType.COMMENT_LIKE,
+                post=comment.post,
+                comment=comment
+            )
+
+        likes_count = comment.likes.count()
+        return Response({'likes': likes_count, 'isLiked': is_liked}, status=status.HTTP_200_OK)
+
+
+@extend_schema(
     tags=['게시글'],
     summary="게시글 검색",
     description="제목, 내용, 작성자명을 기준으로 게시글을 검색합니다. 사용자의 권한에 따라 접근 가능한 게시글 내에서만 검색이 수행됩니다.",
