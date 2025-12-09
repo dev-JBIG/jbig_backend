@@ -88,6 +88,7 @@ class SiteSettingsView(APIView):
                 value={
                     "notion_page_id": "abc123",
                     "quiz_url": "https://forms.gle/...",
+                    "jbig_description": "'JBIG'(JBNU Big Data & AI Group)은 데이터 사이언스와 딥러닝, 머신러닝을 포함한 AI에 대한 학술 교류를 목표로 2021년 설립된 전북대학교의 학생 학회입니다.",
                     "jbig_president": "박성현",
                     "jbig_president_dept": "전자공학부",
                     "jbig_vice_president": "국환",
@@ -104,6 +105,7 @@ class SiteSettingsView(APIView):
         return Response({
             'notion_page_id': SiteSettings.get('notion_page_id', ''),
             'quiz_url': SiteSettings.get('quiz_url', ''),
+            'jbig_description': SiteSettings.get('jbig_description', "'JBIG'(JBNU Big Data & AI Group)은 데이터 사이언스와 딥러닝, 머신러닝을 포함한 AI에 대한 학술 교류를 목표로 2021년 설립된 전북대학교의 학생 학회입니다."),
             'jbig_president': SiteSettings.get('jbig_president', '박성현'),
             'jbig_president_dept': SiteSettings.get('jbig_president_dept', '전자공학부'),
             'jbig_vice_president': SiteSettings.get('jbig_vice_president', '국환'),
@@ -120,6 +122,7 @@ class SiteSettingsView(APIView):
                 'properties': {
                     'notion_page_id': {'type': 'string'},
                     'quiz_url': {'type': 'string', 'format': 'uri'},
+                    'jbig_description': {'type': 'string'},
                     'jbig_president': {'type': 'string'},
                     'jbig_president_dept': {'type': 'string'},
                     'jbig_vice_president': {'type': 'string'},
@@ -135,7 +138,7 @@ class SiteSettingsView(APIView):
     def put(self, request):
         updated = {}
         fields = [
-            'notion_page_id', 'quiz_url', 'jbig_president', 'jbig_president_dept',
+            'notion_page_id', 'quiz_url', 'jbig_description', 'jbig_president', 'jbig_president_dept',
             'jbig_vice_president', 'jbig_vice_president_dept', 'jbig_email',
             'jbig_advisor', 'jbig_advisor_dept'
         ]

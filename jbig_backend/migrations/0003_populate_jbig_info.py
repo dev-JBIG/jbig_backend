@@ -8,6 +8,7 @@ def populate_jbig_info(apps, schema_editor):
     
     # Default JBIG information
     defaults = {
+        'jbig_description': "'JBIG'(JBNU Big Data & AI Group)은 데이터 사이언스와 딥러닝, 머신러닝을 포함한 AI에 대한 학술 교류를 목표로 2021년 설립된 전북대학교의 학생 학회입니다.",
         'jbig_president': '박성현',
         'jbig_president_dept': '전자공학부',
         'jbig_vice_president': '국환',
@@ -25,6 +26,7 @@ def reverse_populate(apps, schema_editor):
     SiteSettings = apps.get_model('jbig_backend', 'SiteSettings')
     
     keys = [
+        'jbig_description',
         'jbig_president',
         'jbig_president_dept',
         'jbig_vice_president',
