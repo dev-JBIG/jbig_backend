@@ -85,7 +85,17 @@ class SiteSettingsView(APIView):
         examples=[
             OpenApiExample(
                 "Example Response",
-                value={"notion_page_id": "abc123", "quiz_url": "https://forms.gle/..."},
+                value={
+                    "notion_page_id": "abc123",
+                    "quiz_url": "https://forms.gle/...",
+                    "jbig_president": "박성현",
+                    "jbig_president_dept": "전자공학부",
+                    "jbig_vice_president": "국환",
+                    "jbig_vice_president_dept": "사회학과",
+                    "jbig_email": "green031234@naver.com",
+                    "jbig_advisor": "최규빈 교수님",
+                    "jbig_advisor_dept": "통계학과"
+                },
                 response_only=True
             )
         ]
@@ -94,6 +104,13 @@ class SiteSettingsView(APIView):
         return Response({
             'notion_page_id': SiteSettings.get('notion_page_id', ''),
             'quiz_url': SiteSettings.get('quiz_url', ''),
+            'jbig_president': SiteSettings.get('jbig_president', '박성현'),
+            'jbig_president_dept': SiteSettings.get('jbig_president_dept', '전자공학부'),
+            'jbig_vice_president': SiteSettings.get('jbig_vice_president', '국환'),
+            'jbig_vice_president_dept': SiteSettings.get('jbig_vice_president_dept', '사회학과'),
+            'jbig_email': SiteSettings.get('jbig_email', 'green031234@naver.com'),
+            'jbig_advisor': SiteSettings.get('jbig_advisor', '최규빈 교수님'),
+            'jbig_advisor_dept': SiteSettings.get('jbig_advisor_dept', '통계학과'),
         })
 
     @extend_schema(
@@ -102,7 +119,14 @@ class SiteSettingsView(APIView):
                 'type': 'object',
                 'properties': {
                     'notion_page_id': {'type': 'string'},
-                    'quiz_url': {'type': 'string', 'format': 'uri'}
+                    'quiz_url': {'type': 'string', 'format': 'uri'},
+                    'jbig_president': {'type': 'string'},
+                    'jbig_president_dept': {'type': 'string'},
+                    'jbig_vice_president': {'type': 'string'},
+                    'jbig_vice_president_dept': {'type': 'string'},
+                    'jbig_email': {'type': 'string', 'format': 'email'},
+                    'jbig_advisor': {'type': 'string'},
+                    'jbig_advisor_dept': {'type': 'string'}
                 }
             }
         },
@@ -110,12 +134,17 @@ class SiteSettingsView(APIView):
     )
     def put(self, request):
         updated = {}
-        if 'notion_page_id' in request.data:
-            SiteSettings.set('notion_page_id', request.data['notion_page_id'])
-            updated['notion_page_id'] = request.data['notion_page_id']
-        if 'quiz_url' in request.data:
-            SiteSettings.set('quiz_url', request.data['quiz_url'])
-            updated['quiz_url'] = request.data['quiz_url']
+        fields = [
+            'notion_page_id', 'quiz_url', 'jbig_president', 'jbig_president_dept',
+            'jbig_vice_president', 'jbig_vice_president_dept', 'jbig_email',
+            'jbig_advisor', 'jbig_advisor_dept'
+        ]
+        
+        for field in fields:
+            if field in request.data:
+                SiteSettings.set(field, request.data[field])
+                updated[field] = request.data[field]
+        
         if not updated:
             return Response({'error': 'No valid fields provided'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'message': 'Settings updated', **updated})
