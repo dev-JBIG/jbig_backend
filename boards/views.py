@@ -430,6 +430,17 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
+        # 게시판 변경 권한 검증
+        board_id = request.data.get('board_id')
+        if board_id is not None:
+            from .models import Board
+            new_board = Board.objects.filter(id=board_id).first()
+            if new_board and new_board.post_permission == 'staff' and not request.user.is_staff:
+                return Response(
+                    {"detail": "해당 게시판에는 글을 작성할 권한이 없습니다."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
         # 수정 전 파일 키 수집
         old_attachment_keys = set()
         if instance.attachment_paths and isinstance(instance.attachment_paths, list):

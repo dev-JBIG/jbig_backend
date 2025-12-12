@@ -237,10 +237,11 @@ def normalize_ncp_urls(content):
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
     attachment_paths = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
     content_md = serializers.CharField(write_only=True)
+    board_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = Post
-        fields = ['title', 'content_md', 'attachment_paths', 'post_type']
+        fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id']
 
 
     def create(self, validated_data):
@@ -257,13 +258,19 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         attachment_paths = validated_data.pop('attachment_paths', None)
         content_md = validated_data.pop('content_md', None)
+        board_id = validated_data.pop('board_id', None)
 
         if content_md is not None:
             instance.content_md = normalize_ncp_urls(content_md)
-        
+
         if attachment_paths is not None:
             instance.attachment_paths = attachment_paths
-            
+
+        if board_id is not None:
+            new_board = Board.objects.filter(id=board_id).first()
+            if new_board:
+                instance.board = new_board
+
         instance = super().update(instance, validated_data)
         instance.update_search_vector()
         instance.save(update_fields=['search_vector'])
