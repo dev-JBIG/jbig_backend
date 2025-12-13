@@ -46,11 +46,10 @@ jobs:
             --exclude='*.pyc' \
             --exclude='__pycache__' \
             --exclude='.venv' \
-            --exclude='jbig_backend/staticfiles' \
+            --exclude='staticfiles' \
             --exclude='.env' \
-            docker-compose.yml \
-            jbig_backend/ \
-            VERSION.json
+            --exclude='.github' \
+            .
           mv /tmp/docker-backend.tar.gz docker-backend.tar.gz
 
       - name: Upload to server

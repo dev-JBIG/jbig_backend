@@ -29,7 +29,7 @@ services:
   # Django 백엔드
   backend:
     build:
-      context: ./jbig_backend
+      context: .
       dockerfile: Dockerfile
     container_name: jbig_backend
     restart: unless-stopped
@@ -43,7 +43,7 @@ services:
       gunicorn jbig_backend.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
       "
     volumes:
-      - ./jbig_backend:/app
+      - .:/app
       - static_volume:/app/staticfiles
     ports:
       - "${BACKEND_PORT:-8000}:8000"
