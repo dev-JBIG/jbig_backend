@@ -1,0 +1,81 @@
+version: '3.12-alpine'
+
+services:
+  # Supabase PostgreSQL 데이터베이스
+  db:
+    image: supabase/postgres:15.1.0.147
+    container_name: jbig_supabase_postgres
+    restart: unless-stopped
+    labels:
+      - "com.jbig.service=database"
+      - "com.jbig.project=jbig"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST: /var/run/postgresql
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT}:5432"
+    networks:
+      - jbig_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django 백엔드
+  backend:
+    build:
+      context: ./jbig_backend
+      dockerfile: Dockerfile
+    container_name: jbig_backend
+    restart: unless-stopped
+    labels:
+      - "com.jbig.service=backend"
+      - "com.jbig.project=jbig"
+    command: >
+      sh -c "
+      python manage.py migrate &&
+      python manage.py collectstatic --noinput &&
+      gunicorn jbig_backend.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120
+      "
+    volumes:
+      - ./jbig_backend:/app
+      - static_volume:/app/staticfiles
+    ports:
+      - "${BACKEND_PORT}:8000"
+    environment:
+      - DEBUG=${DEBUG}
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - NCP_ACCESS_KEY_ID=${NCP_ACCESS_KEY_ID}
+      - NCP_SECRET_KEY=${NCP_SECRET_KEY}
+      - NCP_BUCKET_NAME=${NCP_BUCKET_NAME}
+      - NCP_ENDPOINT_URL=${NCP_ENDPOINT_URL}
+      - NCP_REGION_NAME=${NCP_REGION_NAME}
+    networks:
+      - jbig_network
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/health/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+  static_volume:
+
+networks:
+  jbig_network:
+    driver: bridge

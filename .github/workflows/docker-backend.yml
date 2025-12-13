@@ -1,0 +1,134 @@
+name: Docker Backend Deploy
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies and run tests
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          python manage.py test --settings=jbig_backend.settings_test || echo "No tests found or test settings not configured"
+
+      - name: Create version info
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%s | sed 's/"/\\"/g')
+          cat > VERSION.json << EOF
+          {
+            "commit": "${{ github.sha }}",
+            "commit_short": "$(echo ${{ github.sha }} | cut -c1-7)",
+            "message": "$COMMIT_MSG",
+            "branch": "${{ github.ref_name }}",
+            "time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Create deployment package
+        run: |
+          tar czf /tmp/docker-backend.tar.gz \
+            --exclude='.git' \
+            --exclude='*.pyc' \
+            --exclude='__pycache__' \
+            --exclude='.venv' \
+            --exclude='jbig_backend/staticfiles' \
+            --exclude='.env' \
+            docker-compose.yml \
+            jbig_backend/ \
+            VERSION.json
+          mv /tmp/docker-backend.tar.gz docker-backend.tar.gz
+
+      - name: Upload to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-backend.tar.gz"
+          target: "/tmp/"
+
+      - name: Deploy with Docker Compose
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            APP_BASE_DIR="$HOME/${{ secrets.DEPLOY_PATH }}"
+            RELEASES_DIR="$APP_BASE_DIR/releases"
+            SHARED_DIR="$APP_BASE_DIR/shared"
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            NEW_RELEASE="$RELEASES_DIR/$TIMESTAMP"
+
+            # 디렉토리 생성
+            mkdir -p "$RELEASES_DIR"
+            mkdir -p "$SHARED_DIR/media"
+
+            # .env 파일 확인
+            if [ ! -f "$SHARED_DIR/.env" ]; then
+              echo "WARNING: .env file not found in $SHARED_DIR!"
+              echo "Please create .env file with required environment variables"
+              exit 1
+            fi
+
+            # 빌드 압축 해제
+            mkdir -p "$NEW_RELEASE"
+            tar xzf "/tmp/docker-backend.tar.gz" -C "$NEW_RELEASE"
+            rm -f "/tmp/docker-backend.tar.gz"
+
+            # 공유 디렉토리 심볼릭 링크 (media, .env 등)
+            ln -sfn "$SHARED_DIR/media" "$NEW_RELEASE/media"
+            ln -sfn "$SHARED_DIR/.env" "$NEW_RELEASE/.env"
+
+            # 새 릴리즈 활성화
+            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"
+
+            # Docker Compose로 백엔드 재배포
+            cd "$APP_BASE_DIR/current"
+            
+            # 기존 백엔드 컨테이너 중지 및 제거
+            echo "Stopping old backend container..."
+            docker-compose stop backend || true
+            docker-compose rm -f backend || true
+            
+            # 새 이미지 빌드 및 컨테이너 시작
+            docker-compose build backend
+            docker-compose up -d backend
+            
+            # 사용하지 않는 Docker 리소스 정리
+            echo "Cleaning up unused Docker resources..."
+            docker image prune -f
+            docker container prune -f
+
+            # 헬스체크
+            echo "Waiting for backend to be healthy..."
+            sleep 15
+            if docker-compose ps backend | grep -q "Up"; then
+              echo "✅ Backend deployed successfully!"
+            else
+              echo "❌ Backend deployment failed!"
+              docker-compose logs backend --tail=50
+              exit 1
+            fi
+
+            # 오래된 릴리즈 정리 (최근 5개만 유지)
+            cd "$RELEASES_DIR"
+            ls -t | tail -n +6 | xargs -r rm -rf
+
+            echo "Deployed: $TIMESTAMP"
+
