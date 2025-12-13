@@ -105,12 +105,12 @@ jobs:
             
             # 기존 백엔드 컨테이너 중지 및 제거
             echo "Stopping old backend container..."
-            docker-compose stop backend || true
-            docker-compose rm -f backend || true
+            docker-compose --env-file .env stop backend || true
+            docker-compose --env-file .env rm -f backend || true
             
             # 새 이미지 빌드 및 컨테이너 시작
-            docker-compose build backend
-            docker-compose up -d backend
+            docker-compose --env-file .env build backend
+            docker-compose --env-file .env up -d backend
             
             # 사용하지 않는 Docker 리소스 정리
             echo "Cleaning up unused Docker resources..."
@@ -120,11 +120,11 @@ jobs:
             # 헬스체크
             echo "Waiting for backend to be healthy..."
             sleep 15
-            if docker-compose ps backend | grep -q "Up"; then
+            if docker-compose --env-file .env ps backend | grep -q "Up"; then
               echo "✅ Backend deployed successfully!"
             else
               echo "❌ Backend deployment failed!"
-              docker-compose logs backend --tail=50
+              docker-compose --env-file .env logs backend --tail=50
               exit 1
             fi
 

@@ -46,7 +46,7 @@ services:
       - ./jbig_backend:/app
       - static_volume:/app/staticfiles
     ports:
-      - "${BACKEND_PORT}:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     environment:
       - DEBUG=${DEBUG}
       - SECRET_KEY=${SECRET_KEY}
