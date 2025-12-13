@@ -107,13 +107,31 @@ jobs:
             docker stop jbig_backend || true
             docker rm -f jbig_backend || true
             
-            # db 서비스가 실행 중인지 확인하고 필요시 시작
-            echo "Ensuring database service is running..."
-            docker-compose -p jbig --env-file .env up -d db
+            # 포트 충돌을 일으키는 기존 컨테이너 확인 및 정리
+            echo "Checking for port conflicts..."
+            CONFLICTING_CONTAINER=$(docker ps -q --filter "publish=5432")
+            if [ ! -z "$CONFLICTING_CONTAINER" ]; then
+              CONTAINER_NAME=$(docker ps --filter "id=$CONFLICTING_CONTAINER" --format "{{.Names}}")
+              echo "Found container using port 5432: $CONTAINER_NAME"
+              if [ "$CONTAINER_NAME" != "jbig_supabase_postgres" ]; then
+                echo "WARNING: Another container is using port 5432. Please check manually."
+              fi
+            fi
             
-            # db가 준비될 때까지 대기
-            echo "Waiting for database to be ready..."
-            sleep 10
+            # 기존 db 컨테이너가 실행 중인지 확인
+            if docker ps --format '{{.Names}}' | grep -q "^jbig_supabase_postgres$"; then
+              echo "Database container is already running."
+            else
+              echo "Starting database service..."
+              # 중지된 컨테이너가 있다면 제거
+              docker rm -f jbig_supabase_postgres 2>/dev/null || true
+              # db 서비스 시작
+              docker-compose -p jbig --env-file .env up -d db
+              
+              # db가 준비될 때까지 대기
+              echo "Waiting for database to be ready..."
+              sleep 15
+            fi
             
             # 새 이미지 빌드 및 컨테이너 시작
             echo "Building and starting backend..."
