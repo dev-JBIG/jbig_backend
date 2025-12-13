@@ -109,7 +109,7 @@ jobs:
             
             # 새 이미지 빌드 및 컨테이너 시작
             docker-compose --env-file .env build backend
-            docker-compose --env-file .env up -d backend
+            docker-compose --env-file .env up -d --no-deps backend
             
             # 사용하지 않는 Docker 리소스 정리
             echo "Cleaning up unused Docker resources..."
@@ -123,7 +123,7 @@ jobs:
               echo "✅ Backend deployed successfully!"
             else
               echo "❌ Backend deployment failed!"
-              docker-compose --env-file .env logs backend --tail=50
+              docker-compose --env-file .env logs --tail=50 backend
               exit 1
             fi
 
