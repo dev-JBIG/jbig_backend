@@ -102,41 +102,43 @@ jobs:
             # Docker Compose로 백엔드 재배포
             cd "$APP_BASE_DIR/current"
             
-            # 기존 백엔드 컨테이너 중지 및 제거
-            echo "Stopping old backend container..."
-            docker stop jbig_backend || true
-            docker rm -f jbig_backend || true
+            # 기존 컨테이너 모두 중지 및 제거
+            echo "Stopping all existing containers..."
+            docker-compose -p jbig --env-file .env down 2>/dev/null || true
             
-            # 포트 충돌을 일으키는 기존 컨테이너 확인 및 정리
+            # jbig 관련 컨테이너 강제 정리 (만약 down이 실패한 경우)
+            echo "Cleaning up jbig containers..."
+            docker stop jbig_backend jbig_supabase_postgres 2>/dev/null || true
+            docker rm -f jbig_backend jbig_supabase_postgres 2>/dev/null || true
+            
+            # 포트 충돌 확인 (5432, 8000)
             echo "Checking for port conflicts..."
-            CONFLICTING_CONTAINER=$(docker ps -q --filter "publish=5432")
-            if [ ! -z "$CONFLICTING_CONTAINER" ]; then
-              CONTAINER_NAME=$(docker ps --filter "id=$CONFLICTING_CONTAINER" --format "{{.Names}}")
-              echo "Found container using port 5432: $CONTAINER_NAME"
-              if [ "$CONTAINER_NAME" != "jbig_supabase_postgres" ]; then
-                echo "WARNING: Another container is using port 5432. Please check manually."
-              fi
+            CONFLICT_5432=$(docker ps -q --filter "publish=5432" 2>/dev/null)
+            CONFLICT_8000=$(docker ps -q --filter "publish=8000" 2>/dev/null)
+            
+            if [ ! -z "$CONFLICT_5432" ]; then
+              echo "WARNING: Port 5432 is still in use by container: $(docker ps --filter "id=$CONFLICT_5432" --format "{{.Names}}")"
+              echo "Attempting to stop conflicting container..."
+              docker stop $CONFLICT_5432 || true
             fi
             
-            # 기존 db 컨테이너가 실행 중인지 확인
-            if docker ps --format '{{.Names}}' | grep -q "^jbig_supabase_postgres$"; then
-              echo "Database container is already running."
-            else
-              echo "Starting database service..."
-              # 중지된 컨테이너가 있다면 제거
-              docker rm -f jbig_supabase_postgres 2>/dev/null || true
-              # db 서비스 시작
-              docker-compose -p jbig --env-file .env up -d db
-              
-              # db가 준비될 때까지 대기
-              echo "Waiting for database to be ready..."
-              sleep 15
+            if [ ! -z "$CONFLICT_8000" ]; then
+              echo "WARNING: Port 8000 is still in use by container: $(docker ps --filter "id=$CONFLICT_8000" --format "{{.Names}}")"
+              echo "Attempting to stop conflicting container..."
+              docker stop $CONFLICT_8000 || true
             fi
             
-            # 새 이미지 빌드 및 컨테이너 시작
-            echo "Building and starting backend..."
-            docker-compose -p jbig --env-file .env build backend
-            docker-compose -p jbig --env-file .env up -d backend
+            # 새 이미지 빌드
+            echo "Building new images..."
+            docker-compose -p jbig --env-file .env build
+            
+            # 모든 서비스 시작
+            echo "Starting all services..."
+            docker-compose -p jbig --env-file .env up -d
+            
+            # 데이터베이스가 준비될 때까지 대기
+            echo "Waiting for database to be ready..."
+            sleep 20
             
             # 사용하지 않는 Docker 리소스 정리
             echo "Cleaning up unused Docker resources..."
