@@ -111,15 +111,15 @@ jobs:
             docker stop jbig_backend jbig_supabase_postgres 2>/dev/null || true
             docker rm -f jbig_backend jbig_supabase_postgres 2>/dev/null || true
             
-            # 포트 충돌 확인 (5432, 8000)
+            # 포트 충돌 확인 (5433, 8000)
             echo "Checking for port conflicts..."
-            CONFLICT_5432=$(docker ps -q --filter "publish=5432" 2>/dev/null)
+            CONFLICT_5433=$(docker ps -q --filter "publish=5433" 2>/dev/null)
             CONFLICT_8000=$(docker ps -q --filter "publish=8000" 2>/dev/null)
             
-            if [ ! -z "$CONFLICT_5432" ]; then
-              echo "WARNING: Port 5432 is still in use by container: $(docker ps --filter "id=$CONFLICT_5432" --format "{{.Names}}")"
+            if [ ! -z "$CONFLICT_5433" ]; then
+              echo "WARNING: Port 5433 is still in use by container: $(docker ps --filter "id=$CONFLICT_5433" --format "{{.Names}}")"
               echo "Attempting to stop conflicting container..."
-              docker stop $CONFLICT_5432 || true
+              docker stop $CONFLICT_5433 || true
             fi
             
             if [ ! -z "$CONFLICT_8000" ]; then
@@ -131,7 +131,7 @@ jobs:
             # 새 이미지 빌드
             echo "Building new images..."
             docker-compose -p jbig --env-file .env build
-            
+              
             # 모든 서비스 시작
             echo "Starting all services..."
             docker-compose -p jbig --env-file .env up -d
