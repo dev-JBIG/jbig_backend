@@ -111,8 +111,8 @@ jobs:
             docker stop jbig_backend jbig_supabase_postgres 2>/dev/null || true
             docker rm -f jbig_backend jbig_supabase_postgres 2>/dev/null || true
             
-            # 포트 충돌 확인 (5433, 8000)
-            echo "Checking for port conflicts..."
+            # 포트 충돌 확인 (도커 컨테이너)
+            echo "Checking for docker container port conflicts..."
             CONFLICT_5433=$(docker ps -q --filter "publish=5433" 2>/dev/null)
             CONFLICT_8000=$(docker ps -q --filter "publish=8000" 2>/dev/null)
             
@@ -127,6 +127,49 @@ jobs:
               echo "Attempting to stop conflicting container..."
               docker stop $CONFLICT_8000 || true
             fi
+            
+            # 비-도커 프로세스 확인 및 종료
+            echo "Checking for non-docker processes on ports..."
+            sleep 2  # 도커가 완전히 종료되도록 잠시 대기
+            
+            # 8000번 포트 비-도커 프로세스 확인 및 종료
+            NON_DOCKER_8000=$(sudo lsof -t -i:8000 2>/dev/null || true)
+            if [ ! -z "$NON_DOCKER_8000" ]; then
+              echo "WARNING: Non-docker process found on port 8000. Killing PIDs: $NON_DOCKER_8000"
+              sudo kill -9 $NON_DOCKER_8000 || true
+              sleep 1
+            fi
+            
+            # 5433번 포트 비-도커 프로세스 확인 및 종료
+            NON_DOCKER_5433=$(sudo lsof -t -i:5433 2>/dev/null || true)
+            if [ ! -z "$NON_DOCKER_5433" ]; then
+              echo "WARNING: Non-docker process found on port 5433. Killing PIDs: $NON_DOCKER_5433"
+              sudo kill -9 $NON_DOCKER_5433 || true
+              sleep 1
+            fi
+            
+            # gunicorn 프로세스 정리 (도커 외부에서 실행 중인 것)
+            GUNICORN_PIDS=$(pgrep -f "gunicorn.*jbig" 2>/dev/null || true)
+            if [ ! -z "$GUNICORN_PIDS" ]; then
+              echo "WARNING: Non-docker gunicorn processes found. Killing PIDs: $GUNICORN_PIDS"
+              sudo pkill -9 -f "gunicorn.*jbig" || true
+            fi
+            
+            # 최종 포트 확인
+            echo "Final port check..."
+            if sudo lsof -i :8000 >/dev/null 2>&1; then
+              echo "❌ ERROR: Port 8000 is still in use after cleanup!"
+              sudo lsof -i :8000
+              exit 1
+            fi
+            
+            if sudo lsof -i :5433 >/dev/null 2>&1; then
+              echo "❌ ERROR: Port 5433 is still in use after cleanup!"
+              sudo lsof -i :5433
+              exit 1
+            fi
+            
+            echo "✅ All ports are clean and ready for deployment"
             
             # 새 이미지 빌드
             echo "Building new images..."
