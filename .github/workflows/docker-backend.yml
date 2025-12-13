@@ -158,13 +158,11 @@ jobs:
               echo "✅ Port 5433 is clean"
             fi
             
-            # gunicorn 프로세스 정리 (도커 외부에서 실행 중인 것)
+            # gunicorn 프로세스 체크 (정보만 출력, 종료하지 않음)
+            # 포트가 이미 깨끗하면 다른 포트를 쓰는 gunicorn일 수 있으므로 놔둠
             if pgrep -f "gunicorn" >/dev/null 2>&1; then
-              echo "WARNING: Gunicorn processes found"
-              GUNICORN_PIDS=$(pgrep -f "gunicorn" 2>/dev/null | tr '\n' ' ')
-              echo "Killing gunicorn PIDs: $GUNICORN_PIDS"
-              pkill -9 -f "gunicorn" 2>/dev/null || true
-              sleep 2
+              GUNICORN_COUNT=$(pgrep -f "gunicorn" 2>/dev/null | wc -l)
+              echo "ℹ️  Found $GUNICORN_COUNT gunicorn process(es) running (may be using other ports)"
             else
               echo "✅ No gunicorn processes found"
             fi
