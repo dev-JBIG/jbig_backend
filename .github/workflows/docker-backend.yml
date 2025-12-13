@@ -133,40 +133,66 @@ jobs:
             sleep 2  # 도커가 완전히 종료되도록 잠시 대기
             
             # 8000번 포트 비-도커 프로세스 확인 및 종료
-            NON_DOCKER_8000=$(sudo lsof -t -i:8000 2>/dev/null || true)
-            if [ ! -z "$NON_DOCKER_8000" ]; then
-              echo "WARNING: Non-docker process found on port 8000. Killing PIDs: $NON_DOCKER_8000"
-              sudo kill -9 $NON_DOCKER_8000 || true
+            if lsof -t -i:8000 >/dev/null 2>&1; then
+              echo "WARNING: Non-docker process found on port 8000"
+              NON_DOCKER_8000=$(lsof -t -i:8000 2>/dev/null | tr '\n' ' ')
+              echo "Killing PIDs: $NON_DOCKER_8000"
+              for pid in $NON_DOCKER_8000; do
+                kill -9 $pid 2>/dev/null || true
+              done
               sleep 1
+            else
+              echo "✅ Port 8000 is clean"
             fi
             
             # 5433번 포트 비-도커 프로세스 확인 및 종료
-            NON_DOCKER_5433=$(sudo lsof -t -i:5433 2>/dev/null || true)
-            if [ ! -z "$NON_DOCKER_5433" ]; then
-              echo "WARNING: Non-docker process found on port 5433. Killing PIDs: $NON_DOCKER_5433"
-              sudo kill -9 $NON_DOCKER_5433 || true
+            if lsof -t -i:5433 >/dev/null 2>&1; then
+              echo "WARNING: Non-docker process found on port 5433"
+              NON_DOCKER_5433=$(lsof -t -i:5433 2>/dev/null | tr '\n' ' ')
+              echo "Killing PIDs: $NON_DOCKER_5433"
+              for pid in $NON_DOCKER_5433; do
+                kill -9 $pid 2>/dev/null || true
+              done
               sleep 1
+            else
+              echo "✅ Port 5433 is clean"
             fi
             
             # gunicorn 프로세스 정리 (도커 외부에서 실행 중인 것)
-            GUNICORN_PIDS=$(pgrep -f "gunicorn.*jbig" 2>/dev/null || true)
-            if [ ! -z "$GUNICORN_PIDS" ]; then
-              echo "WARNING: Non-docker gunicorn processes found. Killing PIDs: $GUNICORN_PIDS"
-              sudo pkill -9 -f "gunicorn.*jbig" || true
+            if pgrep -f "gunicorn" >/dev/null 2>&1; then
+              echo "WARNING: Gunicorn processes found"
+              GUNICORN_PIDS=$(pgrep -f "gunicorn" 2>/dev/null | tr '\n' ' ')
+              echo "Killing gunicorn PIDs: $GUNICORN_PIDS"
+              pkill -9 -f "gunicorn" 2>/dev/null || true
+              sleep 2
+            else
+              echo "✅ No gunicorn processes found"
             fi
             
             # 최종 포트 확인
             echo "Final port check..."
-            if sudo lsof -i :8000 >/dev/null 2>&1; then
+            if lsof -i :8000 >/dev/null 2>&1; then
               echo "❌ ERROR: Port 8000 is still in use after cleanup!"
-              sudo lsof -i :8000
-              exit 1
+              lsof -i :8000 || true
+              echo "Attempting one more cleanup..."
+              fuser -k 8000/tcp 2>/dev/null || true
+              sleep 2
+              if lsof -i :8000 >/dev/null 2>&1; then
+                echo "❌ FATAL: Cannot free port 8000"
+                exit 1
+              fi
             fi
             
-            if sudo lsof -i :5433 >/dev/null 2>&1; then
+            if lsof -i :5433 >/dev/null 2>&1; then
               echo "❌ ERROR: Port 5433 is still in use after cleanup!"
-              sudo lsof -i :5433
-              exit 1
+              lsof -i :5433 || true
+              echo "Attempting one more cleanup..."
+              fuser -k 5433/tcp 2>/dev/null || true
+              sleep 2
+              if lsof -i :5433 >/dev/null 2>&1; then
+                echo "❌ FATAL: Cannot free port 5433"
+                exit 1
+              fi
             fi
             
             echo "✅ All ports are clean and ready for deployment"
