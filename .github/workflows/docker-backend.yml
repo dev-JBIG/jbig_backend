@@ -131,14 +131,25 @@ jobs:
             # 새 이미지 빌드
             echo "Building new images..."
             docker-compose -p jbig --env-file .env build
-              
-            # 모든 서비스 시작
-            echo "Starting all services..."
-            docker-compose -p jbig --env-file .env up -d
             
-            # 데이터베이스가 준비될 때까지 대기
-            echo "Waiting for database to be ready..."
-            sleep 20
+            # 1단계: DB 먼저 시작
+            echo "Starting database service..."
+            docker-compose -p jbig --env-file .env up -d db
+            
+            # DB가 healthy 상태가 될 때까지 대기 (최대 60초)
+            echo "Waiting for database to be healthy..."
+            for i in {1..60}; do
+              if docker inspect --format='{{.State.Health.Status}}' jbig_supabase_postgres 2>/dev/null | grep -q "healthy"; then
+                echo "✅ Database is healthy!"
+                break
+              fi
+              echo "Waiting for database... ($i/60)"
+              sleep 1
+            done
+            
+            # 2단계: Backend 시작
+            echo "Starting backend service..."
+            docker-compose -p jbig --env-file .env up -d backend
             
             # 사용하지 않는 Docker 리소스 정리
             echo "Cleaning up unused Docker resources..."
@@ -147,12 +158,27 @@ jobs:
 
             # 헬스체크
             echo "Waiting for backend to be healthy..."
-            sleep 15
-            if docker-compose -p jbig --env-file .env ps backend | grep -q "Up"; then
+            sleep 10
+            
+            # Backend 상태 확인 (최대 30초 대기)
+            for i in {1..30}; do
+              if docker ps --filter "name=jbig_backend" --filter "status=running" | grep -q jbig_backend; then
+                echo "✅ Backend is running!"
+                # 로그 확인
+                echo "Recent backend logs:"
+                docker logs jbig_backend --tail=20
+                break
+              fi
+              echo "Waiting for backend... ($i/30)"
+              sleep 1
+            done
+            
+            # 최종 확인
+            if docker ps --filter "name=jbig_backend" --filter "status=running" | grep -q jbig_backend; then
               echo "✅ Backend deployed successfully!"
             else
               echo "❌ Backend deployment failed!"
-              docker-compose -p jbig --env-file .env logs --tail=50 backend
+              docker logs jbig_backend --tail=100
               exit 1
             fi
 
