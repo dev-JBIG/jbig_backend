@@ -38,6 +38,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('boards', '0025_commentlike_comment_likes_notification'),
+        ('users', '__first__'),  # users 앱의 첫 마이그레이션 이후 실행
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
