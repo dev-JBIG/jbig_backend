@@ -107,9 +107,18 @@ jobs:
             docker stop jbig_backend || true
             docker rm -f jbig_backend || true
             
+            # db 서비스가 실행 중인지 확인하고 필요시 시작
+            echo "Ensuring database service is running..."
+            docker-compose -p jbig --env-file .env up -d db
+            
+            # db가 준비될 때까지 대기
+            echo "Waiting for database to be ready..."
+            sleep 10
+            
             # 새 이미지 빌드 및 컨테이너 시작
+            echo "Building and starting backend..."
             docker-compose -p jbig --env-file .env build backend
-            docker-compose -p jbig --env-file .env up -d --no-deps backend
+            docker-compose -p jbig --env-file .env up -d backend
             
             # 사용하지 않는 Docker 리소스 정리
             echo "Cleaning up unused Docker resources..."
