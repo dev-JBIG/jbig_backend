@@ -1,4 +1,4 @@
-version: '3.12-alpine'
+version: '3.8'
 
 services:
   # Supabase PostgreSQL 데이터베이스
