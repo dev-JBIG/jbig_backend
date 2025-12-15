@@ -250,3 +250,41 @@ class Notification(models.Model):
 
     def __str__(self):
         return f'{self.recipient}에게 {self.get_notification_type_display()} 알림'
+
+
+class Draft(models.Model):
+    """게시글 작성 버퍼 - 사용자당 하나의 임시저장 슬롯"""
+    author = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='draft_buffer',
+        verbose_name='작성자',
+        primary_key=True
+    )
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='drafts',
+        verbose_name='게시판'
+    )
+    title = models.CharField(max_length=200, blank=True, verbose_name='제목')
+    content_md = models.TextField(blank=True, verbose_name='내용')
+    uploaded_paths = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="업로드된 파일 경로 목록"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'draft'
+        verbose_name = '게시글 작성 버퍼'
+        verbose_name_plural = '게시글 작성 버퍼 목록'
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        board_name = self.board.name if self.board else '게시판 미선택'
+        return f'{self.author.email} - {board_name} 버퍼'

@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 from django.conf import settings
 from rest_framework import serializers
 
-from .models import Category, Board, Post, Comment, Notification
+from .models import Category, Board, Post, Comment, Notification, Draft
 
 logger = logging.getLogger(__name__)
 
@@ -391,3 +391,43 @@ class NotificationSerializer(serializers.ModelSerializer):
             content = obj.comment.content
             return content[:50] + '...' if len(content) > 50 else content
         return None
+
+
+class DraftSerializer(serializers.ModelSerializer):
+    board_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    board_name = serializers.CharField(source='board.name', read_only=True, allow_null=True)
+    content_md = serializers.CharField(allow_blank=True, required=False)
+
+    class Meta:
+        model = Draft
+        fields = ['board_id', 'board_name', 'title', 'content_md', 'uploaded_paths', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'board_name']
+
+    def create(self, validated_data):
+        board_id = validated_data.pop('board_id', None)
+        board = Board.objects.filter(id=board_id).first() if board_id else None
+        author = self.context['request'].user
+        
+        # 사용자당 하나의 버퍼 (upsert 동작)
+        draft, created = Draft.objects.update_or_create(
+            author=author,
+            defaults={
+                'board': board,
+                'title': validated_data.get('title', ''),
+                'content_md': normalize_ncp_urls(validated_data.get('content_md', '')),
+                'uploaded_paths': validated_data.get('uploaded_paths', [])
+            }
+        )
+        return draft
+
+    def update(self, instance, validated_data):
+        board_id = validated_data.pop('board_id', None)
+        if board_id is not None:
+            instance.board = Board.objects.filter(id=board_id).first() if board_id else None
+        
+        instance.title = validated_data.get('title', instance.title)
+        content_md = validated_data.get('content_md', instance.content_md)
+        instance.content_md = normalize_ncp_urls(content_md)
+        instance.uploaded_paths = validated_data.get('uploaded_paths', instance.uploaded_paths)
+        instance.save()
+        return instance

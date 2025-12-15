@@ -16,6 +16,8 @@ from .views import (
     NotificationListAPIView,
     NotificationUnreadCountAPIView,
     NotificationMarkReadAPIView,
+    DraftRetrieveCreateAPIView,
+    DraftDeleteAPIView,
 )
 
 router = DefaultRouter()
@@ -39,4 +41,7 @@ urlpatterns = [
     path('notifications/unread-count/', NotificationUnreadCountAPIView.as_view(), name='notification-unread-count'),
     path('notifications/mark-read/', NotificationMarkReadAPIView.as_view(), name='notification-mark-all-read'),
     path('notifications/<int:notification_id>/mark-read/', NotificationMarkReadAPIView.as_view(), name='notification-mark-read'),
+    # 임시저장 버퍼 API
+    path('draft/', DraftRetrieveCreateAPIView.as_view(), name='draft-retrieve-create'),
+    path('draft/delete/', DraftDeleteAPIView.as_view(), name='draft-delete'),
 ]
