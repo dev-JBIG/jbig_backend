@@ -987,10 +987,9 @@ class DraftRetrieveCreateAPIView(generics.GenericAPIView):
 
 
 @extend_schema(tags=['임시저장'])
-class DraftDeleteAPIView(generics.DestroyAPIView):
+class DraftDeleteAPIView(APIView):
     """임시저장 버퍼 삭제"""
     permission_classes = [IsAuthenticated]
-    serializer_class = DraftSerializer
 
     @extend_schema(
         summary="임시저장 버퍼 삭제",
