@@ -1,4 +1,5 @@
 import re
+import html
 import logging
 
 import boto3
@@ -163,6 +164,8 @@ class CommentSerializer(serializers.ModelSerializer):
 
     def validate_content(self, value):
         sanitized_content = bleach.clean(value, tags=[], strip=True).strip()
+        # bleach가 &를 &amp;로 변환하므로 다시 복원
+        sanitized_content = html.unescape(sanitized_content)
         if not sanitized_content:
             raise serializers.ValidationError("Content cannot be empty.")
         return sanitized_content
