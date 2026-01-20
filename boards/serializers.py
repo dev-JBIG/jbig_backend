@@ -126,7 +126,7 @@ class CategoryWithBoardsSerializer(serializers.ModelSerializer):
 
 class CommentSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
-    author = serializers.CharField(source='author.username', read_only=True)
+    author = serializers.SerializerMethodField()
     author_semester = serializers.ReadOnlyField(source='author.semester')
     children = RecursiveField(many=True, read_only=True)
     is_owner = serializers.SerializerMethodField()
@@ -140,6 +140,17 @@ class CommentSerializer(serializers.ModelSerializer):
         model = Comment
         fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id', 'likes', 'isLiked']
         read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id', 'likes', 'isLiked')
+
+
+    # 작성자 이름 파싱 로직
+    def get_author(self, obj):
+        if not obj.author:
+            return "알 수 없는 사용자"
+        username=obj.author.username
+        # _ 가 포함 돼 있으면
+        if '_' in username:
+            return username.split('_', 1)[1]
+        return username
 
 
     def get_user_id(self, obj):
@@ -200,7 +211,7 @@ class CommentSerializer(serializers.ModelSerializer):
 
 class PostListSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
-    author = serializers.CharField(source='author.username', read_only=True)
+    author = serializers.SerializerMethodField()
     author_semester = serializers.ReadOnlyField(source='author.semester')
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comment_count = serializers.SerializerMethodField()
@@ -212,6 +223,13 @@ class PostListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name']
+
+    def get_author(self, obj):
+        username=obj.author.username
+        if '_' in username:
+            return username.split('_',1)[1]
+        return username
+
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
@@ -281,7 +299,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
 
 class PostDetailSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
-    author = serializers.CharField(source='author.username', read_only=True)
+    author = serializers.SerializerMethodField()
     author_semester = serializers.ReadOnlyField(source='author.semester')
     board = BoardSerializer(read_only=True)
     comments = serializers.SerializerMethodField()
@@ -299,6 +317,13 @@ class PostDetailSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'views', 'board', 'comments', 'attachment_paths',
             'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
         ]
+
+    def get_author(self, obj):
+        username=obj.author.username
+        if '_' in username:
+            return username.split('_',1)[1]
+        return username
+
 
     def get_user_id(self, obj):
         return obj.author.email.split('@')[0]
@@ -373,7 +398,7 @@ class CategoryListResponseSerializer(serializers.Serializer):
 
 
 class NotificationSerializer(serializers.ModelSerializer):
-    actor_name = serializers.CharField(source='actor.username', read_only=True)
+    actor_name = serializers.SerializerMethodField()
     actor_semester = serializers.IntegerField(source='actor.semester', read_only=True)
     post_title = serializers.CharField(source='post.title', read_only=True)
     post_id = serializers.IntegerField(source='post.id', read_only=True)
@@ -388,6 +413,13 @@ class NotificationSerializer(serializers.ModelSerializer):
             'actor_name', 'actor_semester', 'post_id', 'post_title', 'board_id',
             'comment_content', 'is_read', 'created_at'
         ]
+
+
+    def get_actor_name(self, obj):
+        username=obj.actor.username
+        if '_' in username:
+            return username.split('_', 1)[1]
+        return username
 
     def get_comment_content(self, obj):
         if obj.comment and not obj.comment.is_deleted:

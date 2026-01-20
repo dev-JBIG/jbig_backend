@@ -67,7 +67,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # 응답 데이터에 사용자 정보 추가
         data['isSuccess'] = True
         data['message'] = '로그인에 성공했습니다.'
-        data['username'] = user.username
+        
+        if '_' in user.username:
+            data['username']=user.username.split('_',1)[1]
+        else:
+            data['username']=user.username
+
         data['semester'] = user.semester
         data['is_staff'] = user.is_staff
         
@@ -100,13 +105,29 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = ('email', 'username', 'password', 'semester')
         extra_kwargs = {
             'email': {'help_text': "사용자 이메일 주소"},
-            'username': {'help_text': "사용자 이름"}
+            'username': {'help_text': "사용자 이름",
+                         'validators':[]}
         }
 
+    def validate(self, attrs):
+        username=attrs.get('username')
+        semester=attrs.get('semester')
+
+        combined_username=f"{semester}_{username}"
+
+        if User.objects.filter(username=combined_username).exists():
+            raise serializers.ValidationError({
+                "username":"이미 가입된 사용자(기수+이름)입니다."
+            })
+        return attrs
+
     def create(self, validated_data):
+        combined_username = f"{validated_data['semester']}_{validated_data['username']}"
+        # 기수 _ 이름
+        
         user = User.objects.create_user(
             email=validated_data['email'],
-            username=validated_data['username'],
+            username=combined_username,
             password=validated_data['password'],
             semester=validated_data['semester']
         )
@@ -189,9 +210,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
     post_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
 
+    username=serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = ('username', 'email', 'semester', 'is_staff', 'date_joined', 'is_self', 'post_count', 'comment_count')
+
+    def get_username(self,obj):
+        if '_' in obj.username:
+            return obj.username.split('_',1)[1]
+        return obj.username
+
 
     def get_is_self(self, obj):
         request = self.context.get('request')
@@ -214,9 +243,17 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     posts = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
 
+    username=serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = ('username', 'email_id', 'semester', 'resume', 'date_joined', 'last_login', 'is_self', 'posts', 'comments')
+
+    def get_username(self,obj):
+        if '_' in obj.username:
+            return obj.username.split('_',1)[1]
+        return obj.username
+
 
     def get_email_id(self, obj):
         return obj.email.split('@')[0] if obj.email else ''
