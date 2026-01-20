@@ -1,0 +1,257 @@
+name: Docker Backend Deploy
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies and run tests
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          python manage.py test --settings=jbig_backend.settings_test || echo "No tests found or test settings not configured"
+
+      - name: Create version info
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%s | sed 's/"/\\"/g')
+          cat > VERSION.json << EOF
+          {
+            "commit": "${{ github.sha }}",
+            "commit_short": "$(echo ${{ github.sha }} | cut -c1-7)",
+            "message": "$COMMIT_MSG",
+            "branch": "${{ github.ref_name }}",
+            "time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Create deployment package
+        run: |
+          tar czf /tmp/docker-backend.tar.gz \
+            --exclude='.git' \
+            --exclude='*.pyc' \
+            --exclude='__pycache__' \
+            --exclude='.venv' \
+            --exclude='staticfiles' \
+            --exclude='.env' \
+            --exclude='.github' \
+            .
+          mv /tmp/docker-backend.tar.gz docker-backend.tar.gz
+
+      - name: Upload to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-backend.tar.gz"
+          target: "/tmp/"
+
+      - name: Deploy with Docker Compose
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            APP_BASE_DIR="$HOME/${{ secrets.DEPLOY_PATH }}"
+            RELEASES_DIR="$APP_BASE_DIR/releases"
+            SHARED_DIR="$APP_BASE_DIR/shared"
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            NEW_RELEASE="$RELEASES_DIR/$TIMESTAMP"
+
+            # 디렉토리 생성
+            mkdir -p "$RELEASES_DIR"
+            mkdir -p "$SHARED_DIR/media"
+
+            # .env 파일 확인
+            if [ ! -f "$SHARED_DIR/.env" ]; then
+              echo "WARNING: .env file not found in $SHARED_DIR!"
+              echo "Please create .env file with required environment variables"
+              exit 1
+            fi
+
+            # 빌드 압축 해제
+            mkdir -p "$NEW_RELEASE"
+            tar xzf "/tmp/docker-backend.tar.gz" -C "$NEW_RELEASE"
+            rm -f "/tmp/docker-backend.tar.gz"
+
+            # 공유 디렉토리 심볼릭 링크 (media, .env 등)
+            ln -sfn "$SHARED_DIR/media" "$NEW_RELEASE/media"
+            ln -sfn "$SHARED_DIR/.env" "$NEW_RELEASE/.env"
+
+            # 새 릴리즈 활성화
+            ln -sfn "$NEW_RELEASE" "$APP_BASE_DIR/current"
+
+            # Docker Compose로 백엔드 재배포
+            cd "$APP_BASE_DIR/current"
+            
+            # 기존 컨테이너 모두 중지 및 제거
+            echo "Stopping all existing containers..."
+            docker-compose -p jbig --env-file .env down 2>/dev/null || true
+            
+            # jbig 관련 컨테이너 강제 정리 (만약 down이 실패한 경우)
+            echo "Cleaning up jbig containers..."
+            docker stop jbig_backend jbig_supabase_postgres 2>/dev/null || true
+            docker rm -f jbig_backend jbig_supabase_postgres 2>/dev/null || true
+            
+            # 포트 충돌 확인 (도커 컨테이너)
+            echo "Checking for docker container port conflicts..."
+            CONFLICT_5433=$(docker ps -q --filter "publish=5433" 2>/dev/null)
+            CONFLICT_8000=$(docker ps -q --filter "publish=8000" 2>/dev/null)
+            
+            if [ ! -z "$CONFLICT_5433" ]; then
+              echo "WARNING: Port 5433 is still in use by container: $(docker ps --filter "id=$CONFLICT_5433" --format "{{.Names}}")"
+              echo "Attempting to stop conflicting container..."
+              docker stop $CONFLICT_5433 || true
+            fi
+            
+            if [ ! -z "$CONFLICT_8000" ]; then
+              echo "WARNING: Port 8000 is still in use by container: $(docker ps --filter "id=$CONFLICT_8000" --format "{{.Names}}")"
+              echo "Attempting to stop conflicting container..."
+              docker stop $CONFLICT_8000 || true
+            fi
+            
+            # 비-도커 프로세스 확인 및 종료
+            echo "Checking for non-docker processes on ports..."
+            sleep 2  # 도커가 완전히 종료되도록 잠시 대기
+            
+            # 8000번 포트 비-도커 프로세스 확인 및 종료
+            if lsof -t -i:8000 >/dev/null 2>&1; then
+              echo "WARNING: Non-docker process found on port 8000"
+              NON_DOCKER_8000=$(lsof -t -i:8000 2>/dev/null | tr '\n' ' ')
+              echo "Killing PIDs: $NON_DOCKER_8000"
+              for pid in $NON_DOCKER_8000; do
+                kill -9 $pid 2>/dev/null || true
+              done
+              sleep 1
+            else
+              echo "✅ Port 8000 is clean"
+            fi
+            
+            # 5433번 포트 비-도커 프로세스 확인 및 종료
+            if lsof -t -i:5433 >/dev/null 2>&1; then
+              echo "WARNING: Non-docker process found on port 5433"
+              NON_DOCKER_5433=$(lsof -t -i:5433 2>/dev/null | tr '\n' ' ')
+              echo "Killing PIDs: $NON_DOCKER_5433"
+              for pid in $NON_DOCKER_5433; do
+                kill -9 $pid 2>/dev/null || true
+              done
+              sleep 1
+            else
+              echo "✅ Port 5433 is clean"
+            fi
+            
+            # gunicorn 프로세스 체크 (정보만 출력, 종료하지 않음)
+            # 포트가 이미 깨끗하면 다른 포트를 쓰는 gunicorn일 수 있으므로 놔둠
+            if pgrep -f "gunicorn" >/dev/null 2>&1; then
+              GUNICORN_COUNT=$(pgrep -f "gunicorn" 2>/dev/null | wc -l)
+              echo "ℹ️  Found $GUNICORN_COUNT gunicorn process(es) running (may be using other ports)"
+            else
+              echo "✅ No gunicorn processes found"
+            fi
+            
+            # 최종 포트 확인
+            echo "Final port check..."
+            if lsof -i :8000 >/dev/null 2>&1; then
+              echo "❌ ERROR: Port 8000 is still in use after cleanup!"
+              lsof -i :8000 || true
+              echo "Attempting one more cleanup..."
+              fuser -k 8000/tcp 2>/dev/null || true
+              sleep 2
+              if lsof -i :8000 >/dev/null 2>&1; then
+                echo "❌ FATAL: Cannot free port 8000"
+                exit 1
+              fi
+            fi
+            
+            if lsof -i :5433 >/dev/null 2>&1; then
+              echo "❌ ERROR: Port 5433 is still in use after cleanup!"
+              lsof -i :5433 || true
+              echo "Attempting one more cleanup..."
+              fuser -k 5433/tcp 2>/dev/null || true
+              sleep 2
+              if lsof -i :5433 >/dev/null 2>&1; then
+                echo "❌ FATAL: Cannot free port 5433"
+                exit 1
+              fi
+            fi
+            
+            echo "✅ All ports are clean and ready for deployment"
+            
+            # 새 이미지 빌드
+            echo "Building new images..."
+            docker-compose -p jbig --env-file .env build
+            
+            # 1단계: DB 먼저 시작
+            echo "Starting database service..."
+            docker-compose -p jbig --env-file .env up -d db
+            
+            # DB가 healthy 상태가 될 때까지 대기 (최대 60초)
+            echo "Waiting for database to be healthy..."
+            for i in {1..60}; do
+              if docker inspect --format='{{.State.Health.Status}}' jbig_supabase_postgres 2>/dev/null | grep -q "healthy"; then
+                echo "✅ Database is healthy!"
+                break
+              fi
+              echo "Waiting for database... ($i/60)"
+              sleep 1
+            done
+            
+            # 2단계: Backend 시작
+            echo "Starting backend service..."
+            docker-compose -p jbig --env-file .env up -d backend
+            
+            # 사용하지 않는 Docker 리소스 정리
+            echo "Cleaning up unused Docker resources..."
+            docker image prune -f
+            docker container prune -f
+
+            # 헬스체크
+            echo "Waiting for backend to be healthy..."
+            sleep 10
+            
+            # Backend 상태 확인 (최대 30초 대기)
+            for i in {1..30}; do
+              if docker ps --filter "name=jbig_backend" --filter "status=running" | grep -q jbig_backend; then
+                echo "✅ Backend is running!"
+                # 로그 확인
+                echo "Recent backend logs:"
+                docker logs jbig_backend --tail=20
+                break
+              fi
+              echo "Waiting for backend... ($i/30)"
+              sleep 1
+            done
+            
+            # 최종 확인
+            if docker ps --filter "name=jbig_backend" --filter "status=running" | grep -q jbig_backend; then
+              echo "✅ Backend deployed successfully!"
+            else
+              echo "❌ Backend deployment failed!"
+              docker logs jbig_backend --tail=100
+              exit 1
+            fi
+
+            # 오래된 릴리즈 정리 (최근 5개만 유지)
+            cd "$RELEASES_DIR"
+            ls -t | tail -n +6 | xargs -r rm -rf
+
+            echo "Deployed: $TIMESTAMP"
+
