@@ -383,7 +383,8 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         if board.board_type == Board.BoardType.JUSTIFICATION_LETTER:
             post_type = Post.PostType.JUSTIFICATION_LETTER
         
-        serializer.save(author=self.request.user, board=board, post_type=post_type)
+        is_anonymous = serializer.validated_data.get('is_anonymous', False)
+        serializer.save(author=self.request.user, board=board, post_type=post_type, is_anonymous=is_anonymous)
 
 @extend_schema(tags=['게시판'])
 @extend_schema_view(
@@ -550,7 +551,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     get=extend_schema(summary="댓글 목록 조회"),
     post=extend_schema(
         summary="댓글 생성",
-        description="""특정 게시글에 새로운 댓글을 작성합니다.\n- **권한 (Board Level)**: 게시판의 `comment_permission` 설정에 따라 접근이 제어됩니다.\n  - `all`: 인증된 사용자 누구나 작성 가능\n  - `staff`: 스태프만 작성 가능""",
+        description="""특정 게시글에 새로운 댓글을 작성합니다.\n- **권한 (Board Level)**: 게시판의 `comment_permission` 설정에 따라 접근이 제어됩니다.\n  - `all`: 인증된 사용자 누구나 작성 가능\n  - `staff`: 스태프만 작성 가능\n- **익명 작성**: `is_anonymous` 필드를 true로 설정하면 익명으로 작성됩니다.""",
     )
 )
 class CommentListCreateAPIView(generics.ListCreateAPIView):
@@ -567,7 +568,8 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
-        comment = serializer.save(author=self.request.user, post=post)
+        is_anonymous = serializer.validated_data.get('is_anonymous', False)
+        comment = serializer.save(author=self.request.user, post=post, is_anonymous=is_anonymous)
 
         # 알림 생성
         if comment.parent:

@@ -14,7 +14,7 @@ class DebugPermission(permissions.BasePermission):
 class IsBoardReadable(permissions.BasePermission):
     """
     Allows access based on the board's `read_permission` field.
-    - 'all': Anyone can read.
+    - 'all': Anyone can read (including non-authenticated users).
     - 'staff': Only staff members can read.
     """
     def has_permission(self, request, view):
@@ -40,6 +40,7 @@ class IsBoardReadable(permissions.BasePermission):
         read_perm = getattr(board, 'read_permission', 'staff')
 
         if read_perm == 'all':
+            # 'all' 권한인 경우 비로그인 사용자도 접근 가능
             return True
         
         return request.user.is_authenticated and request.user.is_staff

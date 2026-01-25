@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError
 from django.conf import settings
 from rest_framework import serializers
 
-from .models import Category, Board, Post, Comment, Notification, Draft
+from .models import Category, Board, Post, Comment, Notification, Draft, generate_anonymous_nickname
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ class CategoryWithBoardsSerializer(serializers.ModelSerializer):
 class CommentSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
-    author_semester = serializers.ReadOnlyField(source='author.semester')
+    author_semester = serializers.SerializerMethodField()
     children = RecursiveField(many=True, read_only=True)
     is_owner = serializers.SerializerMethodField()
     post_id = serializers.IntegerField(source='post.id', read_only=True)
@@ -135,10 +135,11 @@ class CommentSerializer(serializers.ModelSerializer):
     board_id = serializers.IntegerField(source='post.board.id', read_only=True)
     likes = serializers.SerializerMethodField()
     isLiked = serializers.SerializerMethodField()
+    is_anonymous = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Comment
-        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id', 'likes', 'isLiked']
+        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id', 'likes', 'isLiked', 'is_anonymous']
         read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id', 'likes', 'isLiked')
 
 
@@ -146,17 +147,60 @@ class CommentSerializer(serializers.ModelSerializer):
     def get_author(self, obj):
         if not obj.author:
             return "알 수 없는 사용자"
-        username=obj.author.username
-        # _ 가 포함 돼 있으면
-        if '_' in username:
-            return username.split('_', 1)[1]
-        return username
+        
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글인 경우
+        if obj.is_anonymous:
+            # 로그인한 회원은 실명을 볼 수 있음
+            if user and user.is_authenticated:
+                username = obj.author.username
+                if '_' in username:
+                    return username.split('_', 1)[1]
+                return username
+            else:
+                # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
+                return generate_anonymous_nickname(obj.author.id, 'comment', obj.id, None)
+        else:
+            # 익명이 아닌 경우 실명 표시
+            username = obj.author.username
+            if '_' in username:
+                return username.split('_', 1)[1]
+            return username
 
 
     def get_user_id(self, obj):
-        if obj.author:
+        if not obj.author:
+            return '알 수 없는 사용자'
+        
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글인 경우
+        if obj.is_anonymous:
+            # 로그인한 회원은 실제 user_id를 볼 수 있음
+            if user and user.is_authenticated:
+                return obj.author.email.split('@')[0]
+            else:
+                # 비회원은 익명으로 표시
+                return '익명'
+        else:
             return obj.author.email.split('@')[0]
-        return '알 수 없는 사용자'
+    
+    def get_author_semester(self, obj):
+        if not obj.author:
+            return ''
+        
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글이고 비회원인 경우 학기 정보 숨김 (빈 문자열 반환)
+        if obj.is_anonymous and not (user and user.is_authenticated):
+            return ''
+        
+        # semester가 None이면 빈 문자열 반환
+        return obj.author.semester if obj.author.semester is not None else ''
 
     def get_is_owner(self, obj):
         user = self.context.get('request').user
@@ -212,27 +256,66 @@ class CommentSerializer(serializers.ModelSerializer):
 class PostListSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
-    author_semester = serializers.ReadOnlyField(source='author.semester')
+    author_semester = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comment_count = serializers.SerializerMethodField()
     attachment_paths = serializers.SerializerMethodField()
     board_id = serializers.IntegerField(source='board.id', read_only=True)
     board_name = serializers.CharField(source='board.name', read_only=True)
+    is_anonymous = serializers.BooleanField(read_only=True)
 
 
     class Meta:
         model = Post
-        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name']
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name', 'is_anonymous']
 
     def get_author(self, obj):
-        username=obj.author.username
-        if '_' in username:
-            return username.split('_',1)[1]
-        return username
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글인 경우
+        if obj.is_anonymous:
+            # 로그인한 회원은 실명을 볼 수 있음
+            if user and user.is_authenticated:
+                username = obj.author.username
+                if '_' in username:
+                    return username.split('_', 1)[1]
+                return username
+            else:
+                # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
+                return generate_anonymous_nickname(obj.author.id, 'post', obj.id, None)
+        else:
+            # 익명이 아닌 경우 실명 표시
+            username = obj.author.username
+            if '_' in username:
+                return username.split('_',1)[1]
+            return username
 
 
     def get_user_id(self, obj):
-        return obj.author.email.split('@')[0]
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글인 경우
+        if obj.is_anonymous:
+            # 로그인한 회원은 실제 user_id를 볼 수 있음
+            if user and user.is_authenticated:
+                return obj.author.email.split('@')[0]
+            else:
+                # 비회원은 익명으로 표시
+                return '익명'
+        else:
+            return obj.author.email.split('@')[0]
+    
+    def get_author_semester(self, obj):
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글이고 비회원인 경우 학기 정보 숨김 (빈 문자열 반환)
+        if obj.is_anonymous and not (user and user.is_authenticated):
+            return ''
+        
+        return obj.author.semester
 
     def get_comment_count(self, obj):
         return obj.comments.count()
@@ -259,10 +342,11 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     attachment_paths = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
     content_md = serializers.CharField(write_only=True)
     board_id = serializers.IntegerField(write_only=True, required=False)
+    is_anonymous = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Post
-        fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id']
+        fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id', 'is_anonymous']
 
 
     def create(self, validated_data):
@@ -300,7 +384,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
 class PostDetailSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
-    author_semester = serializers.ReadOnlyField(source='author.semester')
+    author_semester = serializers.SerializerMethodField()
     board = BoardSerializer(read_only=True)
     comments = serializers.SerializerMethodField()
     attachment_paths = serializers.SerializerMethodField()
@@ -309,24 +393,63 @@ class PostDetailSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     content_md = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
+    is_anonymous = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Post
         fields = [
             'id', 'board_post_id', 'title', 'content_md', 'user_id', 'author', 'author_semester',
             'created_at', 'updated_at', 'views', 'board', 'comments', 'attachment_paths',
-            'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner'
+            'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner', 'is_anonymous'
         ]
 
     def get_author(self, obj):
-        username=obj.author.username
-        if '_' in username:
-            return username.split('_',1)[1]
-        return username
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글인 경우
+        if obj.is_anonymous:
+            # 로그인한 회원은 실명을 볼 수 있음
+            if user and user.is_authenticated:
+                username = obj.author.username
+                if '_' in username:
+                    return username.split('_', 1)[1]
+                return username
+            else:
+                # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
+                return generate_anonymous_nickname(obj.author.id, 'post', obj.id, None)
+        else:
+            # 익명이 아닌 경우 실명 표시
+            username = obj.author.username
+            if '_' in username:
+                return username.split('_',1)[1]
+            return username
 
 
     def get_user_id(self, obj):
-        return obj.author.email.split('@')[0]
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글인 경우
+        if obj.is_anonymous:
+            # 로그인한 회원은 실제 user_id를 볼 수 있음
+            if user and user.is_authenticated:
+                return obj.author.email.split('@')[0]
+            else:
+                # 비회원은 익명으로 표시
+                return '익명'
+        else:
+            return obj.author.email.split('@')[0]
+    
+    def get_author_semester(self, obj):
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        # 익명 작성글이고 비회원인 경우 학기 정보 숨김 (빈 문자열 반환)
+        if obj.is_anonymous and not (user and user.is_authenticated):
+            return ''
+        
+        return obj.author.semester
 
     def get_comments(self, obj):
         # 최상위 댓글만 가져오고 created_at 기준 오래된 순으로 정렬 (최신 댓글이 아래에)

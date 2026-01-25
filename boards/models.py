@@ -4,11 +4,54 @@ from django.db.models import Q
 from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.contrib.postgres.indexes import GinIndex
 from bs4 import BeautifulSoup
+import random
+import hashlib
 
 
 def post_upload_path(instance, filename):
     """Deprecated - 마이그레이션 호환성 위해 유지"""
     return f'boards/{instance.board.id}/{filename}'
+
+
+# 무작위 닉네임 생성을 위한 단어 리스트
+ADJECTIVES = [
+    '딱딱한', '부드러운', '상냥한', '날카로운', '따뜻한', '차가운', '빠른', '느린',
+    '밝은', '어두운', '큰', '작은', '높은', '낮은', '깊은', '얕은', '넓은', '좁은',
+    '강한', '약한', '단단한', '무른', '매운', '달콤한', '쓴', '시원한', '뜨거운',
+    '차분한', '활발한', '조용한', '시끄러운', '편안한', '불편한', '깨끗한', '지저분한',
+    '예쁜', '못생긴', '귀여운', '무서운', '친절한', '무뚝뚝한', '재미있는', '지루한',
+    '신나는', '우울한', '행복한', '슬픈', '화난', '평화로운', '바쁜', '한가한'
+]
+
+NOUNS = [
+    '두쫀쿠', '밤티', '샤갈', '호날두', '오봉', '표돌이', '표순이', '두쫀붕',
+    '슈붕', '팥붕', '조림핑', '전붕이', '전순이', '오퍼스', '소넷',
+    '하이쿠', '제미니', 'GPT', '올트먼', '머스크', '마라탕', '마라샹궈',
+    '코다리', '고양이', '햄스터', '쿼카', '팬케이크', '오믈렛', '아기맹수', '비빔대왕'
+]
+
+
+def generate_anonymous_nickname(user_id, content_type, content_id, semester=None):
+    """
+    사용자 ID, 콘텐츠 타입, 콘텐츠 ID를 조합하여 일관된 무작위 닉네임 생성
+    같은 사용자의 다른 글/댓글에는 다른 닉네임이 생성됨
+    semester가 있으면 "N기 명사", 없으면 "형용사 명사" 형식으로 생성됨
+    """
+    # 해시를 사용하여 동일한 입력에 대해 항상 같은 닉네임 생성
+    seed_string = f"{user_id}_{content_type}_{content_id}"
+    hash_value = int(hashlib.sha256(seed_string.encode()).hexdigest(), 16)
+    
+    # 해시값을 사용하여 형용사와 명사 선택
+    adj_index = hash_value % len(ADJECTIVES)
+    noun_index = (hash_value // len(ADJECTIVES)) % len(NOUNS)
+    
+    # semester가 있으면 "N기", 없으면 형용사 사용
+    if semester:
+        prefix = f"{semester}기"
+    else:
+        prefix = ADJECTIVES[adj_index]
+    
+    return f"{prefix} {NOUNS[noun_index]}"
 
 
 class Category(models.Model):
@@ -118,6 +161,7 @@ class Post(models.Model):
     search_vector = SearchVectorField(null=True, editable=False)
     board_post_id = models.IntegerField(null=True, blank=True)
     attachment_paths = models.JSONField(default=list, blank=True, help_text="첨부파일 경로 목록")
+    is_anonymous = models.BooleanField(default=False, help_text="익명 작성 여부")
 
     objects = PostManager()
 
@@ -170,6 +214,7 @@ class Comment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
     likes = models.ManyToManyField(settings.AUTH_USER_MODEL, through='CommentLike', related_name='liked_comments')
+    is_anonymous = models.BooleanField(default=False, help_text="익명 작성 여부")
 
     class Meta:
         db_table = 'comment'

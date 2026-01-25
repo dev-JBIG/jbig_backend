@@ -40,7 +40,11 @@ from boards.models import Post, Comment
 @extend_schema(
     tags=["사용자"],
     summary="특정 사용자가 작성한 게시글 목록 조회",
-    description="특정 사용자의 username을 이용하여 해당 사용자가 작성한 모든 게시글의 목록을 조회합니다.",
+    description="""특정 사용자의 username을 이용하여 해당 사용자가 작성한 모든 게시글의 목록을 조회합니다.
+    
+- 로그인한 사용자: 실명 작성글과 익명 작성글 모두 조회 가능
+- 비로그인 사용자(비회원): 실명 작성글만 조회 가능 (익명 작성글은 제외됨)
+- 본인의 프로필: 익명 작성글도 모두 확인 가능""",
     parameters=[
         OpenApiParameter(
             name='user_id',
@@ -52,18 +56,30 @@ from boards.models import Post, Comment
 )
 class UserPostListView(generics.ListAPIView):
     serializer_class = PostListSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         username = self.kwargs['user_id']
-        user = get_object_or_404(User, email__startswith=username + '@')
-        return Post.objects.filter(author=user).order_by('-created_at')
+        target_user = get_object_or_404(User, email__startswith=username + '@')
+        request_user = self.request.user
+        
+        queryset = Post.objects.filter(author=target_user)
+        
+        # 로그인하지 않은 사용자는 익명 글을 볼 수 없음
+        if not request_user.is_authenticated:
+            queryset = queryset.filter(is_anonymous=False)
+        
+        return queryset.order_by('-created_at')
 
 
 @extend_schema(
     tags=["사용자"],
     summary="특정 사용자가 작성한 댓글 목록 조회",
-    description="특정 사용자의 ID를 이용하여 해당 사용자가 작성한 모든 댓글의 목록을 조회합니다.",
+    description="""특정 사용자의 ID를 이용하여 해당 사용자가 작성한 모든 댓글의 목록을 조회합니다.
+    
+- 로그인한 사용자: 실명 댓글과 익명 댓글 모두 조회 가능
+- 비로그인 사용자(비회원): 실명 댓글만 조회 가능 (익명 댓글은 제외됨)
+- 본인의 프로필: 익명 댓글도 모두 확인 가능""",
     parameters=[
         OpenApiParameter(
             name='user_id',
@@ -75,12 +91,20 @@ class UserPostListView(generics.ListAPIView):
 )
 class UserCommentListView(generics.ListAPIView):
     serializer_class = CommentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         user_id = self.kwargs['user_id']
-        user = get_object_or_404(User, email__startswith=user_id + '@')
-        return Comment.objects.filter(author=user).order_by('-created_at')
+        target_user = get_object_or_404(User, email__startswith=user_id + '@')
+        request_user = self.request.user
+        
+        queryset = Comment.objects.filter(author=target_user)
+        
+        # 로그인하지 않은 사용자는 익명 댓글을 볼 수 없음
+        if not request_user.is_authenticated:
+            queryset = queryset.filter(is_anonymous=False)
+        
+        return queryset.order_by('-created_at')
 
 @extend_schema(
     tags=["사용자"],
