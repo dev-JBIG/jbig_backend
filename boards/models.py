@@ -31,14 +31,14 @@ NOUNS = [
 ]
 
 
-def generate_anonymous_nickname(user_id, content_type, content_id, semester=None):
+def generate_anonymous_nickname(user_id, post_id, semester=None):
     """
-    사용자 ID, 콘텐츠 타입, 콘텐츠 ID를 조합하여 일관된 무작위 닉네임 생성
-    같은 사용자의 다른 글/댓글에는 다른 닉네임이 생성됨
+    사용자 ID와 게시글 ID를 조합하여 일관된 무작위 닉네임 생성
+    같은 게시글 내에서 같은 사용자는 항상 동일한 닉네임을 가짐
     semester가 있으면 "N기 명사", 없으면 "형용사 명사" 형식으로 생성됨
     """
     # 해시를 사용하여 동일한 입력에 대해 항상 같은 닉네임 생성
-    seed_string = f"{user_id}_{content_type}_{content_id}"
+    seed_string = f"{user_id}_{post_id}"
     hash_value = int(hashlib.sha256(seed_string.encode()).hexdigest(), 16)
     
     # 해시값을 사용하여 형용사와 명사 선택

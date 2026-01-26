@@ -161,7 +161,8 @@ class CommentSerializer(serializers.ModelSerializer):
                 return username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
-                return generate_anonymous_nickname(obj.author.id, 'comment', obj.id, None)
+                # 같은 게시글 내에서는 동일한 닉네임 유지를 위해 post.id 사용
+                return generate_anonymous_nickname(obj.author.id, obj.post.id, None)
         else:
             # 익명이 아닌 경우 실명 표시
             username = obj.author.username
@@ -283,7 +284,7 @@ class PostListSerializer(serializers.ModelSerializer):
                 return username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
-                return generate_anonymous_nickname(obj.author.id, 'post', obj.id, None)
+                return generate_anonymous_nickname(obj.author.id, obj.id, None)
         else:
             # 익명이 아닌 경우 실명 표시
             username = obj.author.username
@@ -417,7 +418,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 return username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
-                return generate_anonymous_nickname(obj.author.id, 'post', obj.id, None)
+                return generate_anonymous_nickname(obj.author.id, obj.id, None)
         else:
             # 익명이 아닌 경우 실명 표시
             username = obj.author.username
