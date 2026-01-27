@@ -166,6 +166,9 @@ STATIC_URL = os.getenv('STATIC_URL', 'static/')
 # Vast.ai GPU rental
 VAST_API_KEY = os.getenv('VAST_API_KEY', '')
 
+# Cloudflare Turnstile CAPTCHA
+TURNSTILE_SECRET_KEY = os.getenv('TURNSTILE_SECRET_KEY', '')
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 
 import boto3
+import requests
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
@@ -33,6 +34,29 @@ from .permissions import (
     IsCommentWritable,
     PostDetailPermission
 )
+
+# Cloudflare Turnstile 검증 함수
+def verify_turnstile(token: str, ip: str) -> bool:
+    """Cloudflare Turnstile 토큰 검증"""
+    if not settings.TURNSTILE_SECRET_KEY:
+        return True  # 개발 환경에서는 검증 건너뛰기
+
+    try:
+        response = requests.post(
+            'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+            data={
+                'secret': settings.TURNSTILE_SECRET_KEY,
+                'response': token,
+                'remoteip': ip,
+            },
+            timeout=10
+        )
+        result = response.json()
+        return result.get('success', False)
+    except Exception as e:
+        logger.error(f"Turnstile 검증 실패: {e}")
+        return False
+
 
 # 데코레이터가 뷰로 착각해서;; 맨 위로 뺌
 class RegexpReplace(Func):
@@ -568,13 +592,15 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
         return Comment.objects.filter(post_id=post_id, parent__isnull=True).order_by('created_at')
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError
+
         post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
         is_anonymous = serializer.validated_data.get('is_anonymous', True)
-        
+
         # 비회원인 경우 author=None으로 저장
         if self.request.user.is_authenticated:
             comment = serializer.save(author=self.request.user, post=post, is_anonymous=is_anonymous)
-            
+
             # 알림 생성 (회원만)
             if comment.parent and comment.parent.author:
                 # 대댓글인 경우: 부모 댓글 작성자에게 알림
@@ -595,13 +621,19 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
                     comment=comment
                 )
         else:
-            # 비회원 댓글 - IP 주소를 guest_id로 사용
+            # 비회원 댓글 - IP 주소 추출
             x_forwarded_for = self.request.META.get('HTTP_X_FORWARDED_FOR')
             if x_forwarded_for:
                 ip = x_forwarded_for.split(',')[0]
             else:
                 ip = self.request.META.get('REMOTE_ADDR')
-            comment = serializer.save(author=None, post=post, is_anonymous=False, guest_id=ip)
+
+            # Turnstile CAPTCHA 검증
+            turnstile_token = self.request.data.get('turnstile_token')
+            if not verify_turnstile(turnstile_token, ip):
+                raise ValidationError({'detail': 'CAPTCHA 검증에 실패했습니다. 다시 시도해주세요.'})
+
+            comment = serializer.save(author=None, post=post, is_anonymous=is_anonymous, guest_id=ip)
 
 @extend_schema(tags=['댓글'])
 @extend_schema_view(
