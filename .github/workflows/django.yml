@@ -108,6 +108,6 @@ jobs:
 
             # 오래된 릴리즈 정리 (최근 5개만 유지)
             cd "$RELEASES_DIR"
-            ls -t | tail -n +6 | xargs -r rm -rf
+            ls -t | tail -n +6 | xargs -r sudo rm -rf
 
             echo "Deployed: $TIMESTAMP"
