@@ -128,14 +128,15 @@ class CommentLikeAPIView(generics.GenericAPIView):
         except comment.likes.through.DoesNotExist:
             comment.likes.add(user)
             is_liked = True
-            # 댓글 좋아요 추가 시에만 알림 생성
-            create_notification(
-                recipient=comment.author,
-                actor=user,
-                notification_type=Notification.NotificationType.COMMENT_LIKE,
-                post=comment.post,
-                comment=comment
-            )
+            # 댓글 좋아요 추가 시에만 알림 생성 (비회원 댓글 제외)
+            if comment.author:
+                create_notification(
+                    recipient=comment.author,
+                    actor=user,
+                    notification_type=Notification.NotificationType.COMMENT_LIKE,
+                    post=comment.post,
+                    comment=comment
+                )
 
         likes_count = comment.likes.count()
         return Response({'likes': likes_count, 'isLiked': is_liked}, status=status.HTTP_200_OK)
@@ -383,7 +384,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         if board.board_type == Board.BoardType.JUSTIFICATION_LETTER:
             post_type = Post.PostType.JUSTIFICATION_LETTER
         
-        is_anonymous = serializer.validated_data.get('is_anonymous', False)
+        is_anonymous = serializer.validated_data.get('is_anonymous', True)
         serializer.save(author=self.request.user, board=board, post_type=post_type, is_anonymous=is_anonymous)
 
 @extend_schema(tags=['게시판'])
@@ -551,7 +552,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     get=extend_schema(summary="댓글 목록 조회"),
     post=extend_schema(
         summary="댓글 생성",
-        description="""특정 게시글에 새로운 댓글을 작성합니다.\n- **권한 (Board Level)**: 게시판의 `comment_permission` 설정에 따라 접근이 제어됩니다.\n  - `all`: 인증된 사용자 누구나 작성 가능\n  - `staff`: 스태프만 작성 가능\n- **익명 작성**: `is_anonymous` 필드를 true로 설정하면 익명으로 작성됩니다.""",
+        description="""특정 게시글에 새로운 댓글을 작성합니다.\n- **권한 (Board Level)**: 게시판의 `comment_permission` 설정에 따라 접근이 제어됩니다.\n  - `all`: 비회원 포함 누구나 작성 가능\n  - `staff`: 스태프만 작성 가능\n- **비회원 댓글**: 비회원은 자동으로 IP 기반 익명 닉네임이 부여됩니다.\n- **회원 익명 작성**: 회원은 `is_anonymous` 필드를 true로 설정하면 익명으로 작성됩니다 (기본값: true).""",
     )
 )
 class CommentListCreateAPIView(generics.ListCreateAPIView):
@@ -568,28 +569,39 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
-        is_anonymous = serializer.validated_data.get('is_anonymous', False)
-        comment = serializer.save(author=self.request.user, post=post, is_anonymous=is_anonymous)
-
-        # 알림 생성
-        if comment.parent:
-            # 대댓글인 경우: 부모 댓글 작성자에게 알림
-            create_notification(
-                recipient=comment.parent.author,
-                actor=self.request.user,
-                notification_type=Notification.NotificationType.REPLY,
-                post=post,
-                comment=comment
-            )
+        is_anonymous = serializer.validated_data.get('is_anonymous', True)
+        
+        # 비회원인 경우 author=None으로 저장
+        if self.request.user.is_authenticated:
+            comment = serializer.save(author=self.request.user, post=post, is_anonymous=is_anonymous)
+            
+            # 알림 생성 (회원만)
+            if comment.parent and comment.parent.author:
+                # 대댓글인 경우: 부모 댓글 작성자에게 알림
+                create_notification(
+                    recipient=comment.parent.author,
+                    actor=self.request.user,
+                    notification_type=Notification.NotificationType.REPLY,
+                    post=post,
+                    comment=comment
+                )
+            elif post.author:
+                # 일반 댓글인 경우: 게시글 작성자에게 알림
+                create_notification(
+                    recipient=post.author,
+                    actor=self.request.user,
+                    notification_type=Notification.NotificationType.COMMENT,
+                    post=post,
+                    comment=comment
+                )
         else:
-            # 일반 댓글인 경우: 게시글 작성자에게 알림
-            create_notification(
-                recipient=post.author,
-                actor=self.request.user,
-                notification_type=Notification.NotificationType.COMMENT,
-                post=post,
-                comment=comment
-            )
+            # 비회원 댓글 - IP 주소를 guest_id로 사용
+            x_forwarded_for = self.request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip = x_forwarded_for.split(',')[0]
+            else:
+                ip = self.request.META.get('REMOTE_ADDR')
+            comment = serializer.save(author=None, post=post, is_anonymous=False, guest_id=ip)
 
 @extend_schema(tags=['댓글'])
 @extend_schema_view(

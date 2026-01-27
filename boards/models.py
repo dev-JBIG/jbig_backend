@@ -161,7 +161,7 @@ class Post(models.Model):
     search_vector = SearchVectorField(null=True, editable=False)
     board_post_id = models.IntegerField(null=True, blank=True)
     attachment_paths = models.JSONField(default=list, blank=True, help_text="첨부파일 경로 목록")
-    is_anonymous = models.BooleanField(default=False, help_text="익명 작성 여부")
+    is_anonymous = models.BooleanField(default=True, help_text="익명 작성 여부 (True: 회원에게만 실명, False: 비회원에게도 실명 공개)")
 
     objects = PostManager()
 
@@ -206,7 +206,7 @@ class PostLike(models.Model):
 
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comments', null=True, blank=True)
     content = models.TextField()
     parent = models.ForeignKey(
         'self', null=True, blank=True, related_name='children', on_delete=models.CASCADE
@@ -214,7 +214,8 @@ class Comment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
     likes = models.ManyToManyField(settings.AUTH_USER_MODEL, through='CommentLike', related_name='liked_comments')
-    is_anonymous = models.BooleanField(default=False, help_text="익명 작성 여부")
+    is_anonymous = models.BooleanField(default=True, help_text="익명 작성 여부 (True: 회원에게만 실명, False: 비회원에게도 실명 공개)")
+    guest_id = models.CharField(max_length=100, null=True, blank=True, help_text="비회원 고유 ID (IP 기반)")
 
     class Meta:
         db_table = 'comment'

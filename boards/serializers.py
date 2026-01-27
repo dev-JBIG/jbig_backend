@@ -135,7 +135,7 @@ class CommentSerializer(serializers.ModelSerializer):
     board_id = serializers.IntegerField(source='post.board.id', read_only=True)
     likes = serializers.SerializerMethodField()
     isLiked = serializers.SerializerMethodField()
-    is_anonymous = serializers.BooleanField(required=False, default=False)
+    is_anonymous = serializers.BooleanField(required=False, default=True)
 
     class Meta:
         model = Comment
@@ -145,8 +145,14 @@ class CommentSerializer(serializers.ModelSerializer):
 
     # 작성자 이름 파싱 로직
     def get_author(self, obj):
+        # 비회원 댓글인 경우 - guest_id를 user_id처럼 사용하여 무작위 닉네임 생성
         if not obj.author:
-            return "알 수 없는 사용자"
+            if obj.guest_id:
+                # guest_id의 해시값을 user_id처럼 사용
+                import hashlib
+                guest_hash = int(hashlib.md5(obj.guest_id.encode()).hexdigest()[:8], 16)
+                return generate_anonymous_nickname(guest_hash, obj.post.id, None)
+            return "비회원"
         
         request = self.context.get('request')
         user = request.user if request else None
@@ -172,8 +178,9 @@ class CommentSerializer(serializers.ModelSerializer):
 
 
     def get_user_id(self, obj):
+        # 비회원 댓글인 경우
         if not obj.author:
-            return '알 수 없는 사용자'
+            return '비회원'
         
         request = self.context.get('request')
         user = request.user if request else None
@@ -225,6 +232,7 @@ class CommentSerializer(serializers.ModelSerializer):
         if not sanitized_content:
             raise serializers.ValidationError("Content cannot be empty.")
         return sanitized_content
+    
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -343,7 +351,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     attachment_paths = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
     content_md = serializers.CharField(write_only=True)
     board_id = serializers.IntegerField(write_only=True, required=False)
-    is_anonymous = serializers.BooleanField(required=False, default=False)
+    is_anonymous = serializers.BooleanField(required=False, default=True)
 
     class Meta:
         model = Post

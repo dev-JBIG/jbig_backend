@@ -77,7 +77,7 @@ class IsPostWritable(permissions.BasePermission):
 class IsCommentWritable(permissions.BasePermission):
     """
     Allows access based on the board's `comment_permission` field.
-    - 'all': Any authenticated user can comment.
+    - 'all': Anyone (including non-authenticated users) can comment.
     - 'staff': Only staff members can comment.
     """
     def has_permission(self, request, view):
@@ -93,13 +93,12 @@ class IsCommentWritable(permissions.BasePermission):
 
         comment_perm = getattr(board, 'comment_permission', 'staff')
 
-        if not request.user.is_authenticated:
-            return False
-
+        # 'all' 권한인 경우 비회원도 댓글 작성 가능
         if comment_perm == 'all':
             return True
         
-        return request.user.is_staff
+        # 'staff' 권한인 경우 스태프만 작성 가능
+        return request.user.is_authenticated and request.user.is_staff
 
 class PostDetailPermission(permissions.BasePermission):
     """
@@ -139,6 +138,9 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 
         # For posts and comments, the author field exists.
         if hasattr(obj, 'author'):
+            # 비회원 댓글(author=None)은 수정/삭제 불가
+            if obj.author is None:
+                return False
             return obj.author == request.user or request.user.is_staff
         
         return False
