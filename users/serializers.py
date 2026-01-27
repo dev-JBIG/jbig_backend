@@ -272,12 +272,17 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     def get_posts(self, obj):
         request = self.context.get('request')
         is_self = request and request.user.is_authenticated and request.user == obj
+        is_authenticated = request and request.user.is_authenticated
 
         posts = obj.posts.order_by('-created_at')
 
         # 본인이 아닌 경우 비공개 게시글(post_type=3) 제외
         if not is_self:
             posts = posts.exclude(post_type=3)
+
+        # 비회원인 경우 익명 글(is_anonymous=True) 제외
+        if not is_authenticated:
+            posts = posts.filter(is_anonymous=False)
 
         posts = posts[:10]
 
@@ -294,12 +299,17 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         from boards.models import Comment
         request = self.context.get('request')
         is_self = request and request.user.is_authenticated and request.user == obj
+        is_authenticated = request and request.user.is_authenticated
 
         comments = Comment.objects.filter(author=obj, is_deleted=False).select_related('post').order_by('-created_at')
 
         # 본인이 아닌 경우 비공개 게시글(post_type=3)의 댓글 제외
         if not is_self:
             comments = comments.exclude(post__post_type=3)
+
+        # 비회원인 경우 익명 댓글(is_anonymous=True) 제외
+        if not is_authenticated:
+            comments = comments.filter(is_anonymous=False)
 
         comments = comments[:10]
 
