@@ -635,6 +635,16 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
 
             comment = serializer.save(author=None, post=post, is_anonymous=is_anonymous, guest_id=ip)
 
+            # 비회원 댓글 알림 (글 작성자에게)
+            if post.author:
+                create_notification(
+                    recipient=post.author,
+                    actor=None,  # 비회원이므로 actor 없음
+                    notification_type=Notification.NotificationType.COMMENT,
+                    post=post,
+                    comment=comment
+                )
+
 @extend_schema(tags=['댓글'])
 @extend_schema_view(
     put=extend_schema(summary="댓글 수정", description="작성자 또는 스태프만 댓글을 수정할 수 있습니다."),

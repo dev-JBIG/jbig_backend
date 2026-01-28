@@ -136,11 +136,12 @@ class CommentSerializer(serializers.ModelSerializer):
     likes = serializers.SerializerMethodField()
     isLiked = serializers.SerializerMethodField()
     is_anonymous = serializers.BooleanField(required=False, default=True)
+    can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id', 'likes', 'isLiked', 'is_anonymous']
-        read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id', 'likes', 'isLiked')
+        fields = ['id', 'post_id', 'post_title', 'user_id', 'author', 'author_semester', 'content', 'created_at', 'parent', 'children', 'is_owner', 'is_deleted', 'board_id', 'likes', 'isLiked', 'is_anonymous', 'can_delete']
+        read_only_fields = ('user_id', 'author', 'author_semester', 'created_at', 'children', 'is_owner', 'is_deleted', 'post_id', 'post_title', 'board_id', 'likes', 'isLiked', 'can_delete')
 
 
     # 작성자 이름 파싱 로직
@@ -214,6 +215,19 @@ class CommentSerializer(serializers.ModelSerializer):
         user = self.context.get('request').user
         if user and user.is_authenticated:
             return obj.author == user
+        return False
+
+    def get_can_delete(self, obj):
+        """삭제 권한: 본인 댓글이거나, 글 작성자가 비회원 댓글을 삭제할 때"""
+        user = self.context.get('request').user
+        if not user or not user.is_authenticated:
+            return False
+        # 본인 댓글
+        if obj.author == user:
+            return True
+        # 비회원 댓글이고 글 작성자인 경우
+        if obj.author is None and obj.post.author == user:
+            return True
         return False
 
     def get_likes(self, obj):

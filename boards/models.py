@@ -265,7 +265,9 @@ class Notification(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='notifications_sent',
-        verbose_name='알림 발생시킨 사용자'
+        verbose_name='알림 발생시킨 사용자',
+        null=True,
+        blank=True
     )
     notification_type = models.IntegerField(
         choices=NotificationType.choices,
