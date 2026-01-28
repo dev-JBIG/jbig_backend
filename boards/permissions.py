@@ -132,15 +132,26 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        
+
         if not request.user.is_authenticated:
             return False
 
-        # For posts and comments, the author field exists.
+        # 스태프는 항상 허용
+        if request.user.is_staff:
+            return True
+
+        # 댓글인 경우 (post 속성이 있음)
+        if hasattr(obj, 'post') and obj.post:
+            # 비회원 댓글(author=None)은 글 작성자가 삭제 가능
+            if obj.author is None:
+                return obj.post.author == request.user
+            # 본인 댓글이거나 글 작성자면 허용
+            return obj.author == request.user or obj.post.author == request.user
+
+        # 게시글인 경우
         if hasattr(obj, 'author'):
-            # 비회원 댓글(author=None)은 수정/삭제 불가
             if obj.author is None:
                 return False
-            return obj.author == request.user or request.user.is_staff
-        
+            return obj.author == request.user
+
         return False
