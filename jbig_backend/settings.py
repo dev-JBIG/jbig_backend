@@ -160,8 +160,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
-STATIC_URL = os.getenv('STATIC_URL', 'static/')
+# Note: STATIC_URL and STATIC_ROOT are already defined at the top of this file (lines 31-32)
 
 # Vast.ai GPU rental
 VAST_API_KEY = os.getenv('VAST_API_KEY', '')
