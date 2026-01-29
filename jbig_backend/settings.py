@@ -34,14 +34,14 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # Debug toggle
-DEBUG = get_env_bool('DEBUG', True)
+DEBUG = get_env_bool('DEBUG', False)
 
-ALLOWED_HOSTS = [
+ALLOWED_HOSTS = get_env_list('ALLOWED_HOSTS', [
     'jbig.co.kr',
     'www.jbig.co.kr',
     'localhost',
     '127.0.0.1',
-]
+])
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
@@ -178,11 +178,11 @@ AUTH_USER_MODEL = 'users.User'
 # CORS settings
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = [
+CORS_ALLOWED_ORIGINS = get_env_list('CORS_ALLOWED_ORIGINS', [
     'https://jbig.co.kr',
     'https://www.jbig.co.kr',
     'http://localhost:3000',
-]
+])
 
 CORS_ALLOW_HEADERS = [
     'Accept',

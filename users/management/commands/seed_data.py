@@ -1,5 +1,6 @@
 import random
 import uuid
+import os
 from django.core.management.base import BaseCommand
 from django.db import transaction, connection
 from django.core.files.base import ContentFile
@@ -30,8 +31,13 @@ class Command(BaseCommand):
         self.stdout.write('새로운 데이터를 생성합니다...')
 
         # 1. 사용자 생성
+        # 보안: 환경 변수에서 테스트 비밀번호 가져오기
+        test_password = os.getenv('SEED_TEST_PASSWORD', '@test1234')
+        test_email = os.getenv('SEED_TEST_EMAIL', 'testuser@test.com')
+        test_username = os.getenv('SEED_TEST_USERNAME', 'testuser')
+
         users = [
-            User.objects.create_user(email='testuser@test.com', username='testuser', password='@test1234', semester=99),
+            User.objects.create_user(email=test_email, username=test_username, password=test_password, semester=99),
         ]
         self.stdout.write(self.style.SUCCESS('-> 테스트 사용자 1명 생성 완료'))
 
