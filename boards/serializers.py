@@ -396,8 +396,10 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
 
         if board_id is not None:
             new_board = Board.objects.filter(id=board_id).first()
-            if new_board:
+            if new_board and new_board != instance.board:
+                # 게시판이 실제로 변경되는 경우, board_post_id를 초기화하여 새로 할당되도록 함
                 instance.board = new_board
+                instance.board_post_id = None
 
         instance = super().update(instance, validated_data)
         instance.update_search_vector()
