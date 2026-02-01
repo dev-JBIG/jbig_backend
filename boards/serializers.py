@@ -146,14 +146,16 @@ class CommentSerializer(serializers.ModelSerializer):
 
     # 작성자 이름 파싱 로직
     def get_author(self, obj):
-        # 비회원 댓글인 경우 - guest_id를 user_id처럼 사용하여 무작위 닉네임 생성
+        # author가 None인 경우 처리
         if not obj.author:
+            # guest_id가 있으면 비회원 댓글
             if obj.guest_id:
-                # guest_id의 해시값을 user_id처럼 사용
+                # guest_id의 해시값을 user_id처럼 사용하여 무작위 닉네임 생성
                 import hashlib
                 guest_hash = int(hashlib.md5(obj.guest_id.encode()).hexdigest()[:8], 16)
                 return generate_anonymous_nickname(guest_hash, obj.post.id, None)
-            return "비회원"
+            # guest_id가 없으면 탈퇴한 사용자
+            return "탈퇴한 사용자"
         
         request = self.context.get('request')
         user = request.user if request else None
@@ -179,9 +181,10 @@ class CommentSerializer(serializers.ModelSerializer):
 
 
     def get_user_id(self, obj):
-        # 비회원 댓글인 경우
+        # author가 None인 경우 처리
         if not obj.author:
-            return '비회원'
+            # guest_id가 있으면 비회원, 없으면 탈퇴한 사용자
+            return '비회원' if obj.guest_id else '탈퇴한사용자'
         
         request = self.context.get('request')
         user = request.user if request else None
@@ -198,6 +201,7 @@ class CommentSerializer(serializers.ModelSerializer):
             return obj.author.email.split('@')[0]
     
     def get_author_semester(self, obj):
+        # author가 None인 경우 빈 문자열 반환 (비회원 또는 탈퇴한 사용자)
         if not obj.author:
             return ''
         
@@ -212,6 +216,9 @@ class CommentSerializer(serializers.ModelSerializer):
         return obj.author.semester if obj.author.semester is not None else ''
 
     def get_is_owner(self, obj):
+        # 탈퇴한 사용자의 게시글/댓글은 소유자가 없음
+        if not obj.author:
+            return False
         user = self.context.get('request').user
         if user and user.is_authenticated:
             return obj.author == user
@@ -293,6 +300,10 @@ class PostListSerializer(serializers.ModelSerializer):
         fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name', 'is_anonymous']
 
     def get_author(self, obj):
+        # 탈퇴한 사용자 처리
+        if not obj.author:
+            return "탈퇴한 사용자"
+        
         request = self.context.get('request')
         user = request.user if request else None
         
@@ -316,6 +327,10 @@ class PostListSerializer(serializers.ModelSerializer):
 
 
     def get_user_id(self, obj):
+        # 탈퇴한 사용자 처리
+        if not obj.author:
+            return '탈퇴한사용자'
+        
         request = self.context.get('request')
         user = request.user if request else None
         
@@ -331,6 +346,10 @@ class PostListSerializer(serializers.ModelSerializer):
             return obj.author.email.split('@')[0]
     
     def get_author_semester(self, obj):
+        # 탈퇴한 사용자 처리
+        if not obj.author:
+            return ''
+        
         request = self.context.get('request')
         user = request.user if request else None
         
@@ -429,6 +448,10 @@ class PostDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_author(self, obj):
+        # 탈퇴한 사용자 처리
+        if not obj.author:
+            return "탈퇴한 사용자"
+        
         request = self.context.get('request')
         user = request.user if request else None
         
@@ -452,6 +475,10 @@ class PostDetailSerializer(serializers.ModelSerializer):
 
 
     def get_user_id(self, obj):
+        # 탈퇴한 사용자 처리
+        if not obj.author:
+            return '탈퇴한사용자'
+        
         request = self.context.get('request')
         user = request.user if request else None
         
@@ -467,6 +494,10 @@ class PostDetailSerializer(serializers.ModelSerializer):
             return obj.author.email.split('@')[0]
     
     def get_author_semester(self, obj):
+        # 탈퇴한 사용자 처리
+        if not obj.author:
+            return ''
+        
         request = self.context.get('request')
         user = request.user if request else None
         
@@ -490,6 +521,9 @@ class PostDetailSerializer(serializers.ModelSerializer):
         return user.is_authenticated and obj.likes.filter(pk=user.pk).exists()
 
     def get_is_owner(self, obj):
+        # 탈퇴한 사용자의 게시글/댓글은 소유자가 없음
+        if not obj.author:
+            return False
         user = self.context.get('request').user
         if user and user.is_authenticated:
             return obj.author == user

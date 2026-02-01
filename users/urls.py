@@ -15,6 +15,7 @@ from .views import (
     PasswordChangeView,
     PublicProfileView,
     ResumeUpdateView,
+    DeleteAccountView,
 )
 
 urlpatterns = [
@@ -26,6 +27,7 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('profile/<str:username>/', PublicProfileView.as_view(), name='public-profile'),
     path('profile/', ResumeUpdateView.as_view(), name='resume-update'),
+    path('delete-account/', DeleteAccountView.as_view(), name='delete-account'),
     path('<str:user_id>/posts/', UserPostListView.as_view(), name='user-posts'),
     path('<str:user_id>/comments/', UserCommentListView.as_view(), name='user-comments'),
     path('password/reset/request/', PasswordResetRequestView.as_view(), name='password-reset-request'),

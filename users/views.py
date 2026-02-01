@@ -759,3 +759,67 @@ class ResumeUpdateView(generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
+
+
+@extend_schema(
+    tags=["사용자"],
+    summary="회원 탈퇴",
+    description="현재 로그인된 사용자의 계정을 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+    request={
+        "application/json": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "description": "현재 비밀번호 확인"
+                }
+            },
+            "required": ["password"]
+        }
+    },
+    responses={
+        200: {"description": "회원 탈퇴 성공"},
+        400: {"description": "잘못된 요청 또는 비밀번호 불일치"},
+        401: {"description": "인증되지 않은 사용자"}
+    }
+)
+class DeleteAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        password = request.data.get('password')
+
+        if not password:
+            return Response(
+                {"error": "비밀번호를 입력해주세요."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 비밀번호 확인
+        if not user.check_password(password):
+            return Response(
+                {"error": "비밀번호가 올바르지 않습니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 모든 리프레시 토큰 블랙리스트 처리
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+        try:
+            outstanding_tokens = OutstandingToken.objects.filter(user=user)
+            for token_obj in outstanding_tokens:
+                try:
+                    token = RefreshToken(token_obj.token)
+                    token.blacklist()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # 사용자 계정 삭제
+        user.delete()
+
+        return Response(
+            {"message": "회원 탈퇴가 완료되었습니다."},
+            status=status.HTTP_200_OK
+        )

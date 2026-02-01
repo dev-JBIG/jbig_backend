@@ -143,7 +143,7 @@ class Post(models.Model):
         STAFF_ONLY = 2, 'Staff Only'
         JUSTIFICATION_LETTER = 3, 'Justification Letter'
 
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='posts')
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
     content_md = models.TextField(null=True, blank=True)
@@ -196,7 +196,7 @@ class Post(models.Model):
 
 
 class PostLike(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)  # 좋아요는 사용자 삭제 시 함께 삭제
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -206,7 +206,7 @@ class PostLike(models.Model):
 
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='comments', null=True, blank=True)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='comments', null=True, blank=True)
     content = models.TextField()
     parent = models.ForeignKey(
         'self', null=True, blank=True, related_name='children', on_delete=models.CASCADE
@@ -226,7 +226,7 @@ class Comment(models.Model):
         return f'Comment by {self.author} on {self.post}'
 
 class CommentLike(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)  # 좋아요는 사용자 삭제 시 함께 삭제
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -257,13 +257,13 @@ class Notification(models.Model):
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.CASCADE,  # 알림 받는 사용자가 탈퇴하면 알림도 삭제
         related_name='notifications',
         verbose_name='알림 받는 사용자'
     )
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,  # 알림 발생시킨 사용자가 탈퇴해도 알림은 유지
         related_name='notifications_sent',
         verbose_name='알림 발생시킨 사용자',
         null=True,
