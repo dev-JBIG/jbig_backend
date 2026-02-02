@@ -11,8 +11,8 @@ from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 
-from .models import CalendarEvent, SiteSettings
-from .serializers import CalendarEventSerializer
+from .models import CalendarEvent, SiteSettings, Popup
+from .serializers import CalendarEventSerializer, PopupSerializer
 from .permissions import IsStaffOrReadOnly
 
 
@@ -163,3 +163,30 @@ class CalendarEventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return CalendarEvent.objects.all()
+
+
+@extend_schema(tags=['Popup'])
+class PopupViewSet(viewsets.ModelViewSet):
+    """팝업 관리 ViewSet"""
+    serializer_class = PopupSerializer
+    permission_classes = [IsStaffOrReadOnly]
+    pagination_class = None
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def get_queryset(self):
+        # 관리자는 모든 팝업 조회, 일반 사용자는 활성화되고 기간 내인 팝업만 조회
+        from django.utils import timezone
+        queryset = Popup.objects.all()
+        
+        # 일반 사용자는 활성 팝업만 보기
+        if not self.request.user.is_staff:
+            now = timezone.now()
+            queryset = queryset.filter(
+                is_active=True,
+                start_date__lte=now,
+                end_date__gte=now
+            )
+        
+        return queryset.order_by('order', '-created_at')

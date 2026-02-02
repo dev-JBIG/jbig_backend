@@ -38,3 +38,31 @@ class CalendarEvent(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Popup(models.Model):
+    """업데이트 팝업 모델"""
+    title = models.CharField(max_length=255, verbose_name='팝업 제목')
+    content = models.TextField(verbose_name='팝업 내용')
+    start_date = models.DateTimeField(verbose_name='시작 일시')
+    end_date = models.DateTimeField(verbose_name='종료 일시')
+    is_active = models.BooleanField(default=True, verbose_name='활성 여부')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='생성 일시')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='수정 일시')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        verbose_name='작성자'
+    )
+    order = models.IntegerField(default=0, verbose_name='표시 순서')
+
+    class Meta:
+        db_table = 'popups'
+        verbose_name = '팝업'
+        verbose_name_plural = '팝업'
+        ordering = ['order', '-created_at']
+
+    def __str__(self):
+        return f"{self.title} ({self.start_date.strftime('%Y-%m-%d')} ~ {self.end_date.strftime('%Y-%m-%d')})"

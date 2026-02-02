@@ -581,10 +581,10 @@ class CategoryListResponseSerializer(serializers.Serializer):
 
 class NotificationSerializer(serializers.ModelSerializer):
     actor_name = serializers.SerializerMethodField()
-    actor_semester = serializers.IntegerField(source='actor.semester', read_only=True)
-    post_title = serializers.CharField(source='post.title', read_only=True)
-    post_id = serializers.IntegerField(source='post.id', read_only=True)
-    board_id = serializers.IntegerField(source='post.board.id', read_only=True)
+    actor_semester = serializers.SerializerMethodField()
+    post_title = serializers.SerializerMethodField()
+    post_id = serializers.SerializerMethodField()
+    board_id = serializers.SerializerMethodField()
     notification_type_display = serializers.CharField(source='get_notification_type_display', read_only=True)
     comment_content = serializers.SerializerMethodField()
 
@@ -596,12 +596,40 @@ class NotificationSerializer(serializers.ModelSerializer):
             'comment_content', 'is_read', 'created_at'
         ]
 
-
     def get_actor_name(self, obj):
-        username=obj.actor.username
+        # 비회원 댓글인 경우만 "익명" 처리
+        if not obj.actor:
+            return "익명"
+        
+        # 알림은 게시글 작성자(회원)에게 가므로 항상 실명 표시
+        # is_anonymous는 비회원에게 어떻게 보일지를 결정하는 것이지 알림과는 무관
+        username = obj.actor.username
         if '_' in username:
             return username.split('_', 1)[1]
         return username
+
+    def get_actor_semester(self, obj):
+        # 비회원인 경우만 0 반환
+        if not obj.actor:
+            return 0
+        
+        # 알림은 회원에게 가므로 항상 기수 표시
+        return obj.actor.semester
+
+    def get_post_title(self, obj):
+        if not obj.post:
+            return "삭제된 게시글"
+        return obj.post.title
+
+    def get_post_id(self, obj):
+        if not obj.post:
+            return None
+        return obj.post.id
+
+    def get_board_id(self, obj):
+        if not obj.post or not obj.post.board:
+            return None
+        return obj.post.board.id
 
     def get_comment_content(self, obj):
         if obj.comment and not obj.comment.is_deleted:

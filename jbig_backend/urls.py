@@ -8,13 +8,14 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 from users.views import LogoutView
-from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView
+from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView, PopupViewSet
 
 from boards.views import GeneratePresignedURLAPIView, DeleteFileAPIView
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
 router.register(r'calendar', CalendarEventViewSet, basename='calendar')
+router.register(r'popups', PopupViewSet, basename='popup')
 
 urlpatterns = [
     path('api/', include(router.urls)),
