@@ -914,11 +914,16 @@ class GeneratePresignedURLAPIView(APIView):
                 ExpiresIn=3600  # 1시간
             )
 
+            # Public URL 생성 (영구적, 팝업 이미지 등에 사용)
+            # NCP Object Storage의 public URL 형식: {endpoint}/{bucket}/{file-key}
+            public_url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
+
             # React에게 업로드할 URL과 DB에 저장할 Key를 함께 전달
             return Response({
                 "upload_url": upload_url,
                 "file_key": file_key,
-                "download_url": download_url
+                "download_url": download_url,
+                "url": public_url  # 영구적인 public URL 추가
             }, status=status.HTTP_200_OK)
 
         except ClientError as e:
