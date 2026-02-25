@@ -23,6 +23,11 @@ jobs:
           source .venv/bin/activate
           pip install -r requirements.txt
 
+      - name: Verify gunicorn runtime
+        run: |
+          source .venv/bin/activate
+          python -c "import gunicorn; print('gunicorn', gunicorn.__version__)"
+
       - name: Run tests
         run: |
           source .venv/bin/activate
@@ -94,6 +99,7 @@ jobs:
             [ -d .venv ] || python3 -m venv .venv
             source .venv/bin/activate
             pip install -r requirements.txt --no-cache-dir -q
+            python -c "import gunicorn; print('gunicorn', gunicorn.__version__)"
 
             # Django 설정
             python manage.py migrate --noinput

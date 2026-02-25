@@ -9,9 +9,7 @@ djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 drf-spectacular==0.28.0
 drf-spectacular-sidecar==2025.9.1
-gunicorn==20.1.0
-# gunicorn 20.x imports pkg_resources, which is removed in newer setuptools
-setuptools<81
+gunicorn==23.0.0
 html2text==2025.4.15
 inflection==0.5.1
 jsonschema==4.25.1
