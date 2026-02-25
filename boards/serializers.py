@@ -84,7 +84,7 @@ class BoardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Board
-        fields = ['id', 'name', 'category', 'read_permission', 'post_permission', 'comment_permission']
+        fields = ['id', 'name', 'category', 'board_type', 'read_permission', 'post_permission', 'comment_permission']
 
     def get_read_permission(self, instance):
         user = self.context['request'].user
@@ -114,7 +114,7 @@ class BoardSerializer(serializers.ModelSerializer):
 class BoardIdNameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Board
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'board_type']
 
 class CategoryWithBoardsSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source='name')
@@ -382,7 +382,7 @@ def normalize_ncp_urls(content):
 
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
     attachment_paths = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
-    content_md = serializers.CharField(write_only=True)
+    content_md = serializers.CharField(write_only=True, required=False, allow_blank=True)
     board_id = serializers.IntegerField(write_only=True, required=False)
     is_anonymous = serializers.BooleanField(required=False, default=True)
 
@@ -391,9 +391,57 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id', 'is_anonymous']
 
 
+    def _resolve_board(self, validated_data):
+        board_id = validated_data.get('board_id')
+        if board_id:
+            return Board.objects.filter(id=board_id).first()
+        view = self.context.get('view')
+        if view and hasattr(view, 'kwargs'):
+            board_id = view.kwargs.get('board_id')
+            if board_id:
+                return Board.objects.filter(id=board_id).first()
+        if getattr(self, 'instance', None):
+            return self.instance.board
+        return None
+
+    def _is_photo_board(self, board: Board | None) -> bool:
+        if not board:
+            return False
+        return board.board_type == Board.BoardType.PHOTO_ALBUM or board.name == "사진첩"
+
+    def _is_image_name(self, name: str) -> bool:
+        return bool(re.search(r'\.(png|jpe?g|gif|webp|bmp|svg)$', name, re.IGNORECASE))
+
+    def validate(self, attrs):
+        board = self._resolve_board(attrs)
+        if self._is_photo_board(board):
+            content = attrs.get('content_md')
+            if content is None and getattr(self, 'instance', None):
+                content = self.instance.content_md or ''
+            if content and str(content).strip():
+                raise serializers.ValidationError({"content_md": "사진첩 게시판은 본문을 작성할 수 없습니다."})
+
+            attachments = attrs.get('attachment_paths')
+            if attachments is None and getattr(self, 'instance', None):
+                attachments = self.instance.attachment_paths or []
+
+            if not attachments:
+                raise serializers.ValidationError({"attachment_paths": "사진첩 게시판에는 사진을 최소 1장 이상 업로드해야 합니다."})
+
+            for item in attachments:
+                if not isinstance(item, dict):
+                    raise serializers.ValidationError({"attachment_paths": "잘못된 첨부파일 형식입니다."})
+                name = item.get('name') or ''
+                path = item.get('path') or ''
+                candidate = name or path
+                if not self._is_image_name(candidate):
+                    raise serializers.ValidationError({"attachment_paths": "사진첩 게시판에는 이미지 파일만 업로드할 수 있습니다."})
+
+        return attrs
+
     def create(self, validated_data):
         attachment_paths = validated_data.pop('attachment_paths', [])
-        content_md = validated_data.pop('content_md')
+        content_md = validated_data.pop('content_md', '')
         post = Post(**validated_data)
         post.content_md = normalize_ncp_urls(content_md)
         post.attachment_paths = attachment_paths

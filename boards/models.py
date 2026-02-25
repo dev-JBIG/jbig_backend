@@ -71,6 +71,7 @@ class Board(models.Model):
         GENERAL = 1, 'General'
         ADMIN = 2, 'Admin'
         JUSTIFICATION_LETTER = 3, 'Justification Letter'
+        PHOTO_ALBUM = 4, 'Photo Album'
 
     name = models.CharField(max_length=50)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='boards')

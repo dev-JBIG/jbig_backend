@@ -38,9 +38,22 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS(f'Updated Reason board: {reason_board.name}'))
 
+        # Create or update Photo Album board (board_type=4)
+        photo_board, created = Board.objects.update_or_create(
+            name='사진첩',
+            defaults={
+                'board_type': 4,
+                'category': default_category,
+            }
+        )
+        if created:
+            self.stdout.write(self.style.SUCCESS(f'Created Photo Album board: {photo_board.name}'))
+        else:
+            self.stdout.write(self.style.SUCCESS(f'Updated Photo Album board: {photo_board.name}'))
+
         # Update all other boards to board_type=1
-        # Exclude the newly created/updated Admin and Reason boards
-        other_boards = Board.objects.exclude(id__in=[admin_board.id, reason_board.id])
+        # Exclude the newly created/updated Admin, Reason, Photo Album boards
+        other_boards = Board.objects.exclude(id__in=[admin_board.id, reason_board.id, photo_board.id])
         updated_count = other_boards.update(board_type=1)
         self.stdout.write(self.style.SUCCESS(f'Updated {updated_count} existing boards to board_type=1.'))
 
