@@ -199,7 +199,7 @@ class PostSearchView(generics.ListAPIView):
                 return Post.objects.none()
             base_queryset = Post.objects.filter(board_id=board_id)
         else:
-            base_queryset = Post.objects.all()
+            base_queryset = Post.objects.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
             if not (user.is_authenticated and user.is_staff):
                 base_queryset = base_queryset.filter(board__read_permission='all')
 
@@ -675,10 +675,12 @@ class AllPostListAPIView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         queryset = Post.objects.visible_for_user(user)
-        
+
         if not (user.is_authenticated and user.is_staff):
             queryset = queryset.filter(board__read_permission='all')
-                
+
+        queryset = queryset.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
+
         return queryset.order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
