@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'jbig_backend',
     'html_serving',
     'gpu',
+    'recruitments',
 ]
 
 MIDDLEWARE = [

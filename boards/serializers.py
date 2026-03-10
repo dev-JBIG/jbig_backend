@@ -81,10 +81,11 @@ class BoardSerializer(serializers.ModelSerializer):
     read_permission = serializers.SerializerMethodField()
     post_permission = serializers.SerializerMethodField()
     comment_permission = serializers.SerializerMethodField()
+    available_tags = serializers.JSONField(read_only=True)
 
     class Meta:
         model = Board
-        fields = ['id', 'name', 'category', 'board_type', 'read_permission', 'post_permission', 'comment_permission']
+        fields = ['id', 'name', 'category', 'board_type', 'read_permission', 'post_permission', 'comment_permission', 'available_tags']
 
     def get_read_permission(self, instance):
         user = self.context['request'].user
@@ -114,7 +115,7 @@ class BoardSerializer(serializers.ModelSerializer):
 class BoardIdNameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Board
-        fields = ['id', 'name', 'board_type']
+        fields = ['id', 'name', 'board_type', 'available_tags']
 
 class CategoryWithBoardsSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source='name')
@@ -293,11 +294,36 @@ class PostListSerializer(serializers.ModelSerializer):
     board_id = serializers.IntegerField(source='board.id', read_only=True)
     board_name = serializers.CharField(source='board.name', read_only=True)
     is_anonymous = serializers.BooleanField(read_only=True)
+    tag = serializers.CharField(read_only=True)
+    recruitment_info = serializers.SerializerMethodField()
 
 
     class Meta:
         model = Post
-        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name', 'is_anonymous']
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name', 'is_anonymous', 'tag', 'recruitment_info']
+
+    def get_recruitment_info(self, obj):
+        """모집 게시글이면 모집 요약 정보 반환"""
+        recruitment = getattr(obj, 'recruitment', None)
+        if recruitment is None:
+            # select_related가 안 된 경우 DB 조회 방지
+            if hasattr(obj, '_prefetched_objects_cache'):
+                return None
+            try:
+                recruitment = obj.recruitment
+            except Exception:
+                return None
+        if recruitment is None:
+            return None
+        return {
+            'recruitment_type': recruitment.recruitment_type,
+            'recruitment_type_display': recruitment.get_recruitment_type_display(),
+            'status': recruitment.status,
+            'status_display': recruitment.get_status_display(),
+            'max_members': recruitment.max_members,
+            'accepted_count': recruitment.accepted_count,
+            'deadline': recruitment.deadline,
+        }
 
     def get_author(self, obj):
         # 탈퇴한 사용자 처리
@@ -385,10 +411,12 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     content_md = serializers.CharField(write_only=True, required=False, allow_blank=True)
     board_id = serializers.IntegerField(write_only=True, required=False)
     is_anonymous = serializers.BooleanField(required=False, default=True)
+    tag = serializers.CharField(required=False, allow_blank=True, default='')
+    recruitment = serializers.DictField(write_only=True, required=False)
 
     class Meta:
         model = Post
-        fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id', 'is_anonymous']
+        fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id', 'is_anonymous', 'tag', 'recruitment']
 
 
     def _resolve_board(self, validated_data):
@@ -442,18 +470,34 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         attachment_paths = validated_data.pop('attachment_paths', [])
         content_md = validated_data.pop('content_md', '')
+        recruitment_data = validated_data.pop('recruitment', None)
+
+        # 팀원모집 태그일 때 익명 강제 해제
+        if validated_data.get('tag') == '팀원모집':
+            validated_data['is_anonymous'] = False
+
         post = Post(**validated_data)
         post.content_md = normalize_ncp_urls(content_md)
         post.attachment_paths = attachment_paths
         post.save()
         post.update_search_vector()
         post.save(update_fields=['search_vector'])
+
+        # 모집 데이터가 있으면 Recruitment 생성
+        if recruitment_data and validated_data.get('tag') == '팀원모집':
+            from recruitments.models import Recruitment
+            from recruitments.serializers import RecruitmentCreateSerializer
+            rec_serializer = RecruitmentCreateSerializer(data=recruitment_data)
+            rec_serializer.is_valid(raise_exception=True)
+            rec_serializer.save(post=post)
+
         return post
 
     def update(self, instance, validated_data):
         attachment_paths = validated_data.pop('attachment_paths', None)
         content_md = validated_data.pop('content_md', None)
         board_id = validated_data.pop('board_id', None)
+        validated_data.pop('recruitment', None)  # 모집 수정은 별도 API로
 
         if content_md is not None:
             instance.content_md = normalize_ncp_urls(content_md)
@@ -486,14 +530,27 @@ class PostDetailSerializer(serializers.ModelSerializer):
     content_md = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     is_anonymous = serializers.BooleanField(read_only=True)
+    tag = serializers.CharField(read_only=True)
+    recruitment = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'board_post_id', 'title', 'content_md', 'user_id', 'author', 'author_semester',
             'created_at', 'updated_at', 'views', 'board', 'comments', 'attachment_paths',
-            'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner', 'is_anonymous'
+            'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner', 'is_anonymous',
+            'tag', 'recruitment'
         ]
+
+    def get_recruitment(self, obj):
+        try:
+            rec = obj.recruitment
+        except Exception:
+            return None
+        if rec is None:
+            return None
+        from recruitments.serializers import RecruitmentDetailSerializer
+        return RecruitmentDetailSerializer(rec, context=self.context).data
 
     def get_author(self, obj):
         # 탈퇴한 사용자 처리

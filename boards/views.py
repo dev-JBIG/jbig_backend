@@ -368,7 +368,12 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         board_id = self.kwargs.get('board_id')
-        return Post.objects.filter(board_id=board_id).visible_for_user(self.request.user).order_by('-created_at')
+        qs = Post.objects.filter(board_id=board_id).visible_for_user(self.request.user)
+        # tag 필터링
+        tag = self.request.query_params.get('tag')
+        if tag:
+            qs = qs.filter(tag=tag)
+        return qs.select_related('recruitment').order_by('-created_at')
 
     def get_object(self):
         board_id = self.kwargs.get(self.lookup_url_kwarg)

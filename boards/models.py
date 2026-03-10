@@ -84,6 +84,12 @@ class Board(models.Model):
     read_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
     post_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
     comment_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
+    available_tags = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='사용 가능한 태그',
+        help_text='예: ["팀원모집", "후기", "정보공유", "질문"]'
+    )
 
     class Meta:
         db_table = 'board'
@@ -163,6 +169,7 @@ class Post(models.Model):
     board_post_id = models.IntegerField(null=True, blank=True)
     attachment_paths = models.JSONField(default=list, blank=True, help_text="첨부파일 경로 목록")
     is_anonymous = models.BooleanField(default=True, help_text="익명 작성 여부 (True: 회원에게만 실명, False: 비회원에게도 실명 공개)")
+    tag = models.CharField(max_length=20, blank=True, default='', verbose_name='글 태그')
 
     objects = PostManager()
 
@@ -255,6 +262,10 @@ class Notification(models.Model):
         REPLY = 2, '대댓글'            # 내 댓글에 대댓글이 달림
         LIKE = 3, '좋아요'             # 내 글에 좋아요가 달림
         COMMENT_LIKE = 4, '댓글 좋아요'  # 내 댓글에 좋아요가 달림
+        APPLICATION_RECEIVED = 5, '지원 접수'     # 모집자에게
+        APPLICATION_ACCEPTED = 6, '지원 수락'     # 지원자에게
+        APPLICATION_REJECTED = 7, '지원 거절'     # 지원자에게
+        RECRUITMENT_CLOSED = 8, '모집 마감'       # 대기중 지원자에게
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
