@@ -906,9 +906,9 @@ class GeneratePresignedURLAPIView(APIView):
                 Params={
                     'Bucket': settings.NCP_BUCKET_NAME,
                     'Key': file_key,
-                    # 'ContentType': 'image/png' # 필요시 파일 타입 지정
+                    'ACL': 'public-read',
                 },
-                ExpiresIn=600 
+                ExpiresIn=600
             )
 
             # [추가] 다운로드용 URL도 미리 생성 (1시간 만료)

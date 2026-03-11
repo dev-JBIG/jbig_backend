@@ -638,35 +638,18 @@ class PostDetailSerializer(serializers.ModelSerializer):
         raw_md = obj.content_md
         if not raw_md:
             return ""
-        try:
-            s3_client = get_s3_client()
-        except Exception:
-            return raw_md
 
-        def replace_with_presigned_url(match):
-            """ncp-key:// URL을 presigned URL로 교체"""
-            alt_text = match.group(1)  # ![alt text]
-            file_key = match.group(2)  # uploads/... 경로
+        def replace_with_public_url(match):
+            """ncp-key:// URL을 퍼블릭 URL로 교체"""
+            alt_text = match.group(1)
+            file_key = match.group(2)
             if not file_key:
                 return match.group(0)
-            try:
-                url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
-                    ExpiresIn=3600
-                )
-                return f"{alt_text}({url})"
-            except Exception:
-                return match.group(0)
+            url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
+            return f"{alt_text}({url})"
 
-        # 정규식 패턴:
-        # - !\[.*?\] : 마크다운 이미지 alt 텍스트 (대괄호 포함 가능, non-greedy)
-        # - \(ncp-key://(uploads/...)\) : ncp-key:// 프로토콜 URL
-        # 주의: .*?는 non-greedy이므로 가능한 짧게 매칭하되,
-        #       전체 패턴이 매칭되도록 백트래킹하여 올바른 ]를 찾음
-        # re.DOTALL: .이 줄바꿈도 매칭하도록 함 (멀티라인 alt 텍스트 지원)
         pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
-        return re.sub(pattern, replace_with_presigned_url, raw_md, flags=re.DOTALL)
+        return re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
 
     def get_attachment_paths(self, obj):
         return get_presigned_attachments(obj.attachment_paths)
@@ -746,12 +729,30 @@ class NotificationSerializer(serializers.ModelSerializer):
 class DraftSerializer(serializers.ModelSerializer):
     board_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     board_name = serializers.CharField(source='board.name', read_only=True, allow_null=True)
-    content_md = serializers.CharField(allow_blank=True, required=False)
 
     class Meta:
         model = Draft
         fields = ['board_id', 'board_name', 'title', 'content_md', 'uploaded_paths', 'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at', 'board_name']
+
+    def to_representation(self, instance):
+        """조회 시 ncp-key:// URL을 퍼블릭 URL로 변환"""
+        data = super().to_representation(instance)
+        raw_md = data.get('content_md', '')
+        if not raw_md:
+            return data
+
+        def replace_with_public_url(match):
+            alt_text = match.group(1)
+            file_key = match.group(2)
+            if not file_key:
+                return match.group(0)
+            url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
+            return f"{alt_text}({url})"
+
+        pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
+        data['content_md'] = re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
+        return data
 
     def create(self, validated_data):
         board_id = validated_data.pop('board_id', None)
