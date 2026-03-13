@@ -638,28 +638,17 @@ class PostDetailSerializer(serializers.ModelSerializer):
         raw_md = obj.content_md
         if not raw_md:
             return ""
-        try:
-            s3_client = get_s3_client()
-        except Exception:
-            return raw_md
 
-        def replace_with_presigned_url(match):
+        def replace_with_public_url(match):
             alt_text = match.group(1)
             file_key = match.group(2)
             if not file_key:
                 return match.group(0)
-            try:
-                url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
-                    ExpiresIn=3600
-                )
-                return f"{alt_text}({url})"
-            except Exception:
-                return match.group(0)
+            url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
+            return f"{alt_text}({url})"
 
         pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
-        return re.sub(pattern, replace_with_presigned_url, raw_md, flags=re.DOTALL)
+        return re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
 
     def get_attachment_paths(self, obj):
         return get_presigned_attachments(obj.attachment_paths)
@@ -746,33 +735,22 @@ class DraftSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at', 'board_name']
 
     def to_representation(self, instance):
-        """조회 시 ncp-key:// URL을 presigned URL로 변환"""
+        """조회 시 ncp-key:// URL을 퍼블릭 URL로 변환"""
         data = super().to_representation(instance)
         raw_md = data.get('content_md', '')
         if not raw_md:
             return data
-        try:
-            s3_client = get_s3_client()
-        except Exception:
-            return data
 
-        def replace_with_presigned_url(match):
+        def replace_with_public_url(match):
             alt_text = match.group(1)
             file_key = match.group(2)
             if not file_key:
                 return match.group(0)
-            try:
-                url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
-                    ExpiresIn=3600
-                )
-                return f"{alt_text}({url})"
-            except Exception:
-                return match.group(0)
+            url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
+            return f"{alt_text}({url})"
 
         pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
-        data['content_md'] = re.sub(pattern, replace_with_presigned_url, raw_md, flags=re.DOTALL)
+        data['content_md'] = re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
         return data
 
     def create(self, validated_data):
