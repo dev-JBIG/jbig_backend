@@ -807,6 +807,46 @@ class DeleteFileAPIView(APIView):
             return Response({"error": "An unknown error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class ConfirmUploadAPIView(APIView):
+    """업로드 완료 후 파일에 public-read ACL을 적용하는 API"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        file_key = request.data.get('file_key')
+        if not file_key or not isinstance(file_key, str):
+            return Response({"error": "No file_key provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        file_key = file_key.strip()
+        if not file_key.startswith('uploads/'):
+            return Response({"error": "Invalid file path."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 본인 파일인지 확인
+        try:
+            parts = file_key.split('/')
+            if len(parts) >= 5:
+                file_owner_id = int(parts[4])
+                if file_owner_id != request.user.id:
+                    return Response({"error": "You can only modify your own files."}, status=status.HTTP_403_FORBIDDEN)
+            else:
+                return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, IndexError):
+            return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=settings.NCP_ENDPOINT_URL,
+                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.NCP_SECRET_KEY,
+                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
+            )
+            s3_client.put_object_acl(Bucket=settings.NCP_BUCKET_NAME, Key=file_key, ACL='public-read')
+            return Response({"message": "ACL updated."}, status=status.HTTP_200_OK)
+        except ClientError as e:
+            logger.error(f"ACL 적용 실패 (Key: {file_key}): {e}")
+            return Response({"error": "Failed to update ACL."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @extend_schema(
     tags=['파일'], # API 문서에서 '파일' 태그로 분류
     summary="파일 업로드용 Presigned URL 생성",
@@ -906,12 +946,10 @@ class GeneratePresignedURLAPIView(APIView):
                 Params={
                     'Bucket': settings.NCP_BUCKET_NAME,
                     'Key': file_key,
-                    'ACL': 'public-read',
                 },
                 ExpiresIn=600
             )
 
-            # Public URL 생성 (영구적, 파일에 public-read ACL 적용됨)
             public_url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
 
             return Response({
