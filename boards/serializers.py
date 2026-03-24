@@ -481,7 +481,8 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         post.attachment_paths = attachment_paths
         post.save()
         post.update_search_vector()
-        post.save(update_fields=['search_vector'])
+        if post.search_vector is not None:
+            post.save(update_fields=['search_vector'])
 
         # 모집 데이터가 있으면 Recruitment 생성
         if recruitment_data and validated_data.get('tag') == '팀원모집':
@@ -514,7 +515,8 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
 
         instance = super().update(instance, validated_data)
         instance.update_search_vector()
-        instance.save(update_fields=['search_vector'])
+        if instance.search_vector is not None:
+            instance.save(update_fields=['search_vector'])
         return instance
 
 class PostDetailSerializer(serializers.ModelSerializer):

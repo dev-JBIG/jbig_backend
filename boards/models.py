@@ -192,6 +192,9 @@ class Post(models.Model):
         super().save(*args, **kwargs)
 
     def update_search_vector(self):
+        from django.db import connection
+        if connection.vendor != 'postgresql':
+            return  # SearchVector는 PostgreSQL 전용
         content_text = ''
         if self.content_md:
             try:
