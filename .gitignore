@@ -26,3 +26,5 @@ db.sqlite3
 media/
 
 .venv/
+.idea/
+.idea/
