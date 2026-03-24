@@ -3,7 +3,21 @@ import os
 from dotenv import load_dotenv
 from datetime import timedelta
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# ── .env 로드 & 로컬/서버 자동 감지 ─────────────────────────────
+# FORCE_LOCAL=1 → 강제 로컬 모드 (run-local.sh에서 사용)
+# .env 파일이 없으면 → 자동 로컬 모드
+# .env 파일이 있으면 → 서버(배포) 모드
+_force_local = os.getenv('FORCE_LOCAL') == '1'
+_env_path = BASE_DIR / '.env'
+
+if not _force_local and _env_path.is_file():
+    load_dotenv(_env_path)
+    IS_LOCAL = False
+else:
+    IS_LOCAL = True
+
 
 # --- Helpers for reading env vars ---
 def get_env_bool(key: str, default: bool = False) -> bool:
@@ -19,9 +33,34 @@ def get_env_list(key: str, default: list[str] | None = None) -> list[str]:
         return [] if default is None else default
     return [item.strip() for item in val.split(',') if item.strip()]
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 
-# NCP 스토리지 설정
+# ── 로컬/서버 분기 설정 (한곳에 모아서 관리) ───────────────────────
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-local-dev-key-do-not-use-in-production')
+DEBUG = get_env_bool('DEBUG', IS_LOCAL)
+USE_LOCAL_STORAGE = IS_LOCAL
+
+if IS_LOCAL:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': os.getenv('DB_ENGINE'),
+            'NAME': os.getenv('DB_NAME'),
+            'USER': os.getenv('DB_USER'),
+            'PASSWORD': os.getenv('DB_PASSWORD'),
+            'HOST': os.getenv('DB_HOST'),
+            'PORT': os.getenv('DB_PORT'),
+        }
+    }
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+# NCP 스토리지 설정 (로컬이면 None — storage.py에서 USE_LOCAL_STORAGE로 분기)
 NCP_ACCESS_KEY_ID = os.getenv('NCP_ACCESS_KEY_ID')
 NCP_SECRET_KEY = os.getenv('NCP_SECRET_KEY')
 NCP_BUCKET_NAME = os.getenv('NCP_BUCKET_NAME')
@@ -31,10 +70,8 @@ NCP_REGION_NAME = os.getenv('NCP_REGION_NAME')
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-SECRET_KEY = os.getenv('SECRET_KEY')
-
-# Debug toggle
-DEBUG = get_env_bool('DEBUG', False)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 ALLOWED_HOSTS = get_env_list('ALLOWED_HOSTS', [
     'jbig.co.kr',
@@ -103,29 +140,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'jbig_backend.wsgi.application'
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-#EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('APP_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
-
-
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('DB_ENGINE'),
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT'),
-    }
-}
 
 
 # Password validation

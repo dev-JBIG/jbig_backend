@@ -4,10 +4,7 @@ import uuid
 import logging
 from datetime import datetime
 
-import boto3
 import requests
-from botocore.client import Config
-from botocore.exceptions import ClientError
 
 from django.conf import settings
 from django.shortcuts import get_object_or_404
@@ -34,6 +31,7 @@ from .permissions import (
     IsCommentWritable,
     PostDetailPermission
 )
+from jbig_backend.storage import generate_presigned_upload_url, delete_files, delete_file, file_exists, set_public_acl
 
 # Cloudflare Turnstile 검증 함수
 def verify_turnstile(token: str, ip: str) -> bool:
@@ -508,25 +506,9 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         # 삭제할 파일 키 계산 (기존에 있었지만 새로운 버전에 없는 것)
         keys_to_delete = (old_attachment_keys - new_attachment_keys) | (old_content_keys - new_content_keys)
 
-        # NCP에서 삭제된 파일 제거
+        # 삭제된 파일 제거 (NCP 또는 로컬)
         if keys_to_delete:
-            try:
-                s3_client = boto3.client(
-                    's3',
-                    endpoint_url=settings.NCP_ENDPOINT_URL,
-                    aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                    aws_secret_access_key=settings.NCP_SECRET_KEY,
-                    config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-                )
-
-                for key in keys_to_delete:
-                    try:
-                        s3_client.delete_object(Bucket=settings.NCP_BUCKET_NAME, Key=key)
-                        logger.info(f"NCP 파일 삭제 완료 (수정 시 제거됨): {key}")
-                    except ClientError as e:
-                        logger.error(f"NCP 파일 삭제 실패 (Key: {key}): {e}")
-            except Exception as e:
-                logger.error(f"S3 클라이언트 생성 실패: {e}")
+            delete_files(keys_to_delete)
 
         if getattr(instance, '_prefetched_objects_cache', None):
             instance._prefetched_objects_cache = {}
@@ -553,25 +535,9 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             ncp_keys = re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md)
             keys_to_delete.extend(ncp_keys)
 
-        # 3. NCP에서 파일 삭제
+        # 3. 파일 삭제 (NCP 또는 로컬)
         if keys_to_delete:
-            try:
-                s3_client = boto3.client(
-                    's3',
-                    endpoint_url=settings.NCP_ENDPOINT_URL,
-                    aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                    aws_secret_access_key=settings.NCP_SECRET_KEY,
-                    config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-                )
-
-                for key in keys_to_delete:
-                    try:
-                        s3_client.delete_object(Bucket=settings.NCP_BUCKET_NAME, Key=key)
-                        logger.info(f"NCP 파일 삭제 완료: {key}")
-                    except ClientError as e:
-                        logger.error(f"NCP 파일 삭제 실패 (Key: {key}): {e}")
-            except Exception as e:
-                logger.error(f"S3 클라이언트 생성 실패: {e}")
+            delete_files(set(keys_to_delete))
 
         # 4. DB에서 게시글 삭제
         return super().destroy(request, *args, **kwargs)
@@ -775,36 +741,15 @@ class DeleteFileAPIView(APIView):
         except (ValueError, IndexError):
             return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # NCP에서 파일 삭제
-        try:
-            s3_client = boto3.client(
-                's3',
-                endpoint_url=settings.NCP_ENDPOINT_URL,
-                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.NCP_SECRET_KEY,
-                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-            )
+        # 파일 존재 여부 확인
+        if not file_exists(file_key):
+            return Response({"error": "File not found."}, status=status.HTTP_404_NOT_FOUND)
 
-            # 파일 존재 여부 확인
-            try:
-                s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
-            except ClientError as e:
-                if e.response['Error']['Code'] == '404':
-                    return Response({"error": "File not found."}, status=status.HTTP_404_NOT_FOUND)
-                raise
-
-            # 파일 삭제
-            s3_client.delete_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
-            logger.info(f"NCP 파일 삭제 완료 (사용자 요청): {file_key}")
-
+        # 파일 삭제 (NCP 또는 로컬)
+        if delete_file(file_key):
             return Response({"message": "File deleted successfully."}, status=status.HTTP_200_OK)
-
-        except ClientError as e:
-            logger.error(f"NCP 파일 삭제 실패 (Key: {file_key}): {e}")
+        else:
             return Response({"error": "Failed to delete file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            logger.error(f"알 수 없는 에러: {e}")
-            return Response({"error": "An unknown error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ConfirmUploadAPIView(APIView):
@@ -832,18 +777,9 @@ class ConfirmUploadAPIView(APIView):
         except (ValueError, IndexError):
             return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            s3_client = boto3.client(
-                's3',
-                endpoint_url=settings.NCP_ENDPOINT_URL,
-                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.NCP_SECRET_KEY,
-                config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-            )
-            s3_client.put_object_acl(Bucket=settings.NCP_BUCKET_NAME, Key=file_key, ACL='public-read')
+        if set_public_acl(file_key):
             return Response({"message": "ACL updated."}, status=status.HTTP_200_OK)
-        except ClientError as e:
-            logger.error(f"ACL 적용 실패 (Key: {file_key}): {e}")
+        else:
             return Response({"error": "Failed to update ACL."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -915,55 +851,16 @@ class GeneratePresignedURLAPIView(APIView):
             extension = 'bin'
 
         # 2. 서버에서 고유한 파일 경로(Key) 생성
-        # uploads/년/월/일/유저ID/고유ID.확장자
-        # 예: "uploads/2025/10/28/12/a1b2c3d4-e5f6-4a5b-8c7d-9e0f1a2b3c4d.png"
-        # 주의: S3는 슬래시(/)만 사용하므로 os.path.join 대신 직접 조합
         now = datetime.now()
         file_key = f"uploads/{now:%Y}/{now:%m}/{now:%d}/{user.id}/{uuid.uuid4()}.{extension}"
 
-        # 3. boto3 클라이언트 생성
+        # 3. 업로드 URL 생성 (NCP presigned URL 또는 로컬 엔드포인트)
         try:
-            s3_client = boto3.client(
-                's3',
-                endpoint_url=settings.NCP_ENDPOINT_URL,
-                aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.NCP_SECRET_KEY,
-                config=Config(
-                    signature_version='s3v4',
-                    s3={'addressing_style': 'path'},
-                    region_name=settings.NCP_REGION_NAME
-                )
-            )
+            result = generate_presigned_upload_url(file_key, request=request)
+            return Response(result, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"S3 클라이언트 생성 실패: {e}")
-            return Response({"error": "S3 client creation failed."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # 4. Presigned URL (업로드용) 생성
-        try:
-            # URL 만료 시간: 600초 (10분)
-            upload_url = s3_client.generate_presigned_url(
-                'put_object',
-                Params={
-                    'Bucket': settings.NCP_BUCKET_NAME,
-                    'Key': file_key,
-                },
-                ExpiresIn=600
-            )
-
-            public_url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
-
-            return Response({
-                "upload_url": upload_url,
-                "file_key": file_key,
-                "url": public_url,
-            }, status=status.HTTP_200_OK)
-
-        except ClientError as e:
-            logger.error(f"Presigned URL 생성 실패: {e}")
-            return Response({"error": "Failed to generate presigned URL."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            logger.error(f"알 수 없는 에러: {e}")
-            return Response({"error": "An unknown error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"업로드 URL 생성 실패: {e}")
+            return Response({"error": "Failed to generate upload URL."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # 알림 생성 헬퍼 함수

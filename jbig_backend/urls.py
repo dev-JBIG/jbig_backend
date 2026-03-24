@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import (
 )
 from users.views import LogoutView
 from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView, PopupViewSet
+from .local_upload import LocalFileUploadView
 
 from boards.views import GeneratePresignedURLAPIView, DeleteFileAPIView, ConfirmUploadAPIView
 from rest_framework.routers import DefaultRouter
@@ -38,4 +39,9 @@ urlpatterns = [
     path('api/version/', version_info, name='version-info'),
 ]
 
-# MEDIA 서빙 제거 - NCP Object Storage 사용
+# 로컬 개발: 파일 업로드 엔드포인트 + media 파일 서빙
+if settings.USE_LOCAL_STORAGE:
+    urlpatterns += [
+        path('api/local-upload/<path:file_key>', LocalFileUploadView.as_view(), name='local-file-upload'),
+    ]
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

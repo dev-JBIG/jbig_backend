@@ -19,7 +19,10 @@ jbig_backend.env
 # 로그 파일
 *.log
 
-# Media files (using NCP Object Storage)
+# 로컬 개발용 SQLite DB
+db.sqlite3
+
+# Media files (using NCP Object Storage / 로컬 개발 시 로컬 파일)
 media/
 
 .venv/

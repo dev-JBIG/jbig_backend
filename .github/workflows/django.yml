@@ -31,7 +31,7 @@ jobs:
       - name: Run tests
         run: |
           source .venv/bin/activate
-          python manage.py test --settings=jbig_backend.settings_test || echo "No tests found or test settings not configured"
+          python manage.py test
 
       - name: Create build archive
         run: |

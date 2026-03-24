@@ -1,30 +1,10 @@
 import logging
-import boto3
-from botocore.client import Config
-from botocore.exceptions import ClientError
-from django.conf import settings
 
 from rest_framework import serializers
 from .models import CalendarEvent, Popup
+from .storage import generate_presigned_download_url
 
 logger = logging.getLogger(__name__)
-
-# Thread-local storage for S3 client
-import threading
-_thread_local = threading.local()
-
-
-def get_s3_client():
-    """Thread-local S3 클라이언트 반환"""
-    if not hasattr(_thread_local, 's3_client'):
-        _thread_local.s3_client = boto3.client(
-            's3',
-            endpoint_url=settings.NCP_ENDPOINT_URL,
-            aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.NCP_SECRET_KEY,
-            config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-        )
-    return _thread_local.s3_client
 
 
 class CalendarEventSerializer(serializers.ModelSerializer):
@@ -63,32 +43,10 @@ class PopupSerializer(serializers.ModelSerializer):
         return data
 
     def get_image_url(self, obj):
-        """NCP 경로를 Presigned URL로 변환"""
+        """NCP 경로를 Presigned URL로 변환 (로컬이면 /media/ URL)"""
         if not obj.image_url:
             return None
-        
-        # 이미 full URL인 경우 (하위 호환성)
-        if obj.image_url.startswith('http'):
-            return obj.image_url
-        
-        # NCP key 경로인 경우 Presigned URL 생성
-        if obj.image_url.startswith('uploads/'):
-            try:
-                s3_client = get_s3_client()
-                presigned_url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={
-                        'Bucket': settings.NCP_BUCKET_NAME,
-                        'Key': obj.image_url
-                    },
-                    ExpiresIn=3600  # 1시간
-                )
-                return presigned_url
-            except Exception as e:
-                logger.error(f"팝업 이미지 Presigned URL 생성 실패 (Key: {obj.image_url}): {e}")
-                return None
-        
-        return None
+        return generate_presigned_download_url(obj.image_url)
 
     def create(self, validated_data):
         # image_path를 image_url 필드에 저장
