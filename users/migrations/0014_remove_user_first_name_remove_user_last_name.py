@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('users', '0013_user_can_use_gpu'),
+        ('users', '0012_user_resume'),
     ]
 
     operations = [

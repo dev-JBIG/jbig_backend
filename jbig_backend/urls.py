@@ -24,7 +24,6 @@ urlpatterns = [
     path('api/users/', include('users.urls')),
     path('api/', include('boards.urls')),
     path('api/html/', include('html_serving.urls')),
-    path('api/gpu/', include('gpu.urls')),
     path('api/', include('recruitments.urls')),
     path('api/quiz-url/', QuizUrlView.as_view(), name='quiz_url'),
     path('api/settings/', SiteSettingsView.as_view(), name='site_settings'),
