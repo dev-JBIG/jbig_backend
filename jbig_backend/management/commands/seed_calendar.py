@@ -14,8 +14,8 @@ class Command(BaseCommand):
         
         # Get or create a staff user for the event author
         author, created = User.objects.get_or_create(
-            username='staff_tester',
-            defaults={'is_staff': True, 'email': 'staff@example.com'}
+            email='staff@example.com',
+            defaults={'username': 'staff_tester', 'is_staff': True, 'semester': 0}
         )
         if created:
             author.set_password('password')

@@ -35,13 +35,17 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n--- Diagnosing Specific Users ---'))
         usernames_to_check = ['임성혁', 'castle_h0326@jbnu.ac.kr']
         for username in usernames_to_check:
-            try:
-                user = User.objects.get(username=username)
-                self.stdout.write(
-                    f"Found User -> ID: {user.id}, Username: '{user.username}', Email: '{user.email}'"
-                )
-            except User.DoesNotExist:
-                self.stdout.write(f"User with username '{username}' NOT FOUND.")
+            users = User.objects.filter(username=username)
+            if not users.exists():
+                users = User.objects.filter(email__icontains=username)
+            if users.exists():
+                for user in users:
+                    self.stdout.write(
+                        f"Found User -> ID: {user.id}, Username: '{user.username}', "
+                        f"Semester: {user.semester}, Email: '{user.email}'"
+                    )
+            else:
+                self.stdout.write(f"User '{username}' NOT FOUND.")
 
 
         self.stdout.write(self.style.SUCCESS('\n--- Diagnosis Complete ---'))
