@@ -315,7 +315,7 @@ class ResumeUpdateSerializer(serializers.ModelSerializer):
         fields = ('resume',)
 
 
-ALLOWED_BLOCK_TYPES = {'text', 'image', 'links', 'divider', 'project', 'experience', 'skills', 'gallery', 'embed', 'quote'}
+ALLOWED_BLOCK_TYPES = {'text', 'image', 'links', 'divider', 'project', 'experience', 'skills', 'header', 'award', 'certification', 'education', 'activity', 'publication', 'contact', 'stats', 'gallery', 'embed', 'quote'}
 MAX_BLOCKS = 50
 MAX_JSON_SIZE = 200 * 1024  # 200KB
 
