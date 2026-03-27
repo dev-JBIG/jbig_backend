@@ -34,7 +34,7 @@ class User(AbstractUser):
     last_name = None
 
     email = models.EmailField(unique=True)
-    username = models.CharField(max_length=150, unique=True)
+    username = models.CharField(max_length=150)
     semester = models.PositiveIntegerField(
         verbose_name='기수',
         null=True,
@@ -54,6 +54,7 @@ class User(AbstractUser):
         db_table = 'user'
         verbose_name = '사용자'
         verbose_name_plural = '사용자 목록'
+        unique_together = [('username', 'semester')]
 
     def __str__(self):
         return self.email

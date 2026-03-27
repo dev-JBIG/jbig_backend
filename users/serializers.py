@@ -68,10 +68,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['isSuccess'] = True
         data['message'] = '로그인에 성공했습니다.'
         
-        if '_' in user.username:
-            data['username']=user.username.split('_',1)[1]
-        else:
-            data['username']=user.username
+        data['username'] = user.username
 
         data['semester'] = user.semester
         data['is_staff'] = user.is_staff
@@ -105,29 +102,23 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = ('email', 'username', 'password', 'semester')
         extra_kwargs = {
             'email': {'help_text': "사용자 이메일 주소"},
-            'username': {'help_text': "사용자 이름",
-                         'validators':[]}
+            'username': {'help_text': "사용자 이름"}
         }
 
     def validate(self, attrs):
-        username=attrs.get('username')
-        semester=attrs.get('semester')
+        username = attrs.get('username')
+        semester = attrs.get('semester')
 
-        combined_username=f"{semester}_{username}"
-
-        if User.objects.filter(username=combined_username).exists():
+        if User.objects.filter(username=username, semester=semester).exists():
             raise serializers.ValidationError({
-                "username":"이미 가입된 사용자(기수+이름)입니다."
+                "username": "이미 가입된 사용자(기수+이름)입니다."
             })
         return attrs
 
     def create(self, validated_data):
-        combined_username = f"{validated_data['semester']}_{validated_data['username']}"
-        # 기수 _ 이름
-        
         user = User.objects.create_user(
             email=validated_data['email'],
-            username=combined_username,
+            username=validated_data['username'],
             password=validated_data['password'],
             semester=validated_data['semester']
         )
@@ -216,11 +207,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = ('username', 'email', 'semester', 'is_staff', 'date_joined', 'is_self', 'post_count', 'comment_count')
 
-    def get_username(self,obj):
-        if '_' in obj.username:
-            return obj.username.split('_',1)[1]
+    def get_username(self, obj):
         return obj.username
-
 
     def get_is_self(self, obj):
         request = self.context.get('request')
@@ -249,11 +237,8 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = ('username', 'email_id', 'semester', 'resume', 'date_joined', 'last_login', 'is_self', 'posts', 'comments')
 
-    def get_username(self,obj):
-        if '_' in obj.username:
-            return obj.username.split('_',1)[1]
+    def get_username(self, obj):
         return obj.username
-
 
     def get_email_id(self, obj):
         return obj.email.split('@')[0] if obj.email else ''

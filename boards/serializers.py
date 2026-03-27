@@ -165,20 +165,14 @@ class CommentSerializer(serializers.ModelSerializer):
         if obj.is_anonymous:
             # 로그인한 회원은 실명을 볼 수 있음
             if user and user.is_authenticated:
-                username = obj.author.username
-                if '_' in username:
-                    return username.split('_', 1)[1]
-                return username
+                return obj.author.username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
                 # 같은 게시글 내에서는 동일한 닉네임 유지를 위해 post.id 사용
                 return generate_anonymous_nickname(obj.author.id, obj.post.id, None)
         else:
             # 익명이 아닌 경우 실명 표시
-            username = obj.author.username
-            if '_' in username:
-                return username.split('_', 1)[1]
-            return username
+            return obj.author.username
 
 
     def get_user_id(self, obj):
@@ -337,19 +331,13 @@ class PostListSerializer(serializers.ModelSerializer):
         if obj.is_anonymous:
             # 로그인한 회원은 실명을 볼 수 있음
             if user and user.is_authenticated:
-                username = obj.author.username
-                if '_' in username:
-                    return username.split('_', 1)[1]
-                return username
+                return obj.author.username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
                 return generate_anonymous_nickname(obj.author.id, obj.id, None)
         else:
             # 익명이 아닌 경우 실명 표시
-            username = obj.author.username
-            if '_' in username:
-                return username.split('_',1)[1]
-            return username
+            return obj.author.username
 
 
     def get_user_id(self, obj):
@@ -566,19 +554,13 @@ class PostDetailSerializer(serializers.ModelSerializer):
         if obj.is_anonymous:
             # 로그인한 회원은 실명을 볼 수 있음
             if user and user.is_authenticated:
-                username = obj.author.username
-                if '_' in username:
-                    return username.split('_', 1)[1]
-                return username
+                return obj.author.username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
                 return generate_anonymous_nickname(obj.author.id, obj.id, None)
         else:
             # 익명이 아닌 경우 실명 표시
-            username = obj.author.username
-            if '_' in username:
-                return username.split('_',1)[1]
-            return username
+            return obj.author.username
 
 
     def get_user_id(self, obj):
@@ -692,10 +674,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         
         # 알림은 게시글 작성자(회원)에게 가므로 항상 실명 표시
         # is_anonymous는 비회원에게 어떻게 보일지를 결정하는 것이지 알림과는 무관
-        username = obj.actor.username
-        if '_' in username:
-            return username.split('_', 1)[1]
-        return username
+        return obj.actor.username
 
     def get_actor_semester(self, obj):
         # 비회원인 경우만 0 반환

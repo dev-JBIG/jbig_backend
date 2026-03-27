@@ -124,10 +124,7 @@ class ApplicationFullSerializer(serializers.ModelSerializer):
         ]
 
     def get_applicant_name(self, obj):
-        username = obj.applicant.username
-        if '_' in username:
-            return username.split('_', 1)[1]
-        return username
+        return obj.applicant.username
 
     def get_applicant_username(self, obj):
         return obj.applicant.email.split('@')[0]
@@ -144,10 +141,7 @@ class ApplicationPublicSerializer(serializers.ModelSerializer):
         fields = ['id', 'applicant_name', 'applicant_semester', 'status', 'status_display']
 
     def get_applicant_name(self, obj):
-        username = obj.applicant.username
-        if '_' in username:
-            return username.split('_', 1)[1]
-        return username
+        return obj.applicant.username
 
 
 class ApplicationOwnSerializer(serializers.ModelSerializer):
@@ -164,10 +158,7 @@ class ApplicationOwnSerializer(serializers.ModelSerializer):
         ]
 
     def get_applicant_name(self, obj):
-        username = obj.applicant.username
-        if '_' in username:
-            return username.split('_', 1)[1]
-        return username
+        return obj.applicant.username
 
 
 class MyApplicationSerializer(serializers.ModelSerializer):
