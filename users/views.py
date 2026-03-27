@@ -18,7 +18,8 @@ from .serializers import (
     VerifyPasswordCodeSerializer,
     PasswordResetSerializer,
     PublicProfileSerializer,
-    ResumeUpdateSerializer
+    ResumeUpdateSerializer,
+    ProfileBlocksUpdateSerializer
 )
 from .models import User, EmailVerificationCode
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -752,6 +753,24 @@ class PublicProfileView(generics.RetrieveAPIView):
 class ResumeUpdateView(generics.UpdateAPIView):
     queryset = User.objects.all()
     serializer_class = ResumeUpdateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+
+@extend_schema(
+    tags=["사용자"],
+    summary="프로필 블록 수정",
+    description="본인의 프로필 블록 데이터를 수정합니다.",
+    request=ProfileBlocksUpdateSerializer
+)
+class ProfileBlocksUpdateView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = ProfileBlocksUpdateSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):

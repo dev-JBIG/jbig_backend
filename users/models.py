@@ -44,6 +44,7 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(null=True, blank=True)
     resume = models.TextField(blank=True, default='', verbose_name='자기소개')
+    profile_blocks = models.JSONField(default=list, blank=True, verbose_name='프로필 블록')
 
     objects = UserManager()
 

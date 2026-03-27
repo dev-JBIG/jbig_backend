@@ -235,7 +235,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'email_id', 'semester', 'resume', 'date_joined', 'last_login', 'is_self', 'posts', 'comments')
+        fields = ('username', 'email_id', 'semester', 'resume', 'profile_blocks', 'date_joined', 'last_login', 'is_self', 'posts', 'comments')
 
     def get_username(self, obj):
         return obj.username
@@ -313,3 +313,33 @@ class ResumeUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('resume',)
+
+
+ALLOWED_BLOCK_TYPES = {'text', 'image', 'links', 'divider', 'project', 'experience', 'skills', 'gallery', 'embed', 'quote'}
+MAX_BLOCKS = 50
+MAX_JSON_SIZE = 200 * 1024  # 200KB
+
+
+class ProfileBlocksUpdateSerializer(serializers.ModelSerializer):
+    profile_blocks = serializers.JSONField()
+
+    class Meta:
+        model = User
+        fields = ('profile_blocks',)
+
+    def validate_profile_blocks(self, value):
+        import json
+        if not isinstance(value, list):
+            raise serializers.ValidationError("profile_blocks는 배열이어야 합니다.")
+        if len(value) > MAX_BLOCKS:
+            raise serializers.ValidationError(f"블록은 최대 {MAX_BLOCKS}개까지 가능합니다.")
+        if len(json.dumps(value, ensure_ascii=False)) > MAX_JSON_SIZE:
+            raise serializers.ValidationError("프로필 데이터가 너무 큽니다.")
+        for block in value:
+            if not isinstance(block, dict):
+                raise serializers.ValidationError("각 블록은 객체여야 합니다.")
+            if not all(k in block for k in ('id', 'type', 'data')):
+                raise serializers.ValidationError("각 블록에는 id, type, data가 필요합니다.")
+            if block['type'] not in ALLOWED_BLOCK_TYPES:
+                raise serializers.ValidationError(f"허용되지 않는 블록 타입: {block['type']}")
+        return value
