@@ -2,7 +2,7 @@ import os
 import re
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 
@@ -17,6 +17,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 
 logger = logging.getLogger(__name__)
+
+BRAG_POPUP_DURATION_DAYS = 7
+BRAG_BOARD_NAME = '자랑게시판'
 
 from .models import Board, Post, Comment, Category, Notification, Draft
 from .serializers import (
@@ -69,7 +72,63 @@ class RegexpReplace(Func):
             output_field=CharField(),
             **extra
         )
-        
+
+
+def _plain_text_from_markdown(markdown: str) -> str:
+    """팝업 미리보기용으로 마크다운을 짧은 평문으로 변환."""
+    if not markdown:
+        return ''
+    text = re.sub(r'!\[[^\]]*]\([^)]+\)', '', markdown)
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    text = re.sub(r'[#>*`~_\-\[\]\(\)]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _build_brag_popup_content(post: Post) -> str:
+    preview = _plain_text_from_markdown(post.content_md or '')
+    if len(preview) > 140:
+        preview = f"{preview[:137]}..."
+
+    lines = [
+        "새 자랑 글이 등록되었습니다.",
+        f"게시판: {post.board.name}",
+        f"제목: {post.title}",
+    ]
+    if preview:
+        lines.append(f"내용: {preview}")
+    lines.append("축하 한 줄을 남기고 닫아주세요!")
+    return "\n".join(lines)
+
+
+def sync_brag_popup_for_post(post: Post) -> None:
+    """
+    자랑 태그 게시글과 팝업을 동기화합니다.
+    - tag == "자랑": 자동 팝업 생성/갱신
+    - 그 외 태그: 연결된 자동 팝업 비활성화
+    """
+    from django.utils import timezone
+    from jbig_backend.models import Popup
+
+    is_brag_post = bool(post.board_id and post.board and post.board.name == BRAG_BOARD_NAME)
+    if not is_brag_post:
+        Popup.objects.filter(source_post=post, is_active=True).update(is_active=False)
+        return
+
+    now = timezone.now()
+    Popup.objects.update_or_create(
+        source_post=post,
+        defaults={
+            'title': f"축하해주세요! {post.title}"[:255],
+            'content': _build_brag_popup_content(post),
+            'start_date': now,
+            'end_date': now + timedelta(days=BRAG_POPUP_DURATION_DAYS),
+            'is_active': True,
+            'created_by': post.author,
+        }
+    )
+
+
 @extend_schema(
     tags=['게시판'],
     summary="게시글 좋아요/취소",
@@ -412,7 +471,13 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
             post_type = Post.PostType.JUSTIFICATION_LETTER
         
         is_anonymous = serializer.validated_data.get('is_anonymous', True)
-        serializer.save(author=self.request.user, board=board, post_type=post_type, is_anonymous=is_anonymous)
+        post = serializer.save(
+            author=self.request.user,
+            board=board,
+            post_type=post_type,
+            is_anonymous=is_anonymous
+        )
+        sync_brag_popup_for_post(post)
 
 @extend_schema(tags=['게시판'])
 @extend_schema_view(
@@ -509,6 +574,8 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         # 삭제된 파일 제거 (NCP 또는 로컬)
         if keys_to_delete:
             delete_files(keys_to_delete)
+
+        sync_brag_popup_for_post(instance)
 
         if getattr(instance, '_prefetched_objects_cache', None):
             instance._prefetched_objects_cache = {}

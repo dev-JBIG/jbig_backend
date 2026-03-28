@@ -11,7 +11,7 @@ class CalendarEventAdmin(admin.ModelAdmin):
 
 @admin.register(Popup)
 class PopupAdmin(admin.ModelAdmin):
-    list_display = ('title', 'start_date', 'end_date', 'is_active', 'order', 'created_by', 'created_at')
+    list_display = ('title', 'source_post', 'start_date', 'end_date', 'is_active', 'order', 'created_by', 'created_at')
     search_fields = ('title', 'content', 'created_by__username')
     list_filter = ('is_active', 'start_date', 'end_date', 'created_at')
     raw_id_fields = ('created_by',)

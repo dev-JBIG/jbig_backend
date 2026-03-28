@@ -42,6 +42,14 @@ class CalendarEvent(models.Model):
 
 class Popup(models.Model):
     """업데이트 팝업 모델"""
+    source_post = models.OneToOneField(
+        'boards.Post',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='auto_popup',
+        verbose_name='원본 게시글'
+    )
     title = models.CharField(max_length=255, verbose_name='팝업 제목')
     content = models.TextField(blank=True, verbose_name='팝업 내용')
     image_url = models.CharField(max_length=500, blank=True, null=True, verbose_name='이미지 경로 (NCP key)')

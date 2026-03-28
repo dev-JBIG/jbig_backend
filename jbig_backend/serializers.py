@@ -20,15 +20,22 @@ class PopupSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     image_path = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
     content = serializers.CharField(required=False, allow_blank=True)
+    source_post_id = serializers.IntegerField(source='source_post.id', read_only=True)
+    source_board_id = serializers.IntegerField(source='source_post.board.id', read_only=True)
+    auto_generated = serializers.SerializerMethodField()
 
     class Meta:
         model = Popup
         fields = [
             'id', 'title', 'content', 'image_url', 'image_path', 'start_date', 'end_date', 
             'is_active', 'created_at', 'updated_at', 
-            'created_by', 'created_by_username', 'order'
+            'created_by', 'created_by_username', 'order',
+            'source_post_id', 'source_board_id', 'auto_generated'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'created_by', 'image_url']
+        read_only_fields = [
+            'created_at', 'updated_at', 'created_by', 'image_url',
+            'source_post_id', 'source_board_id', 'auto_generated'
+        ]
     
     def validate(self, data):
         """내용 또는 이미지 중 하나는 필수"""
@@ -47,6 +54,9 @@ class PopupSerializer(serializers.ModelSerializer):
         if not obj.image_url:
             return None
         return generate_presigned_download_url(obj.image_url)
+
+    def get_auto_generated(self, obj):
+        return obj.source_post_id is not None
 
     def create(self, validated_data):
         # image_path를 image_url 필드에 저장
