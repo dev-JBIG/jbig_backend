@@ -245,20 +245,6 @@ class CommentLike(models.Model):
         db_table = 'comment_like'
         unique_together = ('user', 'comment')
 
-class Attachment(models.Model):
-    """Deprecated - DB 호환성 위해 유지"""
-    file = models.FileField(upload_to='attachments/')
-    filename = models.CharField(max_length=255)
-
-    class Meta:
-        db_table = 'attachment'
-        verbose_name = '[Deprecated] 첨부파일'
-        verbose_name_plural = '[Deprecated] 첨부파일'
-
-    def __str__(self):
-        return self.filename
-
-
 class Notification(models.Model):
     class NotificationType(models.IntegerChoices):
         COMMENT = 1, '댓글'           # 내 글에 댓글이 달림

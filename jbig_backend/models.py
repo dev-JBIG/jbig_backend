@@ -75,3 +75,18 @@ class Popup(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.start_date.strftime('%Y-%m-%d')} ~ {self.end_date.strftime('%Y-%m-%d')})"
+
+
+class PopupDismiss(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='dismissed_popups')
+    popup = models.ForeignKey(Popup, on_delete=models.CASCADE, related_name='dismissals')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'popup_dismiss'
+        unique_together = ('user', 'popup')
+        verbose_name = '팝업 확인 기록'
+        verbose_name_plural = '팝업 확인 기록'
+
+    def __str__(self):
+        return f"{self.user} dismissed {self.popup}"

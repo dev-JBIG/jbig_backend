@@ -11,7 +11,9 @@ from rest_framework.permissions import IsAdminUser, AllowAny, IsAuthenticated
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 
-from .models import CalendarEvent, SiteSettings, Popup
+from rest_framework.decorators import action
+
+from .models import CalendarEvent, SiteSettings, Popup, PopupDismiss
 from .serializers import CalendarEventSerializer, PopupSerializer
 from .permissions import IsStaffOrReadOnly
 
@@ -176,11 +178,9 @@ class PopupViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
-        # 관리자는 모든 팝업 조회, 일반 사용자는 활성화되고 기간 내인 팝업만 조회
         from django.utils import timezone
         queryset = Popup.objects.all()
-        
-        # 일반 사용자는 활성 팝업만 보기
+
         if not self.request.user.is_staff:
             now = timezone.now()
             queryset = queryset.filter(
@@ -188,5 +188,19 @@ class PopupViewSet(viewsets.ModelViewSet):
                 start_date__lte=now,
                 end_date__gte=now
             )
-        
+
+        # dismiss 필터링은 staff 포함 모든 로그인 사용자에게 적용
+        if self.request.user.is_authenticated:
+            dismissed_ids = PopupDismiss.objects.filter(
+                user=self.request.user
+            ).values_list('popup_id', flat=True)
+            queryset = queryset.exclude(id__in=dismissed_ids)
+
         return queryset.order_by('order', '-created_at')
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def dismiss(self, request, pk=None):
+        from django.shortcuts import get_object_or_404
+        popup = get_object_or_404(Popup, pk=pk)
+        PopupDismiss.objects.get_or_create(user=request.user, popup=popup)
+        return Response({'status': 'dismissed'})

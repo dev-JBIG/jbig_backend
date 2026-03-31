@@ -119,7 +119,7 @@ def sync_brag_popup_for_post(post: Post) -> None:
     Popup.objects.update_or_create(
         source_post=post,
         defaults={
-            'title': f"축하해주세요! {post.title}"[:255],
+            'title': '축하해주세요!',
             'content': _build_brag_popup_content(post),
             'start_date': now,
             'end_date': now + timedelta(days=BRAG_POPUP_DURATION_DAYS),

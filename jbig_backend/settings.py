@@ -105,7 +105,6 @@ INSTALLED_APPS = [
     'users',
     'boards',
     'jbig_backend',
-    'html_serving',
     'recruitments',
 ]
 
