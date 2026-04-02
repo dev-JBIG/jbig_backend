@@ -24,34 +24,27 @@ ADJECTIVES = [
 ]
 
 NOUNS = [
-    '두쫀쿠', '밤티', '샤갈', '호날두', '오봉', '표돌이', '표순이', '두쫀붕',
-    '슈붕', '팥붕', '조림핑', '전붕이', '전순이', '오퍼스', '소넷',
-    '하이쿠', '제미니', 'GPT', '올트먼', '머스크', '마라탕', '마라샹궈',
-    '코다리', '고양이', '햄스터', '쿼카', '팬케이크', '오믈렛', '아기맹수', '비빔대왕'
+    '달팽이', '파란달팽이', '슬라임', '주황버섯', '초록버섯', '파란버섯', '좀비버섯',
+    '스텀프', '리본돼지', '스톤골렘', '와일드보어', '이블아이', '커즈아이', '루팡',
+    '스티지', '드레이크', '다크드레이크', '레드드레이크', '주니어네키', '페페', '예티',
+    '다크예티', '주니어발록', '머쉬맘', '옥토퍼스', '크로노스', '주니어부기', '좀비루팡',
+    '발록', '샐리온'
 ]
 
 
-def generate_anonymous_nickname(user_id, post_id, semester=None):
+def generate_anonymous_nickname(user_id, post_id):
     """
     사용자 ID와 게시글 ID를 조합하여 일관된 무작위 닉네임 생성
     같은 게시글 내에서 같은 사용자는 항상 동일한 닉네임을 가짐
-    semester가 있으면 "N기 명사", 없으면 "형용사 명사" 형식으로 생성됨
+    "형용사 명사" 형식으로 생성됨
     """
-    # 해시를 사용하여 동일한 입력에 대해 항상 같은 닉네임 생성
     seed_string = f"{user_id}_{post_id}"
     hash_value = int(hashlib.sha256(seed_string.encode()).hexdigest(), 16)
-    
-    # 해시값을 사용하여 형용사와 명사 선택
+
     adj_index = hash_value % len(ADJECTIVES)
     noun_index = (hash_value // len(ADJECTIVES)) % len(NOUNS)
-    
-    # semester가 있으면 "N기", 없으면 형용사 사용
-    if semester:
-        prefix = f"{semester}기"
-    else:
-        prefix = ADJECTIVES[adj_index]
-    
-    return f"{prefix} {NOUNS[noun_index]}"
+
+    return f"{ADJECTIVES[adj_index]} {NOUNS[noun_index]}"
 
 
 class Category(models.Model):

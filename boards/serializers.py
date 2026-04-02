@@ -154,7 +154,7 @@ class CommentSerializer(serializers.ModelSerializer):
                 # guest_id의 해시값을 user_id처럼 사용하여 무작위 닉네임 생성
                 import hashlib
                 guest_hash = int(hashlib.md5(obj.guest_id.encode()).hexdigest()[:8], 16)
-                return generate_anonymous_nickname(guest_hash, obj.post.id, None)
+                return generate_anonymous_nickname(guest_hash, obj.post.id)
             # guest_id가 없으면 탈퇴한 사용자
             return "탈퇴한 사용자"
         
@@ -169,7 +169,7 @@ class CommentSerializer(serializers.ModelSerializer):
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
                 # 같은 게시글 내에서는 동일한 닉네임 유지를 위해 post.id 사용
-                return generate_anonymous_nickname(obj.author.id, obj.post.id, None)
+                return generate_anonymous_nickname(obj.author.id, obj.post.id)
         else:
             # 익명이 아닌 경우 실명 표시
             return obj.author.username
@@ -334,7 +334,7 @@ class PostListSerializer(serializers.ModelSerializer):
                 return obj.author.username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
-                return generate_anonymous_nickname(obj.author.id, obj.id, None)
+                return generate_anonymous_nickname(obj.author.id, obj.id)
         else:
             # 익명이 아닌 경우 실명 표시
             return obj.author.username
@@ -553,7 +553,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 return obj.author.username
             else:
                 # 비회원은 무작위 닉네임을 봄 (익명성 보장을 위해 실제 semester 사용 안 함)
-                return generate_anonymous_nickname(obj.author.id, obj.id, None)
+                return generate_anonymous_nickname(obj.author.id, obj.id)
         else:
             # 익명이 아닌 경우 실명 표시
             return obj.author.username
