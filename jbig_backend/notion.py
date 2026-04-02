@@ -312,25 +312,39 @@ def _convert_page(page, top_level_ids):
     return page_id, value
 
 
-def _fetch_all_blocks(notion, block_id):
-    """페이지의 모든 블록을 재귀적으로 가져온다."""
-    all_blocks = []
+def _fetch_children(notion, block_id):
+    """한 블록의 직계 자식만 가져온다 (재귀 없음)."""
+    children = []
     cursor = None
-
     while True:
         kwargs = {'block_id': block_id, 'page_size': 100}
         if cursor:
             kwargs['start_cursor'] = cursor
         response = notion.blocks.children.list(**kwargs)
-        all_blocks.extend(response.get('results', []))
+        children.extend(response.get('results', []))
         if not response.get('has_more'):
             break
         cursor = response.get('next_cursor')
+    return children
 
-    for block in list(all_blocks):
-        if block.get('has_children'):
-            children = _fetch_all_blocks(notion, block['id'])
-            all_blocks.extend(children)
+
+def _fetch_blocks_bfs(notion, page_id, max_depth=3):
+    """
+    BFS로 블록을 가져온다. max_depth로 깊이를 제한하여 API 호출 수를 통제한다.
+    depth 0 = 페이지 직계 자식, depth 1 = 그 자식들, ...
+    """
+    all_blocks = []
+    queue = [(page_id, 0)]
+
+    while queue:
+        parent_id, depth = queue.pop(0)
+        children = _fetch_children(notion, parent_id)
+        all_blocks.extend(children)
+
+        if depth < max_depth:
+            for block in children:
+                if block.get('has_children'):
+                    queue.append((block['id'], depth + 1))
 
     return all_blocks
 
@@ -338,11 +352,12 @@ def _fetch_all_blocks(notion, block_id):
 def fetch_page(page_id: str) -> dict:
     """
     공식 Notion API로 페이지를 가져와 ExtendedRecordMap 포맷으로 반환한다.
+    깊이를 제한하여 대형 페이지에서도 timeout 없이 동작한다.
     """
     notion = Client(auth=settings.NOTION_API_KEY)
 
     page = notion.pages.retrieve(page_id)
-    all_blocks = _fetch_all_blocks(notion, page_id)
+    all_blocks = _fetch_blocks_bfs(notion, page_id, max_depth=3)
 
     # 부모-자식 매핑
     parent_children = {}
