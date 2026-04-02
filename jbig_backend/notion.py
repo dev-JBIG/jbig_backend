@@ -6,6 +6,7 @@ react-notion-x가 그대로 소비할 수 있는 ExtendedRecordMap 포맷을 반
 공개 페이지만 접근 가능하며 API 키가 필요하지 않다.
 """
 import re
+import time
 import requests
 import logging
 
@@ -16,14 +17,57 @@ HEADERS = {
     'Content-Type': 'application/json',
     'User-Agent': 'Mozilla/5.0',
 }
+REQUEST_TIMEOUT = 30
+MAX_CHUNKS = 50
+MAX_MISSING_ROUNDS = 10
+BLOCK_BATCH_SIZE = 100
+
+RECORD_MAP_SECTIONS = ('block', 'collection', 'collection_view', 'notion_user')
+RECORD_MAP_KEYS = (*RECORD_MAP_SECTIONS, 'collection_query', 'signed_urls')
+
+_UUID_STRIP_RE = re.compile(r'[^a-fA-F0-9]')
+
+
+class NotionAPIError(RuntimeError):
+    pass
 
 
 def _format_uuid(page_id: str) -> str:
     """하이픈 없는 32자 hex를 UUID 포맷(8-4-4-4-12)으로 변환"""
-    clean = re.sub(r'[^a-fA-F0-9]', '', page_id)
+    clean = _UUID_STRIP_RE.sub('', page_id)
     if len(clean) != 32:
         return page_id
     return f'{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}'
+
+
+def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
+    """Notion API POST 요청 (재시도 포함)"""
+    url = f'{NOTION_API}/{endpoint}'
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.post(url, json=body, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code == 429:
+                wait = min(2 ** attempt, 5)
+                logger.warning(f'Notion API rate limited, waiting {wait}s (attempt {attempt + 1})')
+                time.sleep(wait)
+                continue
+            if attempt < retries:
+                time.sleep(1)
+                continue
+            raise NotionAPIError(f'Notion API {endpoint} returned {resp.status_code}')
+        except requests.exceptions.Timeout:
+            if attempt < retries:
+                logger.warning(f'Notion API {endpoint} timeout (attempt {attempt + 1})')
+                continue
+            raise NotionAPIError(f'Notion API {endpoint} timed out after {retries + 1} attempts')
+    raise NotionAPIError(f'Notion API {endpoint} failed after {retries + 1} attempts')
+
+
+def _extract_record_map(data: dict) -> dict:
+    """API 응답에서 recordMap 추출 (recordMapWithRoles 호환)"""
+    return data.get('recordMap') or data.get('recordMapWithRoles') or {}
 
 
 def _merge_record_maps(target: dict, source: dict):
@@ -37,25 +81,39 @@ def _merge_record_maps(target: dict, source: dict):
 
 def _unwrap_nested_values(record_map: dict):
     """
-    Notion 내부 API는 { value: { value: {...}, role: "..." } } 형태로 중첩 반환.
-    react-notion-x는 { value: {...}, role: "..." } 형태를 기대하므로 풀어준다.
+    Notion 내부 API의 이중 중첩 value 구조를 평탄화하고 null 항목을 제거한다.
+    { value: { value: {...}, role: "..." } } → { value: {...}, role: "..." }
     """
-    for section_key in ('block', 'collection', 'collection_view', 'notion_user'):
+    for section_key in RECORD_MAP_SECTIONS:
         section = record_map.get(section_key, {})
+        cleaned = {}
         for item_id, item in section.items():
-            if isinstance(item, dict) and 'value' in item and isinstance(item['value'], dict):
-                inner = item['value']
-                if 'value' in inner and 'role' in inner and isinstance(inner['value'], dict):
-                    section[item_id] = inner
+            if not isinstance(item, dict):
+                continue
+            value = item.get('value')
+            if value is None:
+                continue
+            if isinstance(value, dict) and 'value' in value and 'role' in value and isinstance(value['value'], dict):
+                cleaned[item_id] = value
+            else:
+                cleaned[item_id] = item
+        record_map[section_key] = cleaned
 
 
-def _find_missing_block_ids(record_map: dict) -> set:
-    """recordMap에서 참조되지만 존재하지 않는 블록 ID를 찾는다."""
+def _find_missing_block_ids(record_map: dict, scope_ids: set = None) -> set:
+    """
+    recordMap에서 참조되지만 존재하지 않는 블록 ID를 찾는다.
+    scope_ids가 주어지면 해당 블록들의 content만 검사한다.
+    """
     blocks = record_map.get('block', {})
     existing_ids = set(blocks.keys())
     referenced_ids = set()
 
-    for block_data in blocks.values():
+    check_blocks = scope_ids if scope_ids else existing_ids
+    for bid in check_blocks:
+        block_data = blocks.get(bid)
+        if not block_data:
+            continue
         value = block_data.get('value', {})
         if not isinstance(value, dict):
             continue
@@ -70,26 +128,22 @@ def _find_missing_block_ids(record_map: dict) -> set:
 
 def _fetch_blocks_by_ids(block_ids: list) -> dict:
     """syncRecordValues API로 특정 블록들을 가져온다."""
-    resp = requests.post(
-        f'{NOTION_API}/syncRecordValues',
-        json={
-            'requests': [
-                {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
-                for bid in block_ids
-            ]
-        },
-        headers=HEADERS,
-        timeout=15,
-    )
+    data = _notion_post('syncRecordValues', {
+        'requests': [
+            {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
+            for bid in block_ids
+        ]
+    })
 
-    if resp.status_code != 200:
-        logger.warning(f'syncRecordValues returned {resp.status_code}')
-        return {}
+    block_data = _extract_record_map(data).get('block', {})
 
-    data = resp.json()
     results = {}
-    for record in data.get('recordMap', {}).get('block', {}).items():
-        results[record[0]] = record[1]
+    for bid, bdata in block_data.items():
+        if not isinstance(bdata, dict):
+            continue
+        if bdata.get('value') is None:
+            continue
+        results[bid] = bdata
 
     return results
 
@@ -102,29 +156,19 @@ def fetch_page(page_id: str) -> dict:
     uuid = _format_uuid(page_id)
     merged_record_map = {}
 
-    # 1단계: loadPageChunk로 페이지 데이터 가져오기
     chunk_number = 0
     cursor = {'stack': []}
 
     while True:
-        resp = requests.post(
-            f'{NOTION_API}/loadPageChunk',
-            json={
-                'page': {'id': uuid},
-                'limit': 100,
-                'cursor': cursor,
-                'chunkNumber': chunk_number,
-                'verticalColumns': False,
-            },
-            headers=HEADERS,
-            timeout=15,
-        )
+        data = _notion_post('loadPageChunk', {
+            'page': {'id': uuid},
+            'limit': 100,
+            'cursor': cursor,
+            'chunkNumber': chunk_number,
+            'verticalColumns': False,
+        })
 
-        if resp.status_code != 200:
-            raise Exception(f'Notion API returned {resp.status_code}')
-
-        data = resp.json()
-        record_map = data.get('recordMap', {})
+        record_map = _extract_record_map(data)
         _merge_record_maps(merged_record_map, record_map)
 
         next_cursor = data.get('cursor', {})
@@ -135,39 +179,37 @@ def fetch_page(page_id: str) -> dict:
         cursor = next_cursor
         chunk_number += 1
 
-        if chunk_number > 50:
+        if chunk_number > MAX_CHUNKS:
             logger.warning(f'Notion page {page_id}: too many chunks, stopping at {chunk_number}')
             break
 
-    # 중첩 구조 해제
     _unwrap_nested_values(merged_record_map)
 
-    # 2단계: 누락된 블록(토글 자식 등) 추가 fetch
-    for _ in range(10):  # 최대 10회 반복 (깊은 중첩 대응)
-        missing_ids = _find_missing_block_ids(merged_record_map)
+    # 누락된 블록(토글 자식 등) 추가 fetch
+    fetched_ids = set()  # 이미 fetch 시도한 ID 추적 (무한 반복 방지)
+    newly_added = None  # 증분 검색용
+
+    for _ in range(MAX_MISSING_ROUNDS):
+        missing_ids = _find_missing_block_ids(merged_record_map, newly_added) - fetched_ids
         if not missing_ids:
             break
 
-        # 한 번에 최대 100개씩 요청
+        fetched_ids.update(missing_ids)
+        newly_added = set()
+
         missing_list = list(missing_ids)
-        for i in range(0, len(missing_list), 100):
-            batch = missing_list[i:i + 100]
+        for i in range(0, len(missing_list), BLOCK_BATCH_SIZE):
+            batch = missing_list[i:i + BLOCK_BATCH_SIZE]
             fetched = _fetch_blocks_by_ids(batch)
-
-            # 가져온 블록도 중첩 해제
-            for bid, bdata in fetched.items():
-                if isinstance(bdata, dict) and 'value' in bdata and isinstance(bdata['value'], dict):
-                    inner = bdata['value']
-                    if 'value' in inner and 'role' in inner and isinstance(inner['value'], dict):
-                        fetched[bid] = inner
-
             merged_record_map.setdefault('block', {}).update(fetched)
+            newly_added.update(fetched.keys())
 
-    # react-notion-x가 기대하는 키 보장
-    for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
+        # 새로 추가된 블록의 중첩 해제
+        _unwrap_nested_values(merged_record_map)
+
+    for key in RECORD_MAP_KEYS:
         merged_record_map.setdefault(key, {})
 
-    # space 등 불필요한 키 제거 (프론트에서 안 씀)
     merged_record_map.pop('space', None)
 
     return merged_record_map
