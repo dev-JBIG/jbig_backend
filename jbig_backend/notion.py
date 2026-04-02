@@ -79,6 +79,17 @@ def fetch_page(page_id: str) -> dict:
             logger.warning(f'Notion page {page_id}: too many chunks, stopping at {chunk_number}')
             break
 
+    # Notion 내부 API는 { value: { value: {...}, role: "..." } } 형태로 중첩 반환
+    # react-notion-x는 { value: {...}, role: "..." } 형태를 기대하므로 풀어준다
+    for section_key in ('block', 'collection', 'collection_view', 'notion_user'):
+        section = merged_record_map.get(section_key, {})
+        for item_id, item in section.items():
+            if isinstance(item, dict) and 'value' in item and isinstance(item['value'], dict):
+                inner = item['value']
+                # 중첩 여부 판별: inner에 'value'와 'role'이 있으면 중첩된 것
+                if 'value' in inner and 'role' in inner and isinstance(inner['value'], dict):
+                    section[item_id] = inner
+
     # react-notion-x가 기대하는 키 보장
     for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
         merged_record_map.setdefault(key, {})
