@@ -1,8 +1,11 @@
 import os
 import json
+import logging
 
 from django.http import JsonResponse
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 from rest_framework import status, viewsets
 from rest_framework.views import APIView
@@ -153,6 +156,25 @@ class SiteSettingsView(APIView):
         if not updated:
             return Response({'error': 'No valid fields provided'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'message': 'Settings updated', **updated})
+
+class NotionPageView(APIView):
+    """Notion 내부 API 셀프 프록시 (splitbee 대체)"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, page_id):
+        import re
+        clean = re.sub(r'[^a-fA-F0-9]', '', page_id)
+        if len(clean) != 32:
+            return Response({'error': '잘못된 페이지 ID입니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from .notion import fetch_page
+            record_map = fetch_page(page_id)
+            return Response(record_map)
+        except Exception as e:
+            logger.error(f'Notion API error: {e}')
+            return Response({'error': '페이지를 불러올 수 없습니다.'}, status=status.HTTP_502_BAD_GATEWAY)
+
 
 @extend_schema(tags=['Calendar'])
 class CalendarEventViewSet(viewsets.ModelViewSet):

@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 from users.views import LogoutView
-from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView, PopupViewSet
+from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView, PopupViewSet, NotionPageView
 from .local_upload import LocalFileUploadView
 
 from boards.views import GeneratePresignedURLAPIView, DeleteFileAPIView, ConfirmUploadAPIView
@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/boards/files/generate-upload-url/', GeneratePresignedURLAPIView.as_view(), name='file-generate-upload-url'),
     path('api/boards/files/delete/', DeleteFileAPIView.as_view(), name='file-delete'),
     path('api/boards/files/confirm-upload/', ConfirmUploadAPIView.as_view(), name='file-confirm-upload'),
+    path('api/notion/<str:page_id>/', NotionPageView.as_view(), name='notion-page'),
     path('api/version/', version_info, name='version-info'),
 ]
 
