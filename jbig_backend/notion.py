@@ -85,47 +85,6 @@ def _unwrap_nested_values(record_map: dict):
             del section[k]
 
 
-def _find_missing_block_ids(record_map: dict) -> set:
-    blocks = record_map.get('block', {})
-    existing_ids = set(blocks.keys())
-    referenced_ids = set()
-    for block_data in blocks.values():
-        value = block_data.get('value', {})
-        if not isinstance(value, dict):
-            continue
-        content = value.get('content', [])
-        if isinstance(content, list):
-            for child_id in content:
-                if isinstance(child_id, str):
-                    referenced_ids.add(child_id)
-    return referenced_ids - existing_ids
-
-
-def _fetch_blocks_by_ids(block_ids: list) -> dict:
-    data = _notion_post('syncRecordValues', {
-        'requests': [
-            {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
-            for bid in block_ids
-        ]
-    })
-
-    block_data = (
-        data.get('recordMap', {}).get('block')
-        or data.get('recordMapWithRoles', {}).get('block')
-        or {}
-    )
-
-    results = {}
-    for bid, bdata in block_data.items():
-        if not isinstance(bdata, dict):
-            continue
-        value = bdata.get('value')
-        if value is None:
-            continue
-        results[bid] = bdata
-    return results
-
-
 def _build_record_map(page_id: str) -> dict:
     uuid = _format_uuid(page_id)
     merged = {}
@@ -153,22 +112,6 @@ def _build_record_map(page_id: str) -> dict:
             break
 
     _unwrap_nested_values(merged)
-
-    # 누락된 블록(토글 자식 등) 추가 fetch
-    for _ in range(10):
-        missing = _find_missing_block_ids(merged)
-        if not missing:
-            break
-        missing_list = list(missing)
-        for i in range(0, len(missing_list), 100):
-            batch = missing_list[i:i + 100]
-            fetched = _fetch_blocks_by_ids(batch)
-            for bid, bdata in list(fetched.items()):
-                if isinstance(bdata, dict) and 'value' in bdata and isinstance(bdata['value'], dict):
-                    inner = bdata['value']
-                    if 'value' in inner and 'role' in inner and isinstance(inner['value'], dict):
-                        fetched[bid] = inner
-            merged.setdefault('block', {}).update(fetched)
 
     for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
         merged.setdefault(key, {})
