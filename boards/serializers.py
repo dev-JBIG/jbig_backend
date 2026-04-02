@@ -460,10 +460,6 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         content_md = validated_data.pop('content_md', '')
         recruitment_data = validated_data.pop('recruitment', None)
 
-        # 팀원모집 태그일 때 익명 강제 해제
-        if validated_data.get('tag') == '팀원모집':
-            validated_data['is_anonymous'] = False
-
         post = Post(**validated_data)
         post.content_md = normalize_ncp_urls(content_md)
         post.attachment_paths = attachment_paths
