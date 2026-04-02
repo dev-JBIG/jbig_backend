@@ -70,9 +70,17 @@ class RecruitmentDetailAPIView(APIView):
 
     def patch(self, request, post_id):
         """모집 정보 수정 (모집자/관리자)"""
-        recruitment = get_object_or_404(Recruitment, post_id=post_id)
+        recruitment = get_object_or_404(
+            Recruitment.objects.select_related('post', 'post__author'),
+            post_id=post_id
+        )
         if recruitment.post.author != request.user and not request.user.is_staff:
             return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        recruitment.check_and_close_if_expired()
+
+        if recruitment.status in (Recruitment.Status.COMPLETED, Recruitment.Status.CANCELLED):
+            return Response({'error': '종료된 모집은 수정할 수 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # max_members 변경 시 accepted_count 검증
         new_max = request.data.get('max_members')
@@ -113,6 +121,8 @@ class RecruitmentStatusAPIView(APIView):
                 return Response({'error': '마감 상태에서만 재오픈할 수 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
             if recruitment.max_members > 0 and recruitment.accepted_count >= recruitment.max_members:
                 return Response({'error': '모집 인원이 가득 차 재오픈할 수 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+            if recruitment.deadline and recruitment.deadline < timezone.now():
+                return Response({'error': '마감일이 지나 재오픈할 수 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
             recruitment.status = Recruitment.Status.OPEN
             recruitment.save(update_fields=['status'])
 
@@ -121,6 +131,8 @@ class RecruitmentStatusAPIView(APIView):
                 return Response({'error': '완료 처리할 수 없는 상태입니다.'}, status=status.HTTP_400_BAD_REQUEST)
             recruitment.status = Recruitment.Status.COMPLETED
             recruitment.save(update_fields=['status'])
+            # 대기중인 지원자에게 알림
+            self._notify_pending_closed(recruitment, request.user)
 
         elif action == 'cancel':
             if recruitment.status in (Recruitment.Status.COMPLETED, Recruitment.Status.CANCELLED):
@@ -205,11 +217,13 @@ class MyApplicationAPIView(APIView):
         return Response(ApplicationOwnSerializer(app).data)
 
     def delete(self, request, post_id):
-        """지원 철회 (레코드 삭제 — 재지원 가능)"""
+        """지원 철회 (대기중인 지원만 철회 가능)"""
         recruitment = get_object_or_404(Recruitment, post_id=post_id)
         app = Application.objects.filter(recruitment=recruitment, applicant=request.user).first()
         if not app:
             return Response({'detail': '지원 내역이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+        if app.status != Application.Status.PENDING:
+            return Response({'error': '대기중인 지원만 철회할 수 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
         app.delete()  # signal이 accepted_count 조정
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -218,11 +232,16 @@ class ApplicationListAPIView(generics.ListAPIView):
     """지원자 목록 (권한별 다른 시리얼라이저)"""
     permission_classes = [IsAuthenticated]
 
+    def _get_recruitment(self):
+        if not hasattr(self, '_recruitment'):
+            self._recruitment = get_object_or_404(
+                Recruitment.objects.select_related('post', 'post__author'),
+                post_id=self.kwargs['post_id']
+            )
+        return self._recruitment
+
     def get_queryset(self):
-        recruitment = get_object_or_404(
-            Recruitment.objects.select_related('post', 'post__author'),
-            post_id=self.kwargs['post_id']
-        )
+        recruitment = self._get_recruitment()
         user = self.request.user
         is_owner = (recruitment.post.author == user or user.is_staff)
 
@@ -237,10 +256,7 @@ class ApplicationListAPIView(generics.ListAPIView):
         return recruitment.applications.filter(applicant=user).select_related('applicant')
 
     def get_serializer_class(self):
-        recruitment = get_object_or_404(
-            Recruitment.objects.select_related('post', 'post__author'),
-            post_id=self.kwargs['post_id']
-        )
+        recruitment = self._get_recruitment()
         user = self.request.user
         is_owner = (recruitment.post.author == user or user.is_staff)
 
@@ -256,60 +272,68 @@ class AcceptRejectApplicationAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, post_id, app_id, action):
-        recruitment = get_object_or_404(
-            Recruitment.objects.select_related('post', 'post__author'),
-            post_id=post_id
-        )
-        if recruitment.post.author != request.user and not request.user.is_staff:
-            return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+        with transaction.atomic():
+            recruitment = get_object_or_404(
+                Recruitment.objects.select_for_update().select_related('post', 'post__author'),
+                post_id=post_id
+            )
+            if recruitment.post.author != request.user and not request.user.is_staff:
+                return Response({'error': '권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
 
-        app = get_object_or_404(Application, id=app_id, recruitment=recruitment)
+            recruitment.check_and_close_if_expired()
 
-        if app.status != Application.Status.PENDING:
-            return Response({'error': '대기중인 지원만 수락/거절할 수 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+            if recruitment.status not in (Recruitment.Status.OPEN, Recruitment.Status.CLOSED):
+                return Response({'error': '종료된 모집에서는 수락/거절할 수 없습니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # recruiter_note 업데이트
-        note = request.data.get('recruiter_note')
-        if note is not None:
-            app.recruiter_note = note
+            app = get_object_or_404(Application, id=app_id, recruitment=recruitment)
 
+            if app.status != Application.Status.PENDING:
+                return Response({'error': '대기중인 지원만 수락/거절할 수 있습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # recruiter_note 업데이트
+            note = request.data.get('recruiter_note')
+            if note is not None:
+                app.recruiter_note = note
+
+            if action == 'accept':
+                if recruitment.max_members > 0 and recruitment.accepted_count >= recruitment.max_members:
+                    return Response({'error': '모집 인원이 가득 찼습니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                app.status = Application.Status.ACCEPTED
+                app.save(update_fields=['status', 'recruiter_note', 'updated_at'])
+
+                # accepted_count 증가
+                recruitment.accepted_count = F('accepted_count') + 1
+                recruitment.save(update_fields=['accepted_count'])
+                recruitment.refresh_from_db()
+
+                # 인원 충족 시 자동 마감
+                if recruitment.max_members > 0 and recruitment.accepted_count >= recruitment.max_members:
+                    recruitment.status = Recruitment.Status.CLOSED
+                    recruitment.save(update_fields=['status'])
+
+            elif action == 'reject':
+                app.status = Application.Status.REJECTED
+                app.save(update_fields=['status', 'recruiter_note', 'updated_at'])
+
+            else:
+                return Response({'error': '잘못된 액션입니다.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 알림은 트랜잭션 밖에서 (실패해도 수락/거절은 유지)
         if action == 'accept':
-            if recruitment.max_members > 0 and recruitment.accepted_count >= recruitment.max_members:
-                return Response({'error': '모집 인원이 가득 찼습니다.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            app.status = Application.Status.ACCEPTED
-            app.save(update_fields=['status', 'recruiter_note', 'updated_at'])
-
-            # accepted_count 증가
-            Recruitment.objects.filter(pk=recruitment.pk).update(accepted_count=F('accepted_count') + 1)
-            recruitment.refresh_from_db()
-
-            # 인원 충족 시 자동 마감
-            if recruitment.max_members > 0 and recruitment.accepted_count >= recruitment.max_members:
-                recruitment.status = Recruitment.Status.CLOSED
-                recruitment.save(update_fields=['status'])
-
-            # 지원자에게 수락 알림
             create_notification(
                 recipient=app.applicant,
                 actor=request.user,
                 notification_type=Notification.NotificationType.APPLICATION_ACCEPTED,
                 post=recruitment.post
             )
-
         elif action == 'reject':
-            app.status = Application.Status.REJECTED
-            app.save(update_fields=['status', 'recruiter_note', 'updated_at'])
-
-            # 지원자에게 거절 알림
             create_notification(
                 recipient=app.applicant,
                 actor=request.user,
                 notification_type=Notification.NotificationType.APPLICATION_REJECTED,
                 post=recruitment.post
             )
-        else:
-            return Response({'error': '잘못된 액션입니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(ApplicationFullSerializer(app).data)
 

@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 from .models import Recruitment, Application
 
@@ -10,6 +11,17 @@ class RecruitmentCreateSerializer(serializers.ModelSerializer):
             'recruitment_type', 'max_members', 'deadline',
             'required_skills', 'contact_info', 'show_applicants'
         ]
+
+    def validate_deadline(self, value):
+        if value and value < timezone.now():
+            raise serializers.ValidationError('마감일은 현재 시각 이후여야 합니다.')
+        return value
+
+    def validate_required_skills(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('기술 목록은 배열이어야 합니다.')
+        cleaned = list(dict.fromkeys(s.strip() for s in value if isinstance(s, str) and s.strip()))
+        return cleaned
 
 
 class RecruitmentDetailSerializer(serializers.ModelSerializer):

@@ -8,6 +8,7 @@ from botocore.client import Config
 from botocore.exceptions import ClientError
 
 from django.conf import settings
+from django.db import transaction
 from rest_framework import serializers
 
 from .models import Category, Board, Post, Comment, Notification, Draft, generate_anonymous_nickname
@@ -455,6 +456,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         attachment_paths = validated_data.pop('attachment_paths', [])
         content_md = validated_data.pop('content_md', '')
@@ -483,6 +485,14 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         content_md = validated_data.pop('content_md', None)
         board_id = validated_data.pop('board_id', None)
         validated_data.pop('recruitment', None)  # 모집 수정은 별도 API로
+
+        # 태그가 '팀원모집'에서 다른 태그로 변경되면 Recruitment 삭제
+        new_tag = validated_data.get('tag')
+        if new_tag is not None and new_tag != '팀원모집' and hasattr(instance, 'recruitment'):
+            try:
+                instance.recruitment.delete()
+            except Exception:
+                pass
 
         if content_md is not None:
             instance.content_md = normalize_ncp_urls(content_md)
