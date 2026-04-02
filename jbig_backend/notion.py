@@ -25,6 +25,8 @@ REQUEST_TIMEOUT = 30
 # 메모리 캐시
 _cache = {}
 _cache_lock = threading.Lock()
+_build_locks = {}  # page_id별 빌드 락 (동시 빌드 방지)
+_build_locks_lock = threading.Lock()
 CACHE_TTL = 300  # 5분
 
 
@@ -85,6 +87,43 @@ def _unwrap_nested_values(record_map: dict):
             del section[k]
 
 
+def _find_missing_block_ids(record_map: dict) -> list:
+    blocks = record_map.get('block', {})
+    existing = set(blocks.keys())
+    missing = []
+    for bdata in blocks.values():
+        value = bdata.get('value', {})
+        if not isinstance(value, dict):
+            continue
+        for cid in (value.get('content') or []):
+            if isinstance(cid, str) and cid not in existing:
+                missing.append(cid)
+    return missing
+
+
+def _fetch_missing_blocks(missing_ids: list) -> dict:
+    results = {}
+    for i in range(0, len(missing_ids), 100):
+        batch = missing_ids[i:i + 100]
+        data = _notion_post('syncRecordValues', {
+            'requests': [
+                {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
+                for bid in batch
+            ]
+        })
+        block_data = (
+            data.get('recordMap', {}).get('block')
+            or data.get('recordMapWithRoles', {}).get('block')
+            or {}
+        )
+        for bid, bdata in block_data.items():
+            if isinstance(bdata, dict) and bdata.get('value') is not None:
+                results[bid] = bdata
+        if i + 100 < len(missing_ids):
+            _time.sleep(0.5)  # rate limit 방지
+    return results
+
+
 def _build_record_map(page_id: str) -> dict:
     uuid = _format_uuid(page_id)
     merged = {}
@@ -113,6 +152,18 @@ def _build_record_map(page_id: str) -> dict:
 
     _unwrap_nested_values(merged)
 
+    # 누락 블록 1회만 fetch (토글 자식 등)
+    missing = _find_missing_block_ids(merged)
+    if missing:
+        fetched = _fetch_missing_blocks(missing)
+        # 중첩 해제
+        for bid, bdata in list(fetched.items()):
+            if isinstance(bdata, dict) and 'value' in bdata:
+                inner = bdata['value']
+                if isinstance(inner, dict) and 'value' in inner and 'role' in inner:
+                    fetched[bid] = inner
+        merged.setdefault('block', {}).update(fetched)
+
     for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
         merged.setdefault(key, {})
     merged.pop('space', None)
@@ -130,6 +181,13 @@ def _refresh_cache(page_id: str):
         logger.error(f'Notion cache refresh failed: {page_id}: {e}')
 
 
+def _get_build_lock(page_id: str) -> threading.Lock:
+    with _build_locks_lock:
+        if page_id not in _build_locks:
+            _build_locks[page_id] = threading.Lock()
+        return _build_locks[page_id]
+
+
 def fetch_page(page_id: str) -> dict:
     with _cache_lock:
         cached = _cache.get(page_id)
@@ -141,8 +199,16 @@ def fetch_page(page_id: str) -> dict:
         threading.Thread(target=_refresh_cache, args=(page_id,), daemon=True).start()
         return cached['data']
 
-    # 첫 요청 → 동기 빌드
-    data = _build_record_map(page_id)
-    with _cache_lock:
-        _cache[page_id] = {'data': data, 'expires': _time.time() + CACHE_TTL}
-    return data
+    # 첫 요청 → 동기 빌드 (page별 lock으로 동시 빌드 방지)
+    build_lock = _get_build_lock(page_id)
+    with build_lock:
+        # lock 획득 후 다시 캐시 확인 (다른 worker가 이미 빌드했을 수 있음)
+        with _cache_lock:
+            cached = _cache.get(page_id)
+        if cached:
+            return cached['data']
+
+        data = _build_record_map(page_id)
+        with _cache_lock:
+            _cache[page_id] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+        return data
