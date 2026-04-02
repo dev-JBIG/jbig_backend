@@ -13,7 +13,6 @@ gunicorn==23.0.0
 html2text==2025.4.15
 inflection==0.5.1
 jsonschema==4.25.1
-notion-client==2.3.0
 jsonschema-specifications==2025.9.1
 pillow==12.0.0
 psycopg2-binary==2.9.11

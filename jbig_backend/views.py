@@ -158,7 +158,7 @@ class SiteSettingsView(APIView):
         return Response({'message': 'Settings updated', **updated})
 
 class NotionPageView(APIView):
-    """Notion 공식 API 프록시"""
+    """Notion 내부 API 프록시 (splitbee 대체)"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, page_id):
@@ -166,9 +166,6 @@ class NotionPageView(APIView):
         clean = re.sub(r'[^a-fA-F0-9]', '', page_id)
         if len(clean) != 32:
             return Response({'error': '잘못된 페이지 ID입니다.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not settings.NOTION_API_KEY:
-            return Response({'error': 'Notion API 키가 설정되지 않았습니다.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         try:
             from .notion import fetch_page
