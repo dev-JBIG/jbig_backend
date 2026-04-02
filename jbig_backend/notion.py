@@ -1,8 +1,8 @@
 """
 Notion 내부 API 프록시 — splitbee 대체 셀프 호스팅
 
-Notion의 내부 API(loadPageChunk)를 호출하여 react-notion-x가
-그대로 소비할 수 있는 ExtendedRecordMap 포맷을 반환한다.
+Notion의 내부 API(loadPageChunk, syncRecordValues)를 호출하여
+react-notion-x가 그대로 소비할 수 있는 ExtendedRecordMap 포맷을 반환한다.
 공개 페이지만 접근 가능하며 API 키가 필요하지 않다.
 """
 import re
@@ -12,6 +12,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 NOTION_API = 'https://www.notion.so/api/v3'
+HEADERS = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0',
+}
 
 
 def _format_uuid(page_id: str) -> str:
@@ -31,14 +35,74 @@ def _merge_record_maps(target: dict, source: dict):
             target[key].update(value)
 
 
+def _unwrap_nested_values(record_map: dict):
+    """
+    Notion 내부 API는 { value: { value: {...}, role: "..." } } 형태로 중첩 반환.
+    react-notion-x는 { value: {...}, role: "..." } 형태를 기대하므로 풀어준다.
+    """
+    for section_key in ('block', 'collection', 'collection_view', 'notion_user'):
+        section = record_map.get(section_key, {})
+        for item_id, item in section.items():
+            if isinstance(item, dict) and 'value' in item and isinstance(item['value'], dict):
+                inner = item['value']
+                if 'value' in inner and 'role' in inner and isinstance(inner['value'], dict):
+                    section[item_id] = inner
+
+
+def _find_missing_block_ids(record_map: dict) -> set:
+    """recordMap에서 참조되지만 존재하지 않는 블록 ID를 찾는다."""
+    blocks = record_map.get('block', {})
+    existing_ids = set(blocks.keys())
+    referenced_ids = set()
+
+    for block_data in blocks.values():
+        value = block_data.get('value', {})
+        if not isinstance(value, dict):
+            continue
+        content = value.get('content', [])
+        if isinstance(content, list):
+            for child_id in content:
+                if isinstance(child_id, str):
+                    referenced_ids.add(child_id)
+
+    return referenced_ids - existing_ids
+
+
+def _fetch_blocks_by_ids(block_ids: list) -> dict:
+    """syncRecordValues API로 특정 블록들을 가져온다."""
+    resp = requests.post(
+        f'{NOTION_API}/syncRecordValues',
+        json={
+            'requests': [
+                {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
+                for bid in block_ids
+            ]
+        },
+        headers=HEADERS,
+        timeout=15,
+    )
+
+    if resp.status_code != 200:
+        logger.warning(f'syncRecordValues returned {resp.status_code}')
+        return {}
+
+    data = resp.json()
+    results = {}
+    for record in data.get('recordMap', {}).get('block', {}).items():
+        results[record[0]] = record[1]
+
+    return results
+
+
 def fetch_page(page_id: str) -> dict:
     """
     Notion 내부 API로 페이지 데이터를 가져온다.
-    여러 chunk를 페이지네이션하여 전체 recordMap을 반환한다.
+    여러 chunk를 페이지네이션하고 누락된 블록(토글 자식 등)을 추가로 fetch한다.
     """
     uuid = _format_uuid(page_id)
     merged_record_map = {}
 
+    # 1단계: loadPageChunk로 페이지 데이터 가져오기
     chunk_number = 0
     cursor = {'stack': []}
 
@@ -52,10 +116,7 @@ def fetch_page(page_id: str) -> dict:
                 'chunkNumber': chunk_number,
                 'verticalColumns': False,
             },
-            headers={
-                'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0',
-            },
+            headers=HEADERS,
             timeout=15,
         )
 
@@ -66,7 +127,6 @@ def fetch_page(page_id: str) -> dict:
         record_map = data.get('recordMap', {})
         _merge_record_maps(merged_record_map, record_map)
 
-        # 다음 chunk 확인
         next_cursor = data.get('cursor', {})
         stack = next_cursor.get('stack', [])
         if not stack:
@@ -79,16 +139,29 @@ def fetch_page(page_id: str) -> dict:
             logger.warning(f'Notion page {page_id}: too many chunks, stopping at {chunk_number}')
             break
 
-    # Notion 내부 API는 { value: { value: {...}, role: "..." } } 형태로 중첩 반환
-    # react-notion-x는 { value: {...}, role: "..." } 형태를 기대하므로 풀어준다
-    for section_key in ('block', 'collection', 'collection_view', 'notion_user'):
-        section = merged_record_map.get(section_key, {})
-        for item_id, item in section.items():
-            if isinstance(item, dict) and 'value' in item and isinstance(item['value'], dict):
-                inner = item['value']
-                # 중첩 여부 판별: inner에 'value'와 'role'이 있으면 중첩된 것
-                if 'value' in inner and 'role' in inner and isinstance(inner['value'], dict):
-                    section[item_id] = inner
+    # 중첩 구조 해제
+    _unwrap_nested_values(merged_record_map)
+
+    # 2단계: 누락된 블록(토글 자식 등) 추가 fetch
+    for _ in range(10):  # 최대 10회 반복 (깊은 중첩 대응)
+        missing_ids = _find_missing_block_ids(merged_record_map)
+        if not missing_ids:
+            break
+
+        # 한 번에 최대 100개씩 요청
+        missing_list = list(missing_ids)
+        for i in range(0, len(missing_list), 100):
+            batch = missing_list[i:i + 100]
+            fetched = _fetch_blocks_by_ids(batch)
+
+            # 가져온 블록도 중첩 해제
+            for bid, bdata in fetched.items():
+                if isinstance(bdata, dict) and 'value' in bdata and isinstance(bdata['value'], dict):
+                    inner = bdata['value']
+                    if 'value' in inner and 'role' in inner and isinstance(inner['value'], dict):
+                        fetched[bid] = inner
+
+            merged_record_map.setdefault('block', {}).update(fetched)
 
     # react-notion-x가 기대하는 키 보장
     for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
