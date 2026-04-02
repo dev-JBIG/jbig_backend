@@ -67,6 +67,9 @@ NCP_BUCKET_NAME = os.getenv('NCP_BUCKET_NAME')
 NCP_ENDPOINT_URL = os.getenv('NCP_ENDPOINT_URL')
 NCP_REGION_NAME = os.getenv('NCP_REGION_NAME')
 
+# Notion 공식 API
+NOTION_API_KEY = os.getenv('NOTION_API_KEY', '')
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 

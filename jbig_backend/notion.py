@@ -1,215 +1,375 @@
 """
-Notion 내부 API 프록시 — splitbee 대체 셀프 호스팅
+Notion 공식 API → react-notion-x ExtendedRecordMap 변환 모듈
 
-Notion의 내부 API(loadPageChunk, syncRecordValues)를 호출하여
-react-notion-x가 그대로 소비할 수 있는 ExtendedRecordMap 포맷을 반환한다.
-공개 페이지만 접근 가능하며 API 키가 필요하지 않다.
+공식 API 응답을 NotionRenderer가 이해하는 내부 포맷으로 변환한다.
 """
-import re
-import time
-import requests
 import logging
+from datetime import datetime, timezone
+
+from notion_client import Client
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-NOTION_API = 'https://www.notion.so/api/v3'
-HEADERS = {
-    'Content-Type': 'application/json',
-    'User-Agent': 'Mozilla/5.0',
+BLOCK_TYPE_MAP = {
+    'paragraph': 'text',
+    'heading_1': 'header',
+    'heading_2': 'sub_header',
+    'heading_3': 'sub_sub_header',
+    'bulleted_list_item': 'bulleted_list',
+    'numbered_list_item': 'numbered_list',
+    'to_do': 'to_do',
+    'toggle': 'toggle',
+    'code': 'code',
+    'quote': 'quote',
+    'callout': 'callout',
+    'divider': 'divider',
+    'image': 'image',
+    'video': 'video',
+    'file': 'file',
+    'pdf': 'pdf',
+    'bookmark': 'bookmark',
+    'embed': 'embed',
+    'equation': 'equation',
+    'table': 'table',
+    'table_row': 'table_row',
+    'column_list': 'column_list',
+    'column': 'column',
+    'child_page': 'page',
+    'child_database': 'collection_view_page',
+    'synced_block': 'transclusion_container',
+    'table_of_contents': 'table_of_contents',
+    'breadcrumb': 'breadcrumb',
+    'link_preview': 'bookmark',
+    'audio': 'audio',
 }
-REQUEST_TIMEOUT = 30
-MAX_CHUNKS = 50
-MAX_MISSING_ROUNDS = 10
-BLOCK_BATCH_SIZE = 100
-
-RECORD_MAP_SECTIONS = ('block', 'collection', 'collection_view', 'notion_user')
-RECORD_MAP_KEYS = (*RECORD_MAP_SECTIONS, 'collection_query', 'signed_urls')
-
-_UUID_STRIP_RE = re.compile(r'[^a-fA-F0-9]')
 
 
-class NotionAPIError(RuntimeError):
-    pass
+def _iso_to_ms(iso_str):
+    if not iso_str:
+        return 0
+    try:
+        dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return 0
 
 
-def _format_uuid(page_id: str) -> str:
-    """하이픈 없는 32자 hex를 UUID 포맷(8-4-4-4-12)으로 변환"""
-    clean = _UUID_STRIP_RE.sub('', page_id)
-    if len(clean) != 32:
-        return page_id
-    return f'{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}'
+def _get_file_url(file_obj):
+    if not file_obj:
+        return None
+    ft = file_obj.get('type', '')
+    if ft == 'external':
+        return file_obj.get('external', {}).get('url')
+    if ft == 'file':
+        return file_obj.get('file', {}).get('url')
+    return None
 
 
-def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
-    """Notion API POST 요청 (재시도 포함)"""
-    url = f'{NOTION_API}/{endpoint}'
-    for attempt in range(retries + 1):
-        try:
-            resp = requests.post(url, json=body, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-            if resp.status_code == 200:
-                return resp.json()
-            if resp.status_code == 429:
-                wait = min(2 ** attempt, 5)
-                logger.warning(f'Notion API rate limited, waiting {wait}s (attempt {attempt + 1})')
-                time.sleep(wait)
-                continue
-            if attempt < retries:
-                time.sleep(1)
-                continue
-            raise NotionAPIError(f'Notion API {endpoint} returned {resp.status_code}')
-        except requests.exceptions.Timeout:
-            if attempt < retries:
-                logger.warning(f'Notion API {endpoint} timeout (attempt {attempt + 1})')
-                continue
-            raise NotionAPIError(f'Notion API {endpoint} timed out after {retries + 1} attempts')
-    raise NotionAPIError(f'Notion API {endpoint} failed after {retries + 1} attempts')
+def _apply_annotations(decorations, annotations):
+    if annotations.get('bold'):
+        decorations.append(['b'])
+    if annotations.get('italic'):
+        decorations.append(['i'])
+    if annotations.get('strikethrough'):
+        decorations.append(['s'])
+    if annotations.get('underline'):
+        decorations.append(['_'])
+    if annotations.get('code'):
+        decorations.append(['c'])
+    color = annotations.get('color', 'default')
+    if color != 'default':
+        decorations.append(['h', color])
 
 
-def _extract_record_map(data: dict) -> dict:
-    """API 응답에서 recordMap 추출 (recordMapWithRoles 호환)"""
-    return data.get('recordMap') or data.get('recordMapWithRoles') or {}
+def convert_rich_text(rich_text_array):
+    """공식 API rich_text → 내부 포맷 title 프로퍼티"""
+    if not rich_text_array:
+        return []
 
+    result = []
+    for item in rich_text_array:
+        item_type = item.get('type', 'text')
+        text = item.get('plain_text', '')
+        decorations = []
 
-def _merge_record_maps(target: dict, source: dict):
-    """두 recordMap을 병합한다."""
-    for key, value in source.items():
-        if key not in target:
-            target[key] = value
-        elif isinstance(value, dict):
-            target[key].update(value)
-
-
-def _unwrap_nested_values(record_map: dict):
-    """
-    Notion 내부 API의 이중 중첩 value 구조를 평탄화하고 null 항목을 제거한다.
-    { value: { value: {...}, role: "..." } } → { value: {...}, role: "..." }
-    """
-    for section_key in RECORD_MAP_SECTIONS:
-        section = record_map.get(section_key, {})
-        cleaned = {}
-        for item_id, item in section.items():
-            if not isinstance(item, dict):
-                continue
-            value = item.get('value')
-            if value is None:
-                continue
-            if isinstance(value, dict) and 'value' in value and 'role' in value and isinstance(value['value'], dict):
-                cleaned[item_id] = value
-            else:
-                cleaned[item_id] = item
-        record_map[section_key] = cleaned
-
-
-def _find_missing_block_ids(record_map: dict, scope_ids: set = None) -> set:
-    """
-    recordMap에서 참조되지만 존재하지 않는 블록 ID를 찾는다.
-    scope_ids가 주어지면 해당 블록들의 content만 검사한다.
-    """
-    blocks = record_map.get('block', {})
-    existing_ids = set(blocks.keys())
-    referenced_ids = set()
-
-    check_blocks = scope_ids if scope_ids else existing_ids
-    for bid in check_blocks:
-        block_data = blocks.get(bid)
-        if not block_data:
+        if item_type == 'equation':
+            expression = item.get('equation', {}).get('expression', '')
+            result.append(['⁍', [['e', expression]]])
             continue
-        value = block_data.get('value', {})
-        if not isinstance(value, dict):
+
+        if item_type == 'mention':
+            mention = item.get('mention', {})
+            mt = mention.get('type', '')
+            _apply_annotations(decorations, item.get('annotations', {}))
+            if mt == 'page':
+                decorations.append(['p', mention['page']['id']])
+            elif mt == 'date':
+                di = mention.get('date', {})
+                decorations.append(['d', {
+                    'type': 'date',
+                    'start_date': di.get('start', ''),
+                    'end_date': di.get('end'),
+                }])
+            result.append([text, decorations] if decorations else [text])
             continue
-        content = value.get('content', [])
-        if isinstance(content, list):
-            for child_id in content:
-                if isinstance(child_id, str):
-                    referenced_ids.add(child_id)
 
-    return referenced_ids - existing_ids
+        _apply_annotations(decorations, item.get('annotations', {}))
+        href = item.get('href')
+        if href:
+            decorations.append(['a', href])
+
+        result.append([text, decorations] if decorations else [text])
+
+    return result
 
 
-def _fetch_blocks_by_ids(block_ids: list) -> dict:
-    """syncRecordValues API로 특정 블록들을 가져온다."""
-    data = _notion_post('syncRecordValues', {
-        'requests': [
-            {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
-            for bid in block_ids
-        ]
-    })
+def _convert_block(block, children_ids=None):
+    """공식 API 블록 → 내부 포맷 블록"""
+    block_id = block['id']
+    block_type = block.get('type', '')
+    internal_type = BLOCK_TYPE_MAP.get(block_type, 'text')
 
-    block_data = _extract_record_map(data).get('block', {})
+    parent = block.get('parent', {})
+    pt = parent.get('type', '')
+    parent_id = parent.get('page_id', '') if pt == 'page_id' else parent.get('block_id', '')
 
-    results = {}
-    for bid, bdata in block_data.items():
-        if not isinstance(bdata, dict):
-            continue
-        if bdata.get('value') is None:
-            continue
-        results[bid] = bdata
+    value = {
+        'id': block_id,
+        'type': internal_type,
+        'parent_id': parent_id,
+        'parent_table': 'block',
+        'alive': True,
+        'created_time': _iso_to_ms(block.get('created_time')),
+        'last_edited_time': _iso_to_ms(block.get('last_edited_time')),
+    }
 
-    return results
+    if children_ids:
+        value['content'] = children_ids
+
+    td = block.get(block_type, {})
+
+    # 텍스트 계열 블록
+    if block_type in ('paragraph', 'heading_1', 'heading_2', 'heading_3',
+                       'bulleted_list_item', 'numbered_list_item', 'quote', 'toggle'):
+        title = convert_rich_text(td.get('rich_text', []))
+        if title:
+            value['properties'] = {'title': title}
+        color = td.get('color', 'default')
+        if color != 'default':
+            value.setdefault('format', {})['block_color'] = color
+
+    elif block_type == 'to_do':
+        title = convert_rich_text(td.get('rich_text', []))
+        value['properties'] = {}
+        if title:
+            value['properties']['title'] = title
+        value['properties']['checked'] = [['Yes']] if td.get('checked') else [['No']]
+
+    elif block_type == 'callout':
+        title = convert_rich_text(td.get('rich_text', []))
+        if title:
+            value['properties'] = {'title': title}
+        icon = td.get('icon')
+        if icon:
+            it = icon.get('type', '')
+            if it == 'emoji':
+                value.setdefault('format', {})['page_icon'] = icon['emoji']
+            elif it == 'external':
+                value.setdefault('format', {})['page_icon'] = icon['external']['url']
+        color = td.get('color', 'default')
+        if color != 'default':
+            value.setdefault('format', {})['block_color'] = color
+
+    elif block_type == 'code':
+        title = convert_rich_text(td.get('rich_text', []))
+        value['properties'] = {}
+        if title:
+            value['properties']['title'] = title
+        value['properties']['language'] = [[td.get('language', 'Plain Text')]]
+        caption = td.get('caption', [])
+        if caption:
+            value['properties']['caption'] = convert_rich_text(caption)
+
+    elif block_type == 'image':
+        url = _get_file_url(td)
+        if url:
+            value['properties'] = {'source': [[url]]}
+            value['format'] = {'display_source': url, 'block_width': 680}
+        caption = td.get('caption', [])
+        if caption:
+            value.setdefault('properties', {})['caption'] = convert_rich_text(caption)
+
+    elif block_type == 'video':
+        url = _get_file_url(td)
+        if url:
+            value['properties'] = {'source': [[url]]}
+            value['format'] = {'display_source': url, 'block_width': 680}
+
+    elif block_type in ('file', 'pdf', 'audio'):
+        url = _get_file_url(td)
+        if url:
+            value['properties'] = {'source': [[url]]}
+            value['format'] = {'display_source': url}
+
+    elif block_type == 'bookmark':
+        url = td.get('url', '')
+        value['properties'] = {'link': [[url]]}
+        caption = td.get('caption', [])
+        if caption:
+            value['properties']['title'] = convert_rich_text(caption)
+
+    elif block_type == 'link_preview':
+        value['properties'] = {'link': [[td.get('url', '')]]}
+
+    elif block_type == 'embed':
+        url = td.get('url', '')
+        value['properties'] = {'source': [[url]]}
+        value['format'] = {'display_source': url, 'block_width': 680}
+
+    elif block_type == 'equation':
+        value['properties'] = {'title': [['⁍', [['e', td.get('expression', '')]]]]}
+
+    elif block_type == 'table':
+        tw = td.get('table_width', 0)
+        value['format'] = {
+            'table_block_column_order': [f'col_{i}' for i in range(tw)],
+            'table_block_column_header': td.get('has_column_header', False),
+            'table_block_row_header': td.get('has_row_header', False),
+        }
+
+    elif block_type == 'table_row':
+        cells = td.get('cells', [])
+        props = {}
+        for i, cell in enumerate(cells):
+            title = convert_rich_text(cell)
+            if title:
+                props[f'col_{i}'] = title
+        if props:
+            value['properties'] = props
+
+    elif block_type == 'child_page':
+        value['properties'] = {'title': [[td.get('title', '')]]}
+
+    elif block_type == 'synced_block':
+        sf = td.get('synced_from')
+        if sf:
+            value['type'] = 'transclusion_reference'
+            value.setdefault('format', {})['transclusion_reference_pointer'] = {
+                'id': sf.get('block_id', ''),
+                'table': 'block',
+            }
+
+    elif block_type == 'table_of_contents':
+        color = td.get('color', 'default')
+        if color != 'default':
+            value.setdefault('format', {})['block_color'] = color
+
+    return block_id, value
+
+
+def _convert_page(page, top_level_ids):
+    """공식 API 페이지 → 내부 포맷 페이지 블록"""
+    page_id = page['id']
+
+    title_text = ''
+    for prop in page.get('properties', {}).values():
+        if prop.get('type') == 'title':
+            title_text = ''.join(i.get('plain_text', '') for i in prop.get('title', []))
+            break
+
+    value = {
+        'id': page_id,
+        'type': 'page',
+        'properties': {'title': [[title_text]]},
+        'content': top_level_ids,
+        'parent_table': 'space',
+        'alive': True,
+        'created_time': _iso_to_ms(page.get('created_time')),
+        'last_edited_time': _iso_to_ms(page.get('last_edited_time')),
+    }
+
+    fmt = {}
+    icon = page.get('icon')
+    if icon:
+        it = icon.get('type', '')
+        if it == 'emoji':
+            fmt['page_icon'] = icon['emoji']
+        elif it == 'external':
+            fmt['page_icon'] = icon['external']['url']
+        elif it == 'file':
+            fmt['page_icon'] = icon['file']['url']
+
+    cover = page.get('cover')
+    if cover:
+        cover_url = _get_file_url(cover)
+        if cover_url:
+            fmt['page_cover'] = cover_url
+
+    if fmt:
+        value['format'] = fmt
+
+    return page_id, value
+
+
+def _fetch_all_blocks(notion, block_id):
+    """페이지의 모든 블록을 재귀적으로 가져온다."""
+    all_blocks = []
+    cursor = None
+
+    while True:
+        kwargs = {'block_id': block_id, 'page_size': 100}
+        if cursor:
+            kwargs['start_cursor'] = cursor
+        response = notion.blocks.children.list(**kwargs)
+        all_blocks.extend(response.get('results', []))
+        if not response.get('has_more'):
+            break
+        cursor = response.get('next_cursor')
+
+    for block in list(all_blocks):
+        if block.get('has_children'):
+            children = _fetch_all_blocks(notion, block['id'])
+            all_blocks.extend(children)
+
+    return all_blocks
 
 
 def fetch_page(page_id: str) -> dict:
     """
-    Notion 내부 API로 페이지 데이터를 가져온다.
-    여러 chunk를 페이지네이션하고 누락된 블록(토글 자식 등)을 추가로 fetch한다.
+    공식 Notion API로 페이지를 가져와 ExtendedRecordMap 포맷으로 반환한다.
     """
-    uuid = _format_uuid(page_id)
-    merged_record_map = {}
+    notion = Client(auth=settings.NOTION_API_KEY)
 
-    chunk_number = 0
-    cursor = {'stack': []}
+    page = notion.pages.retrieve(page_id)
+    all_blocks = _fetch_all_blocks(notion, page_id)
 
-    while True:
-        data = _notion_post('loadPageChunk', {
-            'page': {'id': uuid},
-            'limit': 100,
-            'cursor': cursor,
-            'chunkNumber': chunk_number,
-            'verticalColumns': False,
-        })
+    # 부모-자식 매핑
+    parent_children = {}
+    for block in all_blocks:
+        parent = block.get('parent', {})
+        pt = parent.get('type', '')
+        pid = parent.get('block_id', page_id) if pt == 'block_id' else page_id
+        parent_children.setdefault(pid, []).append(block['id'])
 
-        record_map = _extract_record_map(data)
-        _merge_record_maps(merged_record_map, record_map)
+    block_map = {}
 
-        next_cursor = data.get('cursor', {})
-        stack = next_cursor.get('stack', [])
-        if not stack:
-            break
+    # 페이지 블록
+    top_ids = parent_children.get(page_id, [])
+    pid, pval = _convert_page(page, top_ids)
+    block_map[pid] = {'value': pval, 'role': 'reader'}
 
-        cursor = next_cursor
-        chunk_number += 1
+    # 하위 블록
+    for block in all_blocks:
+        children_ids = parent_children.get(block['id'])
+        bid, bval = _convert_block(block, children_ids)
+        block_map[bid] = {'value': bval, 'role': 'reader'}
 
-        if chunk_number > MAX_CHUNKS:
-            logger.warning(f'Notion page {page_id}: too many chunks, stopping at {chunk_number}')
-            break
-
-    _unwrap_nested_values(merged_record_map)
-
-    # 누락된 블록(토글 자식 등) 추가 fetch
-    fetched_ids = set()  # 이미 fetch 시도한 ID 추적 (무한 반복 방지)
-    newly_added = None  # 증분 검색용
-
-    for _ in range(MAX_MISSING_ROUNDS):
-        missing_ids = _find_missing_block_ids(merged_record_map, newly_added) - fetched_ids
-        if not missing_ids:
-            break
-
-        fetched_ids.update(missing_ids)
-        newly_added = set()
-
-        missing_list = list(missing_ids)
-        for i in range(0, len(missing_list), BLOCK_BATCH_SIZE):
-            batch = missing_list[i:i + BLOCK_BATCH_SIZE]
-            fetched = _fetch_blocks_by_ids(batch)
-            merged_record_map.setdefault('block', {}).update(fetched)
-            newly_added.update(fetched.keys())
-
-        # 새로 추가된 블록의 중첩 해제
-        _unwrap_nested_values(merged_record_map)
-
-    for key in RECORD_MAP_KEYS:
-        merged_record_map.setdefault(key, {})
-
-    merged_record_map.pop('space', None)
-
-    return merged_record_map
+    return {
+        'block': block_map,
+        'collection': {},
+        'collection_view': {},
+        'notion_user': {},
+        'collection_query': {},
+        'signed_urls': {},
+    }
