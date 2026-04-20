@@ -428,8 +428,16 @@ def normalize_ncp_urls(content):
     return re.sub(pattern, r'ncp-key://\1', content)
 
 
+MAX_ATTACHMENTS_PER_POST = 30
+
+
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
-    attachment_paths = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
+    attachment_paths = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False,
+        max_length=MAX_ATTACHMENTS_PER_POST,
+    )
     content_md = serializers.CharField(write_only=True, required=False, allow_blank=True)
     board_id = serializers.IntegerField(write_only=True, required=False)
     is_anonymous = serializers.BooleanField(required=False, default=True)
@@ -439,6 +447,37 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id', 'is_anonymous', 'tag', 'recruitment']
+
+    def validate_attachment_paths(self, value):
+        """
+        첨부 경로는 반드시 요청자 본인이 업로드한 파일만 허용한다.
+        경로 포맷: `uploads/<y>/<m>/<d>/<user_id>/<uuid>.<ext>` — 서버에서 생성되는 형식.
+        타인의 파일을 첨부 후 게시글 삭제 시점에 해당 파일이 NCP에서 연쇄 삭제되는
+        cross-user file-deletion 공격을 차단한다.
+        """
+        request = self.context.get('request')
+        user_id = getattr(getattr(request, 'user', None), 'id', None)
+        if user_id is None:
+            raise serializers.ValidationError('인증이 필요합니다.')
+
+        for item in value:
+            if not isinstance(item, dict):
+                raise serializers.ValidationError('각 첨부 항목은 객체여야 합니다.')
+            path = (item.get('path') or '').strip()
+            if not path.startswith('uploads/'):
+                raise serializers.ValidationError('잘못된 첨부 경로입니다.')
+            if '..' in path.split('/') or path.startswith('/'):
+                raise serializers.ValidationError('잘못된 첨부 경로입니다.')
+            parts = path.split('/')
+            if len(parts) < 6:
+                raise serializers.ValidationError('잘못된 첨부 경로 형식입니다.')
+            try:
+                owner_id = int(parts[4])
+            except (TypeError, ValueError):
+                raise serializers.ValidationError('잘못된 첨부 경로 형식입니다.')
+            if owner_id != user_id:
+                raise serializers.ValidationError('본인이 업로드한 파일만 첨부할 수 있습니다.')
+        return value
 
 
     def _resolve_board(self, validated_data):
@@ -518,6 +557,8 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         content_md = validated_data.pop('content_md', None)
         board_id = validated_data.pop('board_id', None)
         validated_data.pop('recruitment', None)  # 모집 수정은 별도 API로
+        # post_type은 board_type 기반으로 서버에서 결정되는 값이므로 수정 요청에서 제거한다.
+        validated_data.pop('post_type', None)
 
         # 태그가 '팀원모집'에서 다른 태그로 변경되면 Recruitment 삭제
         new_tag = validated_data.get('tag')

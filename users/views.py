@@ -293,8 +293,16 @@ class CustomTokenRefreshView(APIView):
 
         try:
             old_token = RefreshToken(refresh_token)
+
+            # simplejwt의 RefreshToken(...) 생성자는 서명/만료만 검증하고 blacklist는 확인하지 않는다.
+            # 탈취 후 로그아웃된 토큰이 재사용되는 것을 막기 위해 jti로 명시 조회한다.
+            from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+            jti = old_token.get('jti')
+            if jti and BlacklistedToken.objects.filter(token__jti=jti).exists():
+                raise AuthenticationFailed('Token is blacklisted', code='token_not_valid')
+
             user_id = old_token.get('user_id')
-            
+
             try:
                 user = User.objects.get(id=user_id)
             except User.DoesNotExist:
@@ -390,26 +398,30 @@ class EmailVerifyView(APIView):
         email = serializer.validated_data['email'].strip().lower()
         verifyCode = serializer.validated_data['verifyCode']
 
+        # 사용자 존재/상태/코드 유효성을 구분하는 3-way 응답은 회원 enumeration을 허용하므로
+        # 성공 여부 외에는 전부 동일한 400으로 통일한다.
+        generic_error = Response(
+            {"error": "인증 정보가 유효하지 않거나 만료되었습니다."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
         try:
             user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            return Response({"error": "User not found"},
-                            status=status.HTTP_404_NOT_FOUND)
+            return generic_error
 
         if user.is_verified:
-            return Response({"message": "This account is already verified."},
-                            status=status.HTTP_200_OK)
+            # 이미 인증됐다면 코드 존재 여부와 무관하게 성공 응답을 준다.
+            return Response({"message": "Email verified successfully."}, status=status.HTTP_200_OK)
 
         try:
             verification_code_obj = EmailVerificationCode.objects.get(user=user)
         except EmailVerificationCode.DoesNotExist:
-            return Response({"error": "No verification verifyCode found for this user. Please request a new one."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return generic_error
 
         if (timezone.now() - verification_code_obj.created_at).total_seconds() > 300:
             verification_code_obj.delete()
-            return Response({"error": "Verification code has expired."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return generic_error
 
         if not check_password(verifyCode, verification_code_obj.code):
             verification_code_obj.attempt_count = models.F('attempt_count') + 1
@@ -417,14 +429,14 @@ class EmailVerifyView(APIView):
             verification_code_obj.refresh_from_db()
             if verification_code_obj.attempt_count >= MAX_VERIFICATION_ATTEMPTS:
                 verification_code_obj.delete()
-                return Response({"error": "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 요청해주세요."},
-                                status=status.HTTP_400_BAD_REQUEST)
-            return Response({"error": "Invalid verification code."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return generic_error
 
+        # 신규 가입 인증: 아직 한 번도 인증된 적 없는 계정만 활성화한다.
+        # 관리자가 이미 인증된 계정을 비활성화(`is_active=False`)한 경우 위 `is_verified=True`
+        # 분기에서 바로 성공 응답을 주므로 is_active에 손대지 않아 제재가 유지된다.
         user.is_verified = True
         user.is_active = True
-        user.save()
+        user.save(update_fields=['is_verified', 'is_active'])
         verification_code_obj.delete()
         return Response({"message": "Email verified successfully."}, status=status.HTTP_200_OK)
 
@@ -499,12 +511,23 @@ class LogoutView(APIView):
     def post(self, request):
         try:
             refresh_token = request.data["refresh"]
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-
-            return Response(status=status.HTTP_205_RESET_CONTENT)
-        except Exception :
+        except (KeyError, TypeError):
             return Response(status=status.HTTP_400_BAD_REQUEST)
+        try:
+            token = RefreshToken(refresh_token)
+        except Exception:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        # 본인 리프레시 토큰만 블랙리스트 처리한다.
+        if token.get('user_id') != request.user.id:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            token.blacklist()
+        except Exception:
+            # 이미 블랙리스트됐거나 outstanding이 없는 경우 — 사용자 관점에선 성공.
+            pass
+        return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
 class PasswordResetRequestView(APIView):
@@ -640,7 +663,7 @@ class PasswordResetView(APIView):
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        email = serializer.validated_data['email']
+        email = serializer.validated_data['email'].strip().lower()
         reset_token = serializer.validated_data['reset_token']
         new_password = serializer.validated_data['new_password1']
 

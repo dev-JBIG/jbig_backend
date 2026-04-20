@@ -76,19 +76,18 @@ class UserEmailVerificationTest(TestCase):
         }
         verify_response = self.client.post(self.email_verify_url, verify_data, format='json')
         self.assertEqual(verify_response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(verify_response.data['error'], 'Invalid verification code.')
 
         user = User.objects.get(email=self.user_data['email'])
         self.assertFalse(user.is_verified)
 
-    def test_email_verification_with_nonexistent_user(self):
+    def test_email_verification_generic_error_for_unknown_user(self):
+        """존재하지 않는 사용자에게도 인증 실패(400)와 동일한 응답을 준다 (enumeration 차단)."""
         verify_data = {
             'email': 'nonexistent@jbnu.ac.kr',
             'verifyCode': '123456',
         }
         verify_response = self.client.post(self.email_verify_url, verify_data, format='json')
-        self.assertEqual(verify_response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(verify_response.data['error'], 'User not found')
+        self.assertEqual(verify_response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @patch('users.serializers.send_mail')
     def test_email_verification_attempt_count_locks_code(self, mock_send_mail):
@@ -401,6 +400,64 @@ class SignInEnumerationTest(TestCase):
         response = self._post({'email': self.email, 'password': self.password})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
+
+
+@override_settings(REST_FRAMEWORK=NO_THROTTLE_REST_FRAMEWORK)
+class LogoutOwnershipTest(TestCase):
+    """LogoutView는 현재 인증된 사용자의 refresh 토큰만 blacklist할 수 있어야 한다."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.logout_url = reverse('logout')
+        self.attacker = User.objects.create_user(
+            email='attacker@jbnu.ac.kr', username='attacker',
+            password='Password!1x', semester=1,
+        )
+        self.attacker.is_active = True; self.attacker.is_verified = True; self.attacker.save()
+        self.victim = User.objects.create_user(
+            email='victim@jbnu.ac.kr', username='victim',
+            password='Password!1x', semester=1,
+        )
+        self.victim.is_active = True; self.victim.is_verified = True; self.victim.save()
+
+    def _tokens(self, user):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        return str(refresh.access_token), str(refresh)
+
+    def test_logout_rejects_foreign_refresh_token(self):
+        """공격자가 자신의 access로 인증 후 피해자 refresh를 blacklist 시도하면 거부."""
+        attacker_access, _ = self._tokens(self.attacker)
+        _, victim_refresh = self._tokens(self.victim)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {attacker_access}')
+        res = self.client.post(self.logout_url, {'refresh': victim_refresh}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        # 피해자의 refresh는 여전히 유효해야 한다.
+        from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+        from rest_framework_simplejwt.tokens import RefreshToken
+        jti = RefreshToken(victim_refresh).get('jti')
+        self.assertFalse(BlacklistedToken.objects.filter(token__jti=jti).exists())
+
+
+@override_settings(REST_FRAMEWORK=NO_THROTTLE_REST_FRAMEWORK)
+class TokenRefreshBlacklistTest(TestCase):
+    """이미 blacklist된 refresh token으로는 재발급이 불가능해야 한다."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.refresh_url = reverse('token_refresh')
+        self.user = User.objects.create_user(
+            email='blacklist@jbnu.ac.kr', username='bl',
+            password='Password!1x', semester=1,
+        )
+        self.user.is_active = True; self.user.is_verified = True; self.user.save()
+
+    def test_blacklisted_refresh_is_rejected(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(self.user)
+        refresh.blacklist()
+        res = self.client.post(self.refresh_url, {'refresh': str(refresh)}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 @override_settings(REST_FRAMEWORK=NO_THROTTLE_REST_FRAMEWORK)

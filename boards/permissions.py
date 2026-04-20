@@ -110,9 +110,12 @@ class PostDetailPermission(permissions.BasePermission):
         # Handle READ permissions for safe methods (GET, HEAD, OPTIONS)
         if request.method in permissions.SAFE_METHODS:
             if obj.post_type == Post.PostType.JUSTIFICATION_LETTER:
-                return request.user.is_authenticated and (obj.author.id == request.user.id or request.user.is_staff)
-
-            return True # For DEFAULT and STAFF_ONLY posts, allow read
+                return request.user.is_authenticated and (
+                    (obj.author and obj.author.id == request.user.id) or request.user.is_staff
+                )
+            if obj.post_type == Post.PostType.STAFF_ONLY:
+                return request.user.is_authenticated and request.user.is_staff
+            return True  # DEFAULT posts
 
         # Handle WRITE permissions (PUT, PATCH, DELETE)
         if not request.user.is_authenticated:

@@ -112,22 +112,14 @@ class PostQuerySet(models.QuerySet):
     def visible_for_user(self, user):
         if user.is_authenticated and user.is_staff:
             return self
-        
-        queryset = self
 
         if user.is_authenticated:
-            queryset = queryset.filter(
+            # STAFF_ONLY는 스태프만 읽을 수 있어야 하며 JUSTIFICATION_LETTER는 본인만.
+            return self.filter(
                 Q(post_type=Post.PostType.DEFAULT) |
-                Q(post_type=Post.PostType.STAFF_ONLY) |
                 Q(post_type=Post.PostType.JUSTIFICATION_LETTER, author__id=user.id)
             )
-        else:
-            queryset = queryset.filter(
-                Q(post_type=Post.PostType.DEFAULT) |
-                Q(post_type=Post.PostType.STAFF_ONLY)
-            )
-            
-        return queryset
+        return self.filter(post_type=Post.PostType.DEFAULT)
 
 class PostManager(models.Manager):
     def get_queryset(self):

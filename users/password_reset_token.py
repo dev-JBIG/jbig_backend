@@ -57,7 +57,7 @@ def consume_reset_token(token: str, expected_email: str) -> User:
     except PasswordResetToken.DoesNotExist:
         raise ResetTokenError("유효하지 않은 재설정 토큰입니다.")
 
-    if record.user.email != expected_email:
+    if record.user.email.lower() != (expected_email or '').strip().lower():
         raise ResetTokenError("재설정 토큰의 이메일이 일치하지 않습니다.")
     if record.used_at is not None:
         raise ResetTokenError("이미 사용된 재설정 토큰입니다.")

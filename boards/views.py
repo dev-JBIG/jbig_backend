@@ -201,6 +201,10 @@ class CommentLikeAPIView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     lookup_url_kwarg = 'comment_id'
 
+    def get_queryset(self):
+        visible_posts = Post.objects.visible_for_user(self.request.user)
+        return Comment.objects.filter(post__in=visible_posts)
+
     def post(self, request, *args, **kwargs):
         comment = self.get_object()
         user = request.user
@@ -588,28 +592,34 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     def destroy(self, request, *args, **kwargs):
         """게시글 삭제 시 NCP에 저장된 파일들도 함께 삭제"""
         instance = self.get_object()
+        author_id = getattr(instance.author, 'id', None)
 
-        # 삭제할 파일 키 수집
+        def _is_owned(file_key: str) -> bool:
+            # 경로: uploads/Y/M/D/<user_id>/... 본인 업로드 파일만 연쇄 삭제 허용.
+            parts = file_key.split('/')
+            if len(parts) < 6 or not file_key.startswith('uploads/'):
+                return False
+            try:
+                return int(parts[4]) == author_id
+            except (TypeError, ValueError):
+                return False
+
         keys_to_delete = []
 
-        # 1. attachment_paths에서 파일 키 수집
         if instance.attachment_paths and isinstance(instance.attachment_paths, list):
             for att in instance.attachment_paths:
                 if isinstance(att, dict) and 'path' in att:
                     file_key = att['path']
-                    if file_key.startswith('uploads/'):
+                    if _is_owned(file_key):
                         keys_to_delete.append(file_key)
 
-        # 2. content_md에서 ncp-key:// 이미지 키 수집
         if instance.content_md:
             ncp_keys = re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md)
-            keys_to_delete.extend(ncp_keys)
+            keys_to_delete.extend(k for k in ncp_keys if _is_owned(k))
 
-        # 3. 파일 삭제 (NCP 또는 로컬)
         if keys_to_delete:
             delete_files(set(keys_to_delete))
 
-        # 4. DB에서 게시글 삭제
         return super().destroy(request, *args, **kwargs)
 
 @extend_schema(tags=['댓글'])
@@ -630,12 +640,29 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         post_id = self.kwargs.get('post_id')
-        return Comment.objects.filter(post_id=post_id, parent__isnull=True).order_by('created_at')
+        visible_posts = Post.objects.visible_for_user(self.request.user)
+        return Comment.objects.filter(
+            post_id=post_id,
+            post__in=visible_posts,
+            parent__isnull=True,
+        ).order_by('created_at')
 
     def perform_create(self, serializer):
         from rest_framework.exceptions import ValidationError
 
-        post = get_object_or_404(Post, pk=self.kwargs.get('post_id'))
+        post_id = self.kwargs.get('post_id')
+        # 비공개 게시글에 대한 댓글 작성/존재 확인을 모두 막는다.
+        visible_posts = Post.objects.visible_for_user(self.request.user)
+        post = get_object_or_404(visible_posts, pk=post_id)
+
+        # parent는 반드시 동일 게시글의 댓글이어야 하며, 대댓글은 1단계(depth 1)까지만 허용한다.
+        parent = serializer.validated_data.get('parent')
+        if parent is not None:
+            if parent.post_id != post.id:
+                raise ValidationError({'parent': '다른 게시글의 댓글은 부모가 될 수 없습니다.'})
+            if parent.parent_id is not None:
+                raise ValidationError({'parent': '대댓글에는 다시 대댓글을 달 수 없습니다.'})
+
         is_anonymous = serializer.validated_data.get('is_anonymous', True)
 
         # 비회원인 경우 author=None으로 저장
@@ -698,6 +725,10 @@ class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsOwnerOrReadOnly]
     lookup_url_kwarg = 'comment_id'
 
+    def get_queryset(self):
+        visible_posts = Post.objects.visible_for_user(self.request.user)
+        return Comment.objects.filter(post__in=visible_posts)
+
     def perform_destroy(self, instance):
         instance.is_deleted = True
         instance.save()
@@ -757,14 +788,11 @@ class BoardDetailAPIView(generics.RetrieveAPIView):
 
 # 파일 업로드 허용 확장자 화이트리스트.
 # 블랙리스트 방식은 `.phtml`, `.svg` (XSS), `.html` 등 우회 여지를 남기기 때문에 화이트리스트로 운영한다.
-ALLOWED_UPLOAD_EXTENSIONS = {
-    # 이미지
-    'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp',
-    # 문서
-    'pdf', 'hwp', 'hwpx', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'csv', 'md',
-    # 압축
-    'zip',
+IMAGE_UPLOAD_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'}
+DOCUMENT_UPLOAD_EXTENSIONS = {
+    'pdf', 'hwp', 'hwpx', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'csv', 'md', 'zip',
 }
+ALLOWED_UPLOAD_EXTENSIONS = IMAGE_UPLOAD_EXTENSIONS | DOCUMENT_UPLOAD_EXTENSIONS
 MAX_EXTENSION_LENGTH = 10
 
 
@@ -819,6 +847,24 @@ class DeleteFileAPIView(APIView):
         except (ValueError, IndexError):
             return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 게시글/드래프트에 이미 첨부된 파일은 삭제를 거부한다. 첨부 후 삭제하면
+        # 다른 사용자의 게시글이 참조하고 있던 파일까지 사라질 수 있어 UX/무결성 손상.
+        if Post.objects.filter(attachment_paths__contains=[{'path': file_key}]).exists():
+            return Response(
+                {"error": "이 파일은 게시글에 첨부되어 있어 삭제할 수 없습니다."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if Post.objects.filter(content_md__contains=f'ncp-key://{file_key}').exists():
+            return Response(
+                {"error": "이 파일은 게시글 본문에서 참조 중이라 삭제할 수 없습니다."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if Draft.objects.filter(uploaded_paths__contains=[{'path': file_key}]).exists():
+            return Response(
+                {"error": "이 파일은 임시 저장(Draft)에서 참조 중입니다."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         # 파일 존재 여부 확인
         if not file_exists(file_key):
             return Response({"error": "File not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -855,10 +901,17 @@ class ConfirmUploadAPIView(APIView):
         except (ValueError, IndexError):
             return Response({"error": "Invalid file path format."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if set_public_acl(file_key):
-            return Response({"message": "ACL updated."}, status=status.HTTP_200_OK)
-        else:
+        # 이미지는 마크다운 렌더러가 직접 `<img src=...>`로 로드해야 하므로 public-read로
+        # 두고, 문서/압축 파일은 private 유지한 뒤 클라이언트가 요청할 때마다 서버가
+        # 짧은 만료의 presigned download URL을 발급한다. 이력서/계약서 등 민감 문서가
+        # URL만 알면 전세계에 노출되는 것을 막기 위한 조치.
+        extension = file_key.rsplit('.', 1)[-1].lower() if '.' in file_key else ''
+        if extension in IMAGE_UPLOAD_EXTENSIONS:
+            if set_public_acl(file_key):
+                return Response({"message": "ACL updated."}, status=status.HTTP_200_OK)
             return Response({"error": "Failed to update ACL."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # 문서 계열은 ACL 변경 없이 성공 응답 (기본 private 유지)
+        return Response({"message": "Upload confirmed."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(
