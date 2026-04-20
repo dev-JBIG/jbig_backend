@@ -186,6 +186,10 @@ class VerifyPasswordCodeSerializer(serializers.Serializer):
 
 class PasswordResetSerializer(serializers.Serializer):
     email = serializers.EmailField(help_text="비밀번호를 변경할 이메일 주소")
+    reset_token = serializers.CharField(
+        write_only=True,
+        help_text="VerifyPasswordCodeView 응답으로 받은 단기 재설정 토큰",
+    )
     new_password1 = serializers.CharField(write_only=True, help_text="새로운 비밀번호")
     new_password2 = serializers.CharField(write_only=True, help_text="새로운 비밀번호 확인")
 

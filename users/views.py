@@ -22,6 +22,12 @@ from .serializers import (
     ProfileBlocksUpdateSerializer
 )
 from .models import User, EmailVerificationCode
+from .password_reset_token import (
+    RESET_TOKEN_TTL_SECONDS,
+    ResetTokenError,
+    decode_reset_token,
+    issue_reset_token,
+)
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
@@ -514,10 +520,14 @@ class VerifyPasswordCodeView(APIView):
     @extend_schema(
         tags=["사용자"],
         summary="비밀번호 재설정 인증코드 확인",
-        description="이메일로 전송된 인증 코드를 확인합니다.",
+        description=(
+            "이메일로 전송된 인증 코드를 확인하고, "
+            "비밀번호 재설정에 사용할 단기 토큰(reset_token)을 발급합니다. "
+            "발급된 토큰은 10분 동안 유효하며 PasswordResetView 호출 시 필수입니다."
+        ),
         request=VerifyPasswordCodeSerializer,
         responses={
-            200: {"description": "인증 코드가 확인되었습니다."},
+            200: {"description": "인증 코드가 확인되었습니다. 응답 본문에 reset_token이 포함됩니다."},
             400: {"description": "잘못된 요청 또는 유효하지 않은 인증 코드"}
         }
     )
@@ -536,23 +546,27 @@ class VerifyPasswordCodeView(APIView):
         try:
             verification_code_obj = EmailVerificationCode.objects.get(user=user)
         except EmailVerificationCode.DoesNotExist:
-            return Response({"error": "인증 코드를 찾을 수 없습니다. 다시 요청해주세요."}, 
+            return Response({"error": "인증 코드를 찾을 수 없습니다. 다시 요청해주세요."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         if (timezone.now() - verification_code_obj.created_at).total_seconds() > 300:
-            return Response({"error": "인증 코드가 만료되었습니다."}, 
+            return Response({"error": "인증 코드가 만료되었습니다."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         if not check_password(verification_code, verification_code_obj.code):
-            return Response({"error": "유효하지 않은 인증 코드입니다."}, 
+            return Response({"error": "유효하지 않은 인증 코드입니다."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Mark code as verified (but don't delete it yet)
-        # A temporary flag could be added to the model, or we can rely on the client to proceed.
-        # For simplicity, we'll just return a success message.
+        reset_token = issue_reset_token(email)
 
-        return Response({"message": "인증 코드가 확인되었습니다."}, 
-                        status=status.HTTP_200_OK)
+        return Response(
+            {
+                "message": "인증 코드가 확인되었습니다.",
+                "reset_token": reset_token,
+                "expires_in": RESET_TOKEN_TTL_SECONDS,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class PasswordResetView(APIView):
@@ -573,15 +587,26 @@ class PasswordResetView(APIView):
         serializer.is_valid(raise_exception=True)
 
         email = serializer.validated_data['email']
+        reset_token = serializer.validated_data['reset_token']
         new_password = serializer.validated_data['new_password1']
+
+        try:
+            decode_reset_token(reset_token, expected_email=email)
+        except ResetTokenError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({"error": "사용자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
 
-        # It's assumed the verification code was checked in the previous step.
-        # For added security, you might want to re-verify a token passed from the verification step.
+        # 토큰이 일회성이 되도록, verify 단계에서 생성된 인증 코드 레코드가 아직 존재하는지 확인한다.
+        # 비밀번호 변경 성공 시 코드 레코드를 삭제하므로, 동일 토큰으로 재호출하면 여기서 걸린다.
+        if not EmailVerificationCode.objects.filter(user=user).exists():
+            return Response(
+                {"error": "인증 절차가 만료되었습니다. 인증 코드 요청부터 다시 진행해주세요."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError
