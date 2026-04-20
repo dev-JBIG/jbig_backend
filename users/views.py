@@ -1,4 +1,5 @@
 
+from django.db import models
 from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import generics, status
@@ -29,8 +30,11 @@ from .password_reset_token import (
     issue_reset_token,
 )
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
+
+MAX_VERIFICATION_ATTEMPTS = 5
 import random
 import string
 from django.core.mail import send_mail
@@ -66,10 +70,10 @@ class UserPostListView(generics.ListAPIView):
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        username = self.kwargs['user_id']
-        target_user = get_object_or_404(User, email__startswith=username + '@')
+        username = (self.kwargs['user_id'] or '').strip().lower()
+        target_user = get_object_or_404(User, email__iexact=f'{username}@jbnu.ac.kr')
         request_user = self.request.user
-        
+
         queryset = Post.objects.filter(author=target_user)
         
         # 로그인하지 않은 사용자는 익명 글을 볼 수 없음
@@ -101,10 +105,10 @@ class UserCommentListView(generics.ListAPIView):
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        user_id = self.kwargs['user_id']
-        target_user = get_object_or_404(User, email__startswith=user_id + '@')
+        user_id = (self.kwargs['user_id'] or '').strip().lower()
+        target_user = get_object_or_404(User, email__iexact=f'{user_id}@jbnu.ac.kr')
         request_user = self.request.user
-        
+
         queryset = Comment.objects.filter(author=target_user)
         
         # 로그인하지 않은 사용자는 익명 댓글을 볼 수 없음
@@ -151,6 +155,8 @@ class SignUpView(generics.CreateAPIView):
     parser_classes = [JSONParser, FormParser]
     queryset = User.objects.all()
     serializer_class = UserCreateSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'signup'
 
     def post(self, request, *args, **kwargs):
         return self.create(request, *args, **kwargs)
@@ -235,7 +241,9 @@ class SignUpView(generics.CreateAPIView):
 class SignInView(TokenObtainPairView):
     parser_classes = [JSONParser, FormParser]
     serializer_class = CustomTokenObtainPairSerializer
-    
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'signin'
+
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
@@ -292,6 +300,13 @@ class CustomTokenRefreshView(APIView):
             except User.DoesNotExist:
                 raise AuthenticationFailed('User not found', code='user_not_found')
 
+            if not user.is_active or not user.is_verified:
+                try:
+                    old_token.blacklist()
+                except Exception:
+                    pass
+                raise AuthenticationFailed('Account disabled', code='account_disabled')
+
             # last_login 업데이트
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
@@ -317,6 +332,9 @@ class CustomTokenRefreshView(APIView):
             
             return Response(response_data, status=status.HTTP_200_OK)
 
+        except AuthenticationFailed as e:
+            detail = e.detail if hasattr(e, 'detail') else str(e)
+            return Response({"error": str(detail)}, status=status.HTTP_401_UNAUTHORIZED)
         except TokenError as e:
             return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
@@ -363,38 +381,47 @@ class CustomTokenRefreshView(APIView):
 )
 class EmailVerifyView(APIView):
     serializer_class = EmailVerificationSerializer
-    
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'email_verify'
+
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data['email']
+        email = serializer.validated_data['email'].strip().lower()
         verifyCode = serializer.validated_data['verifyCode']
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             return Response({"error": "User not found"},
                             status=status.HTTP_404_NOT_FOUND)
 
         if user.is_verified:
-            return Response({"message": "This account is already verified."}, 
+            return Response({"message": "This account is already verified."},
                             status=status.HTTP_200_OK)
 
         try:
             verification_code_obj = EmailVerificationCode.objects.get(user=user)
         except EmailVerificationCode.DoesNotExist:
-            return Response({"error": "No verification verifyCode found for this user. Please request a new one."}, 
+            return Response({"error": "No verification verifyCode found for this user. Please request a new one."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if code is valid (5 minutes expiration)
         if (timezone.now() - verification_code_obj.created_at).total_seconds() > 300:
-            return Response({"error": "Verification code has expired."}, 
+            verification_code_obj.delete()
+            return Response({"error": "Verification code has expired."},
                             status=status.HTTP_400_BAD_REQUEST)
 
         if not check_password(verifyCode, verification_code_obj.code):
-            return Response({"error": "Invalid verification code."}, 
+            verification_code_obj.attempt_count = models.F('attempt_count') + 1
+            verification_code_obj.save(update_fields=['attempt_count'])
+            verification_code_obj.refresh_from_db()
+            if verification_code_obj.attempt_count >= MAX_VERIFICATION_ATTEMPTS:
+                verification_code_obj.delete()
+                return Response({"error": "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 요청해주세요."},
+                                status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid verification code."},
                             status=status.HTTP_400_BAD_REQUEST)
-        
+
         user.is_verified = True
         user.is_active = True
         user.save()
@@ -404,39 +431,45 @@ class EmailVerifyView(APIView):
 
 class ResendVerificationEmailView(APIView):
     serializer_class = EmailResendSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_request'
 
     @extend_schema(
         tags=["사용자"],
         summary="인증 이메일 재전송",
-        description="인증 이메일을 재전송합니다. 사용자가 인증 코드를 받지 못했거나 코드가 만료된 경우 사용됩니다.",
+        description="인증 이메일을 재전송합니다. 사용자가 인증 코드를 받지 못했거나 코드가 만료된 경우 사용됩니다. 존재 여부와 관계없이 동일한 응답을 반환합니다.",
     )
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data['email']
+        email = serializer.validated_data['email'].strip().lower()
+
+        generic_response = Response(
+            {"message": "A new verification email has been sent if the account exists and is pending verification."},
+            status=status.HTTP_200_OK,
+        )
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            return generic_response
 
         if user.is_verified:
-            return Response({"message": "This account is already verified."}, status=status.HTTP_400_BAD_REQUEST)
+            return generic_response
 
-        # Generate and send new code
         code = ''.join(random.choices(string.digits, k=6))
         hashed_code = make_password(code)
 
         EmailVerificationCode.objects.update_or_create(
             user=user,
-            defaults={'code': hashed_code, 'created_at': timezone.now()}
+            defaults={'code': hashed_code, 'created_at': timezone.now(), 'attempt_count': 0},
         )
 
         subject = '[JBIG] Your New Verification Code'
         message = f'Your new verification code is: {code}'
         send_mail(subject, message, None, [user.email])
 
-        return Response({"message": "A new verification email has been sent."}, status=status.HTTP_200_OK)
+        return generic_response
 
 
 class LogoutView(APIView):
@@ -476,46 +509,55 @@ class LogoutView(APIView):
 
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_request'
 
     @extend_schema(
         tags=["사용자"],
         summary="비밀번호 재설정 인증코드 요청",
-        description="이메일로 인증 코드를 요청하여 비밀번호 재설정을 시작합니다.",
+        description=(
+            "이메일로 인증 코드를 요청하여 비밀번호 재설정을 시작합니다. "
+            "사용자 열거 방지를 위해 이메일 존재 여부와 관계없이 동일한 200 응답을 반환합니다."
+        ),
         request=PasswordResetRequestSerializer,
         responses={
-            200: {"description": "인증 코드가 이메일로 전송되었습니다."},
-            400: {"description": "잘못된 요청"},
-            404: {"description": "사용자를 찾을 수 없음"}
-        }
+            200: {"description": "이메일이 등록되어 있다면 인증 코드가 발송됩니다."},
+        },
     )
     def post(self, request, *args, **kwargs):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data['email']
+        email = serializer.validated_data['email'].strip().lower()
+
+        generic_response = Response(
+            {"message": "입력하신 이메일이 등록되어 있다면 인증 코드가 발송됩니다."},
+            status=status.HTTP_200_OK,
+        )
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            return Response({"error": "사용자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+            return generic_response
 
         code = ''.join(random.choices(string.digits, k=6))
         hashed_code = make_password(code)
 
         EmailVerificationCode.objects.update_or_create(
             user=user,
-            defaults={'code': hashed_code, 'created_at': timezone.now()}
+            defaults={'code': hashed_code, 'created_at': timezone.now(), 'attempt_count': 0},
         )
 
         subject = '[JBIG] 비밀번호 변경 인증 코드'
         message = f'요청하신 비밀번호 변경 인증 코드는 다음과 같습니다: {code}'
         send_mail(subject, message, None, [user.email])
 
-        return Response({"message": "인증 코드가 이메일로 전송되었습니다."}, 
-                        status=status.HTTP_200_OK)
+        return generic_response
 
 
 class VerifyPasswordCodeView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_verify'
 
     @extend_schema(
         tags=["사용자"],
@@ -535,27 +577,36 @@ class VerifyPasswordCodeView(APIView):
         serializer = VerifyPasswordCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        email = serializer.validated_data['email']
+        email = serializer.validated_data['email'].strip().lower()
         verification_code = serializer.validated_data['verification_code']
 
+        # 사용자 열거 및 코드 상태 노출을 방지하기 위해 실패 경로 응답을 단일화한다.
+        generic_error = Response(
+            {"error": "인증 정보가 유효하지 않거나 만료되었습니다."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            return Response({"error": "사용자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+            return generic_error
 
         try:
             verification_code_obj = EmailVerificationCode.objects.get(user=user)
         except EmailVerificationCode.DoesNotExist:
-            return Response({"error": "인증 코드를 찾을 수 없습니다. 다시 요청해주세요."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return generic_error
 
         if (timezone.now() - verification_code_obj.created_at).total_seconds() > 300:
-            return Response({"error": "인증 코드가 만료되었습니다."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            verification_code_obj.delete()
+            return generic_error
 
         if not check_password(verification_code, verification_code_obj.code):
-            return Response({"error": "유효하지 않은 인증 코드입니다."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            verification_code_obj.attempt_count = models.F('attempt_count') + 1
+            verification_code_obj.save(update_fields=['attempt_count'])
+            verification_code_obj.refresh_from_db()
+            if verification_code_obj.attempt_count >= MAX_VERIFICATION_ATTEMPTS:
+                verification_code_obj.delete()
+            return generic_error
 
         reset_token, expires_in = issue_reset_token(user, request=request)
 
@@ -667,9 +718,11 @@ class UserProfileView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        user_id = self.kwargs['user_id']
-        # email__startswith is used to find the user by the part of their email before the '@'
-        obj = get_object_or_404(self.get_queryset(), email__startswith=user_id + '@')
+        user_id = (self.kwargs['user_id'] or '').strip().lower()
+        # 전북대 이메일 ID(@ 앞부분)에 해당하는 사용자를 정확히 매칭한다.
+        # 접두 매칭(startswith)은 예: 'a'로 'abc@...'를 잡는 경로 불일치 및
+        # 여러 도메인을 가진 중복 ID 선점 공격의 여지를 남긴다.
+        obj = get_object_or_404(self.get_queryset(), email__iexact=f'{user_id}@jbnu.ac.kr')
         self.check_object_permissions(self.request, obj)
         return obj
 
@@ -754,8 +807,8 @@ class PublicProfileView(generics.RetrieveAPIView):
     permission_classes = [AllowAny]
 
     def get_object(self):
-        username = self.kwargs['username']
-        obj = get_object_or_404(self.get_queryset(), email__istartswith=username + '@')
+        username = (self.kwargs['username'] or '').strip().lower()
+        obj = get_object_or_404(self.get_queryset(), email__iexact=f'{username}@jbnu.ac.kr')
         return obj
 
 

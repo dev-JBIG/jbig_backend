@@ -1,5 +1,4 @@
 import re
-import html
 import logging
 
 import boto3
@@ -14,6 +13,42 @@ from rest_framework import serializers
 from .models import Category, Board, Post, Comment, Notification, Draft, generate_anonymous_nickname
 
 logger = logging.getLogger(__name__)
+
+from bleach.css_sanitizer import CSSSanitizer
+
+# content_md / 마크다운 본문에 허용할 HTML 태그와 속성 화이트리스트.
+# 프론트엔드가 rehype-raw로 raw HTML을 렌더하므로, 저장 전 서버에서도 한 번 더 필터링한다.
+ALLOWED_MD_TAGS = {
+    'a', 'abbr', 'b', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'h1', 'h2', 'h3',
+    'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'kbd', 'li', 'mark', 'ol', 'p', 'pre',
+    'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td',
+    'tfoot', 'th', 'thead', 'tr', 'u', 'ul',
+}
+ALLOWED_MD_ATTRIBUTES = {
+    '*': ['class'],
+    'a': ['href', 'title', 'target', 'rel'],
+    'img': ['src', 'alt', 'title', 'width', 'height'],
+    'div': ['style'],
+    'span': ['style'],
+}
+ALLOWED_MD_PROTOCOLS = ['http', 'https', 'mailto', 'data']
+_MD_CSS_SANITIZER = CSSSanitizer(
+    allowed_css_properties=['text-align', 'color', 'background-color'],
+)
+
+
+def sanitize_markdown(value: str) -> str:
+    if not value:
+        return ''
+    return bleach.clean(
+        value,
+        tags=ALLOWED_MD_TAGS,
+        attributes=ALLOWED_MD_ATTRIBUTES,
+        protocols=ALLOWED_MD_PROTOCOLS,
+        strip=True,
+        css_sanitizer=_MD_CSS_SANITIZER,
+    )
+
 
 # Thread-local storage for S3 client (process/fork 안전)
 import threading
@@ -244,8 +279,6 @@ class CommentSerializer(serializers.ModelSerializer):
 
     def validate_content(self, value):
         sanitized_content = bleach.clean(value, tags=[], strip=True).strip()
-        # bleach가 &를 &amp;로 변환하므로 다시 복원
-        sanitized_content = html.unescape(sanitized_content)
         if not sanitized_content:
             raise serializers.ValidationError("Content cannot be empty.")
         return sanitized_content
@@ -463,7 +496,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         recruitment_data = validated_data.pop('recruitment', None)
 
         post = Post(**validated_data)
-        post.content_md = normalize_ncp_urls(content_md)
+        post.content_md = sanitize_markdown(normalize_ncp_urls(content_md))
         post.attachment_paths = attachment_paths
         post.save()
         post.update_search_vector()
@@ -495,7 +528,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
                 pass
 
         if content_md is not None:
-            instance.content_md = normalize_ncp_urls(content_md)
+            instance.content_md = sanitize_markdown(normalize_ncp_urls(content_md))
 
         if attachment_paths is not None:
             instance.attachment_paths = attachment_paths
@@ -751,7 +784,7 @@ class DraftSerializer(serializers.ModelSerializer):
             defaults={
                 'board': board,
                 'title': validated_data.get('title', ''),
-                'content_md': normalize_ncp_urls(validated_data.get('content_md', '')),
+                'content_md': sanitize_markdown(normalize_ncp_urls(validated_data.get('content_md', ''))),
                 'uploaded_paths': validated_data.get('uploaded_paths', [])
             }
         )
@@ -764,7 +797,7 @@ class DraftSerializer(serializers.ModelSerializer):
         
         instance.title = validated_data.get('title', instance.title)
         content_md = validated_data.get('content_md', instance.content_md)
-        instance.content_md = normalize_ncp_urls(content_md)
+        instance.content_md = sanitize_markdown(normalize_ncp_urls(content_md))
         instance.uploaded_paths = validated_data.get('uploaded_paths', instance.uploaded_paths)
         instance.save()
         return instance

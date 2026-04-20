@@ -152,6 +152,9 @@ class PostLikeAPIView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     lookup_url_kwarg = 'post_id'
 
+    def get_queryset(self):
+        return Post.objects.visible_for_user(self.request.user)
+
     def post(self, request, *args, **kwargs):
         post = self.get_object()
         user = request.user
@@ -752,9 +755,17 @@ class BoardDetailAPIView(generics.RetrieveAPIView):
 
 # 업로드 URL 발급해주는 GeneratePresignedURlAPIView 클래스
 
-# 파일 업로드 제한 상수 (프론트엔드와 동일하게 유지)
-BLOCKED_EXTENSIONS = {'jsp', 'php', 'asp', 'cgi', 'exe', 'sh', 'bat', 'cmd', 'ps1'}
-MAX_EXTENSION_LENGTH = 10  # 확장자 최대 길이
+# 파일 업로드 허용 확장자 화이트리스트.
+# 블랙리스트 방식은 `.phtml`, `.svg` (XSS), `.html` 등 우회 여지를 남기기 때문에 화이트리스트로 운영한다.
+ALLOWED_UPLOAD_EXTENSIONS = {
+    # 이미지
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp',
+    # 문서
+    'pdf', 'hwp', 'hwpx', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'csv', 'md',
+    # 압축
+    'zip',
+}
+MAX_EXTENSION_LENGTH = 10
 
 
 @extend_schema(
@@ -904,18 +915,16 @@ class GeneratePresignedURLAPIView(APIView):
             if not extension:
                 extension = 'bin'
 
-            # 확장자 길이 검증
             if len(extension) > MAX_EXTENSION_LENGTH:
                 return Response({"error": "Extension too long."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # 차단된 확장자 검증
-            if extension in BLOCKED_EXTENSIONS:
+            if extension not in ALLOWED_UPLOAD_EXTENSIONS:
                 return Response(
                     {"error": f"File extension '.{extension}' is not allowed."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
         except Exception:
-            extension = 'bin'
+            return Response({"error": "Invalid filename."}, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. 서버에서 고유한 파일 경로(Key) 생성
         now = datetime.now()

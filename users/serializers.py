@@ -7,6 +7,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer, TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
+from boards.serializers import sanitize_markdown
 from .models import User, EmailVerificationCode
 
 from django.contrib.auth import get_user_model
@@ -93,6 +94,9 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
 
         return data
 
+ALLOWED_SIGNUP_EMAIL_DOMAIN = '@jbnu.ac.kr'
+
+
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, help_text="사용자 비밀번호")
     semester = serializers.IntegerField(help_text="학기 정보")
@@ -104,6 +108,16 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'email': {'help_text': "사용자 이메일 주소"},
             'username': {'help_text': "사용자 이름"}
         }
+
+    def validate_email(self, value):
+        normalized = (value or '').strip().lower()
+        if not normalized.endswith(ALLOWED_SIGNUP_EMAIL_DOMAIN):
+            raise serializers.ValidationError(
+                f"가입은 {ALLOWED_SIGNUP_EMAIL_DOMAIN} 이메일로만 가능합니다."
+            )
+        if User.objects.filter(email__iexact=normalized).exists():
+            raise serializers.ValidationError("이미 가입된 이메일입니다.")
+        return normalized
 
     def validate(self, attrs):
         username = attrs.get('username')
@@ -313,10 +327,21 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         } for c in comments]
 
 
+MAX_RESUME_LENGTH = 8 * 1024  # 8KB
+
+
 class ResumeUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('resume',)
+
+    def validate_resume(self, value):
+        value = value or ''
+        if len(value) > MAX_RESUME_LENGTH:
+            raise serializers.ValidationError(
+                f"자기소개는 {MAX_RESUME_LENGTH}자 이하여야 합니다."
+            )
+        return sanitize_markdown(value)
 
 
 ALLOWED_BLOCK_TYPES = {'text', 'image', 'links', 'divider', 'project', 'experience', 'skills', 'header', 'award', 'certification', 'education', 'activity', 'publication', 'contact', 'stats', 'gallery', 'embed', 'quote'}
@@ -346,4 +371,7 @@ class ProfileBlocksUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("각 블록에는 id, type, data가 필요합니다.")
             if block['type'] not in ALLOWED_BLOCK_TYPES:
                 raise serializers.ValidationError(f"허용되지 않는 블록 타입: {block['type']}")
+            data = block.get('data')
+            if isinstance(data, dict) and isinstance(data.get('markdown'), str):
+                data['markdown'] = sanitize_markdown(data['markdown'])
         return value

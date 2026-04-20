@@ -83,6 +83,19 @@ ALLOWED_HOSTS = get_env_list('ALLOWED_HOSTS', [
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 
+# 프로덕션(비-로컬) 환경에서만 강제되는 보안 헤더/쿠키 설정.
+# IS_LOCAL = True 인 개발 환경에서는 HTTPS가 아닐 수 있어 끄고 간다.
+if not IS_LOCAL:
+    SECURE_SSL_REDIRECT = get_env_bool('SECURE_SSL_REDIRECT', True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'same-origin'
+    X_FRAME_OPTIONS = 'DENY'
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -217,6 +230,20 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema', # Add this line
     'DEFAULT_PAGINATION_CLASS': 'jbig_backend.pagination.CustomPagination',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',
+        'user': '240/min',
+        'signin': '10/min',
+        'password_reset_request': '5/hour',
+        'password_reset_verify': '20/hour',
+        'email_verify': '20/hour',
+        'signup': '10/hour',
+    },
 }
 
 SPECTACULAR_SETTINGS = {

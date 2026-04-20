@@ -60,21 +60,11 @@ class User(AbstractUser):
     def __str__(self):
         return self.email
 
-class UserRefreshToken(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    refresh_token = models.CharField(max_length=500)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'user_refresh_token'
-        verbose_name = '사용자 리프레시 토큰'
-        verbose_name_plural = '사용자 리프레시 토큰 목록'
-        unique_together = ('user', 'refresh_token')
-
 class EmailVerificationCode(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='verification_code')
     code = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
+    attempt_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = 'email_verification_code'
