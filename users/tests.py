@@ -367,6 +367,43 @@ class PasswordResetFlowTest(TestCase):
 
 
 @override_settings(REST_FRAMEWORK=NO_THROTTLE_REST_FRAMEWORK)
+class SignInEnumerationTest(TestCase):
+    """로그인 실패 경로는 존재하지 않는 이메일과 비밀번호 불일치를 구분할 수 없어야 한다."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.signin_url = reverse('signin')
+        self.email = 'signin@jbnu.ac.kr'
+        self.password = 'Password!1x'
+        user = User.objects.create_user(
+            email=self.email,
+            username='signinuser',
+            password=self.password,
+            semester=1,
+        )
+        user.is_active = True
+        user.is_verified = True
+        user.save()
+
+    def _post(self, payload):
+        return self.client.post(self.signin_url, payload, format='json')
+
+    def test_unknown_email_and_wrong_password_return_identical_error(self):
+        unknown = self._post({'email': 'ghost@jbnu.ac.kr', 'password': 'anything'})
+        wrong = self._post({'email': self.email, 'password': 'wrongpass'})
+        self.assertEqual(unknown.status_code, wrong.status_code)
+        # 두 응답이 완전히 동일해야 enumeration이 불가능하다.
+        self.assertEqual(unknown.data, wrong.data)
+        # 응답 본문에 'INVALID_CREDENTIALS' 문자열이 어디든 포함되어 있어야 한다.
+        self.assertIn('INVALID_CREDENTIALS', unknown.content.decode())
+
+    def test_correct_login_succeeds(self):
+        response = self._post({'email': self.email, 'password': self.password})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+
+
+@override_settings(REST_FRAMEWORK=NO_THROTTLE_REST_FRAMEWORK)
 class TokenRefreshGuardTest(TestCase):
     """리프레시 경로에서 비활성/미인증 계정은 차단되어야 한다."""
 

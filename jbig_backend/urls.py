@@ -4,9 +4,6 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-)
 from users.views import LogoutView
 from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView, PopupViewSet, NotionPageView
 from .local_upload import LocalFileUploadView
@@ -26,7 +23,6 @@ urlpatterns = [
     path('api/', include('recruitments.urls')),
     path('api/quiz-url/', QuizUrlView.as_view(), name='quiz_url'),
     path('api/settings/', SiteSettingsView.as_view(), name='site_settings'),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/logout/', LogoutView.as_view(), name='logout'),
     path('api/boards/files/generate-upload-url/', GeneratePresignedURLAPIView.as_view(), name='file-generate-upload-url'),
     path('api/boards/files/delete/', DeleteFileAPIView.as_view(), name='file-delete'),

@@ -15,29 +15,26 @@ from django.contrib.auth import get_user_model
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
-        email = attrs.get('email')
+        email = (attrs.get('email') or '').strip().lower()
         password = attrs.get('password')
         User = get_user_model()
 
-        # 1. 이메일 존재 여부 확인 (대소문자 무시)
+        # 사용자 열거 방지를 위해 존재하지 않는 이메일과 비밀번호 불일치는 동일한 응답을 준다.
+        invalid_credentials = AuthenticationFailed({
+            "isSuccess": False,
+            "errorCode": "INVALID_CREDENTIALS",
+            "message": "이메일 또는 비밀번호가 올바르지 않습니다."
+        }, code='authentication')
+
         try:
             user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            raise AuthenticationFailed({
-                "isSuccess": False,
-                "errorCode": "USER_NOT_FOUND",
-                "message": "존재하지 않는 이메일입니다."
-            }, code='authentication')
+            raise invalid_credentials
 
-        # 2. 비밀번호 확인
         if not user.check_password(password):
-            raise AuthenticationFailed({
-                "isSuccess": False,
-                "errorCode": "INVALID_PASSWORD",
-                "message": "비밀번호가 올바르지 않습니다."
-            }, code='authentication')
+            raise invalid_credentials
 
-        # 3. 이메일 인증 여부 확인
+        # 자격 증명이 유효한 경우에만 추가 상태(인증/활성)를 확인한다.
         if not user.is_verified:
             raise AuthenticationFailed({
                 "isSuccess": False,
@@ -45,7 +42,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 "message": "이메일 인증이 완료되지 않았습니다. 이메일을 확인해주세요."
             }, code='authentication')
 
-        # 4. 계정 활성 상태 확인
         if not user.is_active:
             raise AuthenticationFailed({
                 "isSuccess": False,
