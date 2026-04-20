@@ -83,3 +83,28 @@ class EmailVerificationCode(models.Model):
 
     def __str__(self):
         return f'Verification code for {self.user.email}'
+
+class PasswordResetToken(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='password_reset_tokens',
+    )
+    token_hash = models.CharField(max_length=64, db_index=True, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_ip = models.GenericIPAddressField(null=True, blank=True)
+    created_ua = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'password_reset_token'
+        verbose_name = '비밀번호 재설정 토큰'
+        verbose_name_plural = '비밀번호 재설정 토큰 목록'
+        indexes = [
+            models.Index(fields=['expires_at']),
+            models.Index(fields=['user', 'used_at']),
+        ]
+
+    def __str__(self):
+        return f'PasswordResetToken(user={self.user_id}, used={self.used_at is not None})'

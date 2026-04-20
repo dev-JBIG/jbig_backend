@@ -25,7 +25,7 @@ from .models import User, EmailVerificationCode
 from .password_reset_token import (
     RESET_TOKEN_TTL_SECONDS,
     ResetTokenError,
-    decode_reset_token,
+    consume_reset_token,
     issue_reset_token,
 )
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -557,13 +557,16 @@ class VerifyPasswordCodeView(APIView):
             return Response({"error": "유효하지 않은 인증 코드입니다."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        reset_token = issue_reset_token(email)
+        reset_token, expires_in = issue_reset_token(user, request=request)
+
+        # 인증코드는 재설정 토큰으로 교체되므로 즉시 제거한다.
+        verification_code_obj.delete()
 
         return Response(
             {
                 "message": "인증 코드가 확인되었습니다.",
                 "reset_token": reset_token,
-                "expires_in": RESET_TOKEN_TTL_SECONDS,
+                "expires_in": expires_in,
             },
             status=status.HTTP_200_OK,
         )
@@ -591,22 +594,9 @@ class PasswordResetView(APIView):
         new_password = serializer.validated_data['new_password1']
 
         try:
-            decode_reset_token(reset_token, expected_email=email)
+            user = consume_reset_token(reset_token, expected_email=email)
         except ResetTokenError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "사용자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
-
-        # 토큰이 일회성이 되도록, verify 단계에서 생성된 인증 코드 레코드가 아직 존재하는지 확인한다.
-        # 비밀번호 변경 성공 시 코드 레코드를 삭제하므로, 동일 토큰으로 재호출하면 여기서 걸린다.
-        if not EmailVerificationCode.objects.filter(user=user).exists():
-            return Response(
-                {"error": "인증 절차가 만료되었습니다. 인증 코드 요청부터 다시 진행해주세요."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError
