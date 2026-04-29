@@ -152,16 +152,20 @@ def _build_record_map(page_id: str) -> dict:
 
     _unwrap_nested_values(merged)
 
-    # 누락 블록 1회만 fetch (토글 자식 등)
-    missing = _find_missing_block_ids(merged)
-    if missing:
+    # 누락 블록 반복 fetch (중첩 토글 자식 등 깊이 무관하게 보완)
+    MAX_ROUNDS = 5
+    for _ in range(MAX_ROUNDS):
+        missing = _find_missing_block_ids(merged)
+        if not missing:
+            break
         fetched = _fetch_missing_blocks(missing)
-        # 중첩 해제
         for bid, bdata in list(fetched.items()):
             if isinstance(bdata, dict) and 'value' in bdata:
                 inner = bdata['value']
                 if isinstance(inner, dict) and 'value' in inner and 'role' in inner:
                     fetched[bid] = inner
+        if not fetched:
+            break
         merged.setdefault('block', {}).update(fetched)
 
     for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
