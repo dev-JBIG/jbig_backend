@@ -66,9 +66,24 @@ class Board(models.Model):
         JUSTIFICATION_LETTER = 3, 'Justification Letter'
         PHOTO_ALBUM = 4, 'Photo Album'
 
+    # board_type은 접근 권한(공개/비공개)을 결정하고, form_type은 작성 화면에서
+    # 어떤 입력 폼을 띄울지를 결정한다. 두 개념은 직교한다.
+    # 예: 사유서와 에러/피드백 제보는 둘 다 board_type=3(작성자·스태프만 조회)이지만,
+    #     입력 폼은 각각 결석사유서/피드백으로 다르므로 form_type으로 구분한다.
+    class FormType(models.IntegerChoices):
+        NONE = 0, 'None'
+        ABSENCE = 1, 'Absence'
+        FEEDBACK = 2, 'Feedback'
+
     name = models.CharField(max_length=50)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='boards')
     board_type = models.IntegerField(choices=BoardType.choices, default=BoardType.GENERAL)
+    form_type = models.IntegerField(
+        choices=FormType.choices,
+        default=FormType.NONE,
+        verbose_name='작성 폼 종류',
+        help_text='작성 화면에서 띄울 입력 폼. 권한(board_type)과 별개로 동작한다.',
+    )
 
     PERMISSION_CHOICES = (
         ('all', 'All'),

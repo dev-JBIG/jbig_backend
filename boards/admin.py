@@ -8,8 +8,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'board_type', 'category')
-    list_filter = ('board_type', 'category')
+    list_display = ('id', 'name', 'board_type', 'form_type', 'category')
+    list_filter = ('board_type', 'form_type', 'category')
     search_fields = ('name',)
     raw_id_fields = ('category',)
 

@@ -121,7 +121,7 @@ class BoardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Board
-        fields = ['id', 'name', 'category', 'board_type', 'read_permission', 'post_permission', 'comment_permission', 'available_tags']
+        fields = ['id', 'name', 'category', 'board_type', 'form_type', 'read_permission', 'post_permission', 'comment_permission', 'available_tags']
 
     def get_read_permission(self, instance):
         user = self.context['request'].user
@@ -151,7 +151,7 @@ class BoardSerializer(serializers.ModelSerializer):
 class BoardIdNameSerializer(serializers.ModelSerializer):
     class Meta:
         model = Board
-        fields = ['id', 'name', 'board_type', 'available_tags']
+        fields = ['id', 'name', 'board_type', 'form_type', 'available_tags']
 
 class CategoryWithBoardsSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source='name')
