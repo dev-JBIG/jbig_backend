@@ -37,11 +37,6 @@ def _format_uuid(page_id: str) -> str:
     return f'{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}'
 
 
-def _cache_key(page_id: str) -> str:
-    clean = re.sub(r'[^a-fA-F0-9]', '', page_id)
-    return clean.lower() if len(clean) == 32 else page_id
-
-
 def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
     url = f'{NOTION_API}/{endpoint}'
     for attempt in range(retries + 1):
@@ -95,73 +90,15 @@ def _unwrap_nested_values(record_map: dict):
 def _find_missing_block_ids(record_map: dict) -> list:
     blocks = record_map.get('block', {})
     existing = set(blocks.keys())
-    seen = set()
     missing = []
-
-    def has_block(block_id: str) -> bool:
-        compact = re.sub(r'[^a-fA-F0-9]', '', block_id)
-        variants = {block_id}
-        if len(compact) == 32:
-            variants.add(compact)
-            variants.add(_format_uuid(compact))
-        return bool(variants & existing)
-
-    def add_missing(block_id: str):
-        if not isinstance(block_id, str):
-            return
-        if block_id in seen or has_block(block_id):
-            return
-        seen.add(block_id)
-        missing.append(block_id)
-
-    def collect_referenced_blocks(node):
-        if isinstance(node, dict):
-            for value in node.values():
-                collect_referenced_blocks(value)
-            return
-        if not isinstance(node, list):
-            return
-
-        if len(node) >= 2 and node[0] in ('p', 'eoi'):
-            add_missing(node[1])
-        elif len(node) >= 2 and node[0] == '‣':
-            link = node[1]
-            if isinstance(link, list) and len(link) >= 2 and link[0] != 'u':
-                add_missing(link[1])
-
-        for value in node:
-            collect_referenced_blocks(value)
-
     for bdata in blocks.values():
         value = bdata.get('value', {})
         if not isinstance(value, dict):
             continue
         for cid in (value.get('content') or []):
-            add_missing(cid)
-        collect_referenced_blocks(value.get('properties', {}))
+            if isinstance(cid, str) and cid not in existing:
+                missing.append(cid)
     return missing
-
-
-def _add_block_aliases(record_map: dict):
-    blocks = record_map.get('block', {})
-    aliases = {}
-    for key, bdata in list(blocks.items()):
-        if not isinstance(bdata, dict):
-            continue
-
-        value = bdata.get('value', {})
-        block_id = value.get('id') if isinstance(value, dict) else key
-        for candidate in (key, block_id):
-            if not isinstance(candidate, str):
-                continue
-            compact = re.sub(r'[^a-fA-F0-9]', '', candidate)
-            if len(compact) != 32:
-                continue
-            aliases.setdefault(compact, bdata)
-            aliases.setdefault(_format_uuid(compact), bdata)
-
-    for alias, bdata in aliases.items():
-        blocks.setdefault(alias, bdata)
 
 
 def _fetch_missing_blocks(missing_ids: list) -> dict:
@@ -170,7 +107,7 @@ def _fetch_missing_blocks(missing_ids: list) -> dict:
         batch = missing_ids[i:i + 100]
         data = _notion_post('syncRecordValues', {
             'requests': [
-                {'pointer': {'table': 'block', 'id': _format_uuid(bid)}, 'version': -1}
+                {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
                 for bid in batch
             ]
         })
@@ -234,17 +171,15 @@ def _build_record_map(page_id: str) -> dict:
     for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
         merged.setdefault(key, {})
     merged.pop('space', None)
-    _add_block_aliases(merged)
 
     return merged
 
 
 def _refresh_cache(page_id: str):
-    key = _cache_key(page_id)
     try:
         data = _build_record_map(page_id)
         with _cache_lock:
-            _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+            _cache[page_id] = {'data': data, 'expires': _time.time() + CACHE_TTL}
         logger.info(f'Notion cache refreshed: {page_id} ({len(data.get("block", {}))} blocks)')
     except Exception as e:
         logger.error(f'Notion cache refresh failed: {page_id}: {e}')
@@ -258,9 +193,8 @@ def _get_build_lock(page_id: str) -> threading.Lock:
 
 
 def fetch_page(page_id: str) -> dict:
-    key = _cache_key(page_id)
     with _cache_lock:
-        cached = _cache.get(key)
+        cached = _cache.get(page_id)
 
     if cached:
         if _time.time() < cached['expires']:
@@ -270,15 +204,15 @@ def fetch_page(page_id: str) -> dict:
         return cached['data']
 
     # 첫 요청 → 동기 빌드 (page별 lock으로 동시 빌드 방지)
-    build_lock = _get_build_lock(key)
+    build_lock = _get_build_lock(page_id)
     with build_lock:
         # lock 획득 후 다시 캐시 확인 (다른 worker가 이미 빌드했을 수 있음)
         with _cache_lock:
-            cached = _cache.get(key)
+            cached = _cache.get(page_id)
         if cached:
             return cached['data']
 
         data = _build_record_map(page_id)
         with _cache_lock:
-            _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+            _cache[page_id] = {'data': data, 'expires': _time.time() + CACHE_TTL}
         return data
