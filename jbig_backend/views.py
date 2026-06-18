@@ -169,7 +169,7 @@ class NotionPageView(APIView):
 
         try:
             from .notion import fetch_page
-            record_map = fetch_page(page_id)
+            record_map = fetch_page(clean)
             return Response(record_map)
         except Exception as e:
             logger.error(f'Notion API error: {e}')

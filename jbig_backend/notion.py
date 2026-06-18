@@ -28,6 +28,7 @@ _cache_lock = threading.Lock()
 _build_locks = {}  # page_id별 빌드 락 (동시 빌드 방지)
 _build_locks_lock = threading.Lock()
 CACHE_TTL = 300  # 5분
+MAX_MISSING_ROUNDS = 10
 
 
 def _format_uuid(page_id: str) -> str:
@@ -35,6 +36,13 @@ def _format_uuid(page_id: str) -> str:
     if len(clean) != 32:
         return page_id
     return f'{clean[:8]}-{clean[8:12]}-{clean[12:16]}-{clean[16:20]}-{clean[20:]}'
+
+
+def _cache_key(page_id: str) -> str:
+    clean = re.sub(r'[^a-fA-F0-9]', '', page_id)
+    if len(clean) != 32:
+        return page_id
+    return clean.lower()
 
 
 def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
@@ -61,12 +69,24 @@ def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
     return {}
 
 
+def _has_record_value(record: dict) -> bool:
+    return isinstance(record, dict) and isinstance(record.get('value'), dict)
+
+
 def _merge_record_maps(target: dict, source: dict):
-    for key, value in source.items():
+    for key, source_section in source.items():
         if key not in target:
-            target[key] = value
-        elif isinstance(value, dict):
-            target[key].update(value)
+            target[key] = source_section
+            continue
+        target_section = target[key]
+        if not isinstance(target_section, dict) or not isinstance(source_section, dict):
+            target[key] = source_section
+            continue
+        for item_id, source_item in source_section.items():
+            target_item = target_section.get(item_id)
+            if _has_record_value(target_item) and not _has_record_value(source_item):
+                continue
+            target_section[item_id] = source_item
 
 
 def _unwrap_nested_values(record_map: dict):
@@ -89,16 +109,26 @@ def _unwrap_nested_values(record_map: dict):
 
 def _find_missing_block_ids(record_map: dict) -> list:
     blocks = record_map.get('block', {})
-    existing = set(blocks.keys())
     missing = []
+    seen = set()
     for bdata in blocks.values():
+        if not isinstance(bdata, dict):
+            continue
         value = bdata.get('value', {})
         if not isinstance(value, dict):
             continue
         for cid in (value.get('content') or []):
-            if isinstance(cid, str) and cid not in existing:
+            if isinstance(cid, str) and not _has_record_value(blocks.get(cid)) and cid not in seen:
                 missing.append(cid)
+                seen.add(cid)
     return missing
+
+
+def _record_map_stats(record_map: dict) -> tuple:
+    blocks = record_map.get('block', {})
+    if not isinstance(blocks, dict):
+        return 0, 0
+    return len(blocks), len(_find_missing_block_ids(record_map))
 
 
 def _fetch_missing_blocks(missing_ids: list) -> dict:
@@ -153,8 +183,7 @@ def _build_record_map(page_id: str) -> dict:
     _unwrap_nested_values(merged)
 
     # 누락 블록 반복 fetch (중첩 토글 자식 등 깊이 무관하게 보완)
-    MAX_ROUNDS = 5
-    for _ in range(MAX_ROUNDS):
+    for _ in range(MAX_MISSING_ROUNDS):
         missing = _find_missing_block_ids(merged)
         if not missing:
             break
@@ -172,17 +201,47 @@ def _build_record_map(page_id: str) -> dict:
         merged.setdefault(key, {})
     merged.pop('space', None)
 
+    block_count, missing_count = _record_map_stats(merged)
+    if missing_count:
+        logger.warning(
+            'Notion record map still has missing blocks: page_id=%s block_count=%s missing_count=%s',
+            page_id,
+            block_count,
+            missing_count,
+        )
+
     return merged
 
 
 def _refresh_cache(page_id: str):
+    key = _cache_key(page_id)
     try:
         data = _build_record_map(page_id)
+        new_block_count, new_missing_count = _record_map_stats(data)
         with _cache_lock:
-            _cache[page_id] = {'data': data, 'expires': _time.time() + CACHE_TTL}
-        logger.info(f'Notion cache refreshed: {page_id} ({len(data.get("block", {}))} blocks)')
+            cached = _cache.get(key)
+            if cached:
+                old_block_count, old_missing_count = _record_map_stats(cached['data'])
+                if new_block_count < old_block_count and new_missing_count > old_missing_count:
+                    cached['expires'] = _time.time() + CACHE_TTL
+                    logger.warning(
+                        'Notion cache refresh rejected: page_id=%s old_blocks=%s new_blocks=%s old_missing=%s new_missing=%s',
+                        key,
+                        old_block_count,
+                        new_block_count,
+                        old_missing_count,
+                        new_missing_count,
+                    )
+                    return
+            _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+        logger.info(
+            'Notion cache refreshed: %s (%s blocks, %s missing)',
+            key,
+            new_block_count,
+            new_missing_count,
+        )
     except Exception as e:
-        logger.error(f'Notion cache refresh failed: {page_id}: {e}')
+        logger.error(f'Notion cache refresh failed: {key}: {e}')
 
 
 def _get_build_lock(page_id: str) -> threading.Lock:
@@ -193,26 +252,27 @@ def _get_build_lock(page_id: str) -> threading.Lock:
 
 
 def fetch_page(page_id: str) -> dict:
+    key = _cache_key(page_id)
     with _cache_lock:
-        cached = _cache.get(page_id)
+        cached = _cache.get(key)
 
     if cached:
         if _time.time() < cached['expires']:
             return cached['data']
         # 만료 → stale 반환 + 백그라운드 갱신
-        threading.Thread(target=_refresh_cache, args=(page_id,), daemon=True).start()
+        threading.Thread(target=_refresh_cache, args=(key,), daemon=True).start()
         return cached['data']
 
     # 첫 요청 → 동기 빌드 (page별 lock으로 동시 빌드 방지)
-    build_lock = _get_build_lock(page_id)
+    build_lock = _get_build_lock(key)
     with build_lock:
         # lock 획득 후 다시 캐시 확인 (다른 worker가 이미 빌드했을 수 있음)
         with _cache_lock:
-            cached = _cache.get(page_id)
+            cached = _cache.get(key)
         if cached:
             return cached['data']
 
-        data = _build_record_map(page_id)
+        data = _build_record_map(key)
         with _cache_lock:
-            _cache[page_id] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+            _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
         return data
