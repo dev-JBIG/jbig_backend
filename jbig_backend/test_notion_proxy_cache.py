@@ -120,7 +120,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.assertEqual(len(stale.json()['block']), 4)
         self.assertEqual(missing_block_count(stale.json()), 0)
         self.assertTrue(
-            any('Notion cache refresh rejected' in message for message in logs.output)
+            any('Notion cache refresh failed' in message for message in logs.output)
         )
 
         refreshed = self.client.get(f'/api/notion/{PAGE_ID}/')
@@ -168,7 +168,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.assertEqual(missing_block_count(response.json()), 0)
         self.assertEqual(notion._cache[PAGE_ID]['missing_count'], 0)
 
-    def test_initial_load_prunes_unresolved_children_after_bounded_retries(self):
+    def test_initial_load_returns_error_when_unresolved_children_remain(self):
         def partial_map():
             return {
                 'block': {
@@ -194,15 +194,13 @@ class NotionProxyCacheReproductionTests(TestCase):
 
         response = self.client.get(f'/api/notion/{PAGE_ID}/')
 
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(len(load_page_calls), notion.MAX_INCOMPLETE_BUILD_RETRIES + 1)
-        self.assertEqual(response.json()['block']['root']['value']['content'], ['a'])
-        self.assertEqual(missing_block_count(response.json()), 0)
-        self.assertEqual(notion._cache[PAGE_ID]['missing_count'], 1)
-        self.assertLessEqual(
-            notion._cache[PAGE_ID]['expires'] - notion._time.time(),
-            notion.INCOMPLETE_CACHE_TTL + 1,
-        )
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.headers['X-Notion-Event'], 'request_error')
+        self.assertEqual(response.headers['X-Notion-Cache'], 'error')
+        self.assertEqual(response.headers['X-Notion-Block-Count'], '2')
+        self.assertEqual(response.headers['X-Notion-Missing-Count'], '1')
+        self.assertNotIn(PAGE_ID, notion._cache)
 
     def test_hyphenated_and_plain_page_ids_share_one_cache_entry(self):
         load_page_calls = []

@@ -247,31 +247,6 @@ def _record_map_stats(record_map: dict) -> tuple:
     return len(blocks), len(_find_missing_block_ids(record_map))
 
 
-def _prune_missing_block_refs(record_map: dict) -> int:
-    blocks = record_map.get('block', {})
-    if not isinstance(blocks, dict):
-        return 0
-
-    pruned = 0
-    for bdata in blocks.values():
-        if not isinstance(bdata, dict):
-            continue
-        value = bdata.get('value', {})
-        if not isinstance(value, dict):
-            continue
-        content = value.get('content')
-        if not isinstance(content, list):
-            continue
-        clean_content = [
-            cid for cid in content
-            if not (isinstance(cid, str) and not _has_record_value(blocks.get(cid)))
-        ]
-        if len(clean_content) != len(content):
-            pruned += len(content) - len(clean_content)
-            value['content'] = clean_content
-    return pruned
-
-
 def _fetch_missing_blocks(missing_ids: list, diagnostics: dict = None) -> dict:
     results = {}
     for i in range(0, len(missing_ids), 100):
@@ -346,7 +321,6 @@ def _build_record_map_once(page_id: str, diagnostics: dict = None) -> dict:
 
 
 def _build_record_map(page_id: str, diagnostics: dict = None) -> tuple:
-    best = None
     best_stats = None
 
     for attempt in range(MAX_INCOMPLETE_BUILD_RETRIES + 1):
@@ -364,12 +338,11 @@ def _build_record_map(page_id: str, diagnostics: dict = None) -> tuple:
             return data, block_count, missing_count
 
         if (
-            best is None
-            or problem_count < best_stats[1]
-            or (problem_count == best_stats[1] and block_count > best_stats[0])
+            best_stats is None
+            or problem_count < best_stats[2]
+            or (problem_count == best_stats[2] and block_count > best_stats[0])
         ):
-            best = data
-            best_stats = (block_count, problem_count)
+            best_stats = (block_count, missing_count, problem_count)
 
         if attempt < MAX_INCOMPLETE_BUILD_RETRIES:
             logger.warning(
@@ -381,16 +354,21 @@ def _build_record_map(page_id: str, diagnostics: dict = None) -> tuple:
             )
             _time.sleep(0.5)
 
-    block_count, missing_count = best_stats
-    pruned_count = _prune_missing_block_refs(best)
+    block_count, missing_count, problem_count = best_stats
+    _finish_diagnostics(
+        diagnostics,
+        'request_error',
+        block_count=block_count,
+        missing_count=missing_count,
+    )
     logger.warning(
-        'Notion record map incomplete after retries; pruned missing refs: page_id=%s block_count=%s missing_count=%s pruned_count=%s',
+        'Notion record map incomplete after retries: page_id=%s block_count=%s missing_count=%s problem_count=%s',
         page_id,
         block_count,
         missing_count,
-        pruned_count,
+        problem_count,
     )
-    return best, block_count, missing_count
+    raise Exception('Notion record map incomplete')
 
 
 def _refresh_cache(page_id: str):
@@ -433,6 +411,10 @@ def _refresh_cache(page_id: str):
             missing_count=new_missing_count,
         )
     except Exception as e:
+        with _cache_lock:
+            cached = _cache.get(key)
+            if cached:
+                cached['expires'] = max(cached['expires'], _time.time() + INCOMPLETE_CACHE_TTL)
         _finish_diagnostics(diagnostics, 'refresh_error')
         logger.error(f'Notion cache refresh failed: {key}: {e}')
 
@@ -491,7 +473,8 @@ def fetch_page(page_id: str, diagnostics: dict = None) -> dict:
         try:
             data, block_count, missing_count = _build_record_map(key, diagnostics=diagnostics)
         except Exception:
-            _finish_diagnostics(diagnostics, 'request_error')
+            if 'event' not in diagnostics:
+                _finish_diagnostics(diagnostics, 'request_error')
             raise
         ttl = CACHE_TTL if missing_count == 0 else INCOMPLETE_CACHE_TTL
         with _cache_lock:
