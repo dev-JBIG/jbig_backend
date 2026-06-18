@@ -21,6 +21,7 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0',
 }
 REQUEST_TIMEOUT = 30
+REQUEST_TIME_BUDGET = 12
 
 # 메모리 캐시
 _cache = {}
@@ -29,6 +30,10 @@ _build_locks = {}  # page_id별 빌드 락 (동시 빌드 방지)
 _build_locks_lock = threading.Lock()
 CACHE_TTL = 300  # 5분
 MAX_MISSING_ROUNDS = 10
+
+
+class NotionDeadlineExceeded(Exception):
+    pass
 
 
 def _format_uuid(page_id: str) -> str:
@@ -45,24 +50,60 @@ def _cache_key(page_id: str) -> str:
     return clean.lower()
 
 
-def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
+def _deadline(seconds: float | None = None) -> float:
+    if seconds is None:
+        seconds = REQUEST_TIME_BUDGET
+    return _time.monotonic() + seconds
+
+
+def _time_remaining(deadline: float | None) -> float | None:
+    if deadline is None:
+        return None
+    return deadline - _time.monotonic()
+
+
+def _deadline_expired(deadline: float | None) -> bool:
+    remaining = _time_remaining(deadline)
+    return remaining is not None and remaining <= 0
+
+
+def _request_timeout(deadline: float | None) -> float:
+    remaining = _time_remaining(deadline)
+    if remaining is None:
+        return REQUEST_TIMEOUT
+    if remaining <= 0:
+        raise NotionDeadlineExceeded()
+    return min(REQUEST_TIMEOUT, remaining)
+
+
+def _sleep(seconds: float, deadline: float | None = None):
+    remaining = _time_remaining(deadline)
+    if remaining is None:
+        _time.sleep(seconds)
+        return
+    if remaining <= 0:
+        raise NotionDeadlineExceeded()
+    _time.sleep(min(seconds, remaining))
+
+
+def _notion_post(endpoint: str, body: dict, retries: int = 2, deadline: float | None = None) -> dict:
     url = f'{NOTION_API}/{endpoint}'
     for attempt in range(retries + 1):
         try:
-            resp = requests.post(url, json=body, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            resp = requests.post(url, json=body, headers=HEADERS, timeout=_request_timeout(deadline))
             if resp.status_code == 200:
                 return resp.json()
             if resp.status_code == 429:
                 wait = min(2 ** attempt, 5)
                 logger.warning(f'Notion rate limited, waiting {wait}s')
-                _time.sleep(wait)
+                _sleep(wait, deadline)
                 continue
             if attempt < retries:
-                _time.sleep(1)
+                _sleep(1, deadline)
                 continue
             raise Exception(f'Notion API {endpoint} returned {resp.status_code}')
         except requests.exceptions.Timeout:
-            if attempt < retries:
+            if attempt < retries and not _deadline_expired(deadline):
                 logger.warning(f'Notion {endpoint} timeout, retrying')
                 continue
             raise
@@ -131,16 +172,21 @@ def _record_map_stats(record_map: dict) -> tuple:
     return len(blocks), len(_find_missing_block_ids(record_map))
 
 
-def _fetch_missing_blocks(missing_ids: list) -> dict:
+def _fetch_missing_blocks(missing_ids: list, deadline: float | None = None) -> tuple:
     results = {}
     for i in range(0, len(missing_ids), 100):
+        if _deadline_expired(deadline):
+            return results, False
         batch = missing_ids[i:i + 100]
-        data = _notion_post('syncRecordValues', {
-            'requests': [
-                {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
-                for bid in batch
-            ]
-        })
+        try:
+            data = _notion_post('syncRecordValues', {
+                'requests': [
+                    {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
+                    for bid in batch
+                ]
+            }, deadline=deadline)
+        except (NotionDeadlineExceeded, requests.exceptions.Timeout):
+            return results, False
         block_data = (
             data.get('recordMap', {}).get('block')
             or data.get('recordMapWithRoles', {}).get('block')
@@ -150,25 +196,35 @@ def _fetch_missing_blocks(missing_ids: list) -> dict:
             if isinstance(bdata, dict) and bdata.get('value') is not None:
                 results[bid] = bdata
         if i + 100 < len(missing_ids):
-            _time.sleep(0.5)  # rate limit 방지
-    return results
+            try:
+                _sleep(0.5, deadline)  # rate limit 방지
+            except NotionDeadlineExceeded:
+                return results, False
+    return results, True
 
 
-def _build_record_map(page_id: str) -> dict:
+def _build_record_map(page_id: str, deadline: float | None = None) -> tuple:
     uuid = _format_uuid(page_id)
     merged = {}
+    complete = True
 
     chunk_number = 0
     cursor = {'stack': []}
 
     while True:
-        data = _notion_post('loadPageChunk', {
-            'page': {'id': uuid},
-            'limit': 100,
-            'cursor': cursor,
-            'chunkNumber': chunk_number,
-            'verticalColumns': False,
-        })
+        try:
+            data = _notion_post('loadPageChunk', {
+                'page': {'id': uuid},
+                'limit': 100,
+                'cursor': cursor,
+                'chunkNumber': chunk_number,
+                'verticalColumns': False,
+            }, deadline=deadline)
+        except (NotionDeadlineExceeded, requests.exceptions.Timeout):
+            if not merged:
+                raise
+            complete = False
+            break
 
         _merge_record_maps(merged, data.get('recordMap', {}))
 
@@ -178,24 +234,35 @@ def _build_record_map(page_id: str) -> dict:
         cursor = next_cursor
         chunk_number += 1
         if chunk_number > 50:
+            complete = False
             break
 
     _unwrap_nested_values(merged)
 
     # 누락 블록 반복 fetch (중첩 토글 자식 등 깊이 무관하게 보완)
     for _ in range(MAX_MISSING_ROUNDS):
+        if _deadline_expired(deadline):
+            complete = False
+            break
         missing = _find_missing_block_ids(merged)
         if not missing:
             break
-        fetched = _fetch_missing_blocks(missing)
+        fetched, fetch_complete = _fetch_missing_blocks(missing, deadline=deadline)
         for bid, bdata in list(fetched.items()):
             if isinstance(bdata, dict) and 'value' in bdata:
                 inner = bdata['value']
                 if isinstance(inner, dict) and 'value' in inner and 'role' in inner:
                     fetched[bid] = inner
         if not fetched:
+            complete = complete and fetch_complete
             break
         merged.setdefault('block', {}).update(fetched)
+        complete = complete and fetch_complete
+        if not fetch_complete:
+            break
+    else:
+        if _find_missing_block_ids(merged):
+            complete = False
 
     for key in ('block', 'collection', 'collection_view', 'notion_user', 'collection_query', 'signed_urls'):
         merged.setdefault(key, {})
@@ -210,16 +277,26 @@ def _build_record_map(page_id: str) -> dict:
             missing_count,
         )
 
-    return merged
+    return merged, complete
 
 
 def _refresh_cache(page_id: str):
     key = _cache_key(page_id)
     try:
-        data = _build_record_map(page_id)
+        data, complete = _build_record_map(page_id)
         new_block_count, new_missing_count = _record_map_stats(data)
         with _cache_lock:
             cached = _cache.get(key)
+            if cached and not complete:
+                cached['expires'] = _time.time() + CACHE_TTL
+                logger.warning(
+                    'Notion cache refresh incomplete: page_id=%s old_blocks=%s new_blocks=%s new_missing=%s',
+                    key,
+                    _record_map_stats(cached['data'])[0],
+                    new_block_count,
+                    new_missing_count,
+                )
+                return
             if cached:
                 old_block_count, old_missing_count = _record_map_stats(cached['data'])
                 if new_block_count < old_block_count and new_missing_count > old_missing_count:
@@ -272,7 +349,10 @@ def fetch_page(page_id: str) -> dict:
         if cached:
             return cached['data']
 
-        data = _build_record_map(key)
+        data, complete = _build_record_map(key, deadline=_deadline())
         with _cache_lock:
-            _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+            if complete:
+                _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+        if not complete:
+            threading.Thread(target=_refresh_cache, args=(key,), daemon=True).start()
         return data

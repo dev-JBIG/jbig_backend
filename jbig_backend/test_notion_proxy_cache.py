@@ -49,6 +49,8 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.original_notion_post = notion._notion_post
         self.original_thread = notion.threading.Thread
         self.original_sleep = notion._time.sleep
+        self.original_monotonic = notion._time.monotonic
+        self.original_time_budget = notion.REQUEST_TIME_BUDGET
         notion._time.sleep = lambda seconds: None
 
         user = get_user_model().objects.create_user(
@@ -65,6 +67,8 @@ class NotionProxyCacheReproductionTests(TestCase):
         notion._notion_post = self.original_notion_post
         notion.threading.Thread = self.original_thread
         notion._time.sleep = self.original_sleep
+        notion._time.monotonic = self.original_monotonic
+        notion.REQUEST_TIME_BUDGET = self.original_time_budget
         notion._cache.clear()
         notion._build_locks.clear()
 
@@ -85,7 +89,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         }
         load_page_responses = [complete, partial]
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, deadline=None):
             if endpoint == 'loadPageChunk':
                 return {
                     'recordMap': load_page_responses.pop(0),
@@ -122,7 +126,7 @@ class NotionProxyCacheReproductionTests(TestCase):
     def test_hyphenated_and_plain_page_ids_share_one_cache_entry(self):
         load_page_calls = []
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, deadline=None):
             if endpoint == 'loadPageChunk':
                 load_page_calls.append(body['page']['id'])
                 return {
@@ -148,7 +152,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         }
         child_chain['b6'] = block_record('b6')
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, deadline=None):
             if endpoint == 'loadPageChunk':
                 return {
                     'recordMap': {'block': {'root': block_record('root', ['b1'])}},
@@ -178,3 +182,56 @@ class NotionProxyCacheReproductionTests(TestCase):
         record_map = response.json()
         self.assertEqual(len(record_map['block']), 7)
         self.assertEqual(missing_block_count(record_map), 0)
+
+    def test_request_time_budget_returns_partial_result_without_caching_it(self):
+        now = {'value': 0.0}
+        sync_calls = []
+        notion.REQUEST_TIME_BUDGET = 1
+        notion._time.monotonic = lambda: now['value']
+
+        class NoStartThread:
+            def __init__(self, target, args=(), daemon=None):
+                self.target = target
+                self.args = args
+                self.daemon = daemon
+
+            def start(self):
+                pass
+
+        def fake_notion_post(endpoint, body, retries=2, deadline=None):
+            if endpoint == 'loadPageChunk':
+                now['value'] = 0.2
+                return {
+                    'recordMap': {'block': {'root': block_record('root', ['b1'])}},
+                    'cursor': {'stack': []},
+                }
+            if endpoint == 'syncRecordValues':
+                sync_calls.append([
+                    request['pointer']['id']
+                    for request in body['requests']
+                ])
+                now['value'] = 1.2
+                return {
+                    'recordMap': {
+                        'block': {
+                            'b1': block_record('b1', ['b2']),
+                        }
+                    }
+                }
+            raise AssertionError(f'unexpected endpoint: {endpoint}')
+
+        notion._notion_post = fake_notion_post
+        notion.threading.Thread = NoStartThread
+
+        with self.assertLogs('jbig_backend.notion', level='WARNING') as logs:
+            response = self.client.get(f'/api/notion/{PAGE_ID}/')
+
+        self.assertEqual(response.status_code, 200)
+        record_map = response.json()
+        self.assertEqual(set(record_map['block'].keys()), {'root', 'b1'})
+        self.assertEqual(missing_block_count(record_map), 1)
+        self.assertEqual(sync_calls, [['b1']])
+        self.assertNotIn(PAGE_ID, notion._cache)
+        self.assertTrue(
+            any('Notion record map still has missing blocks' in message for message in logs.output)
+        )
