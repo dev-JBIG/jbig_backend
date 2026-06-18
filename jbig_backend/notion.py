@@ -30,7 +30,7 @@ _build_locks_lock = threading.Lock()
 CACHE_TTL = 300  # 5분
 INCOMPLETE_CACHE_TTL = 30
 MAX_MISSING_ROUNDS = 10
-MAX_INCOMPLETE_BUILD_RETRIES = 2
+MAX_INCOMPLETE_BUILD_RETRIES = 0
 
 
 def _format_uuid(page_id: str) -> str:

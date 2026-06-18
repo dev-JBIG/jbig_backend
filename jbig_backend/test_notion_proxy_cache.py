@@ -49,6 +49,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.original_notion_post = notion._notion_post
         self.original_thread = notion.threading.Thread
         self.original_sleep = notion._time.sleep
+        self.original_max_incomplete_build_retries = notion.MAX_INCOMPLETE_BUILD_RETRIES
         notion._time.sleep = lambda seconds: None
 
         user = get_user_model().objects.create_user(
@@ -65,6 +66,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         notion._notion_post = self.original_notion_post
         notion.threading.Thread = self.original_thread
         notion._time.sleep = self.original_sleep
+        notion.MAX_INCOMPLETE_BUILD_RETRIES = self.original_max_incomplete_build_retries
         notion._cache.clear()
         notion._build_locks.clear()
 
@@ -127,6 +129,8 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.assertEqual(missing_block_count(refreshed.json()), 0)
 
     def test_initial_load_retries_incomplete_record_map_before_caching(self):
+        notion.MAX_INCOMPLETE_BUILD_RETRIES = 1
+
         partial = {
             'block': {
                 'root': block_record('root', ['a', 'b']),
