@@ -28,7 +28,9 @@ _cache_lock = threading.Lock()
 _build_locks = {}  # page_id별 빌드 락 (동시 빌드 방지)
 _build_locks_lock = threading.Lock()
 CACHE_TTL = 300  # 5분
+INCOMPLETE_CACHE_TTL = 30
 MAX_MISSING_ROUNDS = 10
+MAX_INCOMPLETE_BUILD_RETRIES = 2
 
 
 def _format_uuid(page_id: str) -> str:
@@ -131,6 +133,31 @@ def _record_map_stats(record_map: dict) -> tuple:
     return len(blocks), len(_find_missing_block_ids(record_map))
 
 
+def _prune_missing_block_refs(record_map: dict) -> int:
+    blocks = record_map.get('block', {})
+    if not isinstance(blocks, dict):
+        return 0
+
+    pruned = 0
+    for bdata in blocks.values():
+        if not isinstance(bdata, dict):
+            continue
+        value = bdata.get('value', {})
+        if not isinstance(value, dict):
+            continue
+        content = value.get('content')
+        if not isinstance(content, list):
+            continue
+        clean_content = [
+            cid for cid in content
+            if not (isinstance(cid, str) and not _has_record_value(blocks.get(cid)))
+        ]
+        if len(clean_content) != len(content):
+            pruned += len(content) - len(clean_content)
+            value['content'] = clean_content
+    return pruned
+
+
 def _fetch_missing_blocks(missing_ids: list) -> dict:
     results = {}
     for i in range(0, len(missing_ids), 100):
@@ -154,7 +181,7 @@ def _fetch_missing_blocks(missing_ids: list) -> dict:
     return results
 
 
-def _build_record_map(page_id: str) -> dict:
+def _build_record_map_once(page_id: str) -> dict:
     uuid = _format_uuid(page_id)
     merged = {}
 
@@ -201,28 +228,67 @@ def _build_record_map(page_id: str) -> dict:
         merged.setdefault(key, {})
     merged.pop('space', None)
 
-    block_count, missing_count = _record_map_stats(merged)
-    if missing_count:
-        logger.warning(
-            'Notion record map still has missing blocks: page_id=%s block_count=%s missing_count=%s',
-            page_id,
-            block_count,
-            missing_count,
-        )
-
     return merged
+
+
+def _build_record_map(page_id: str) -> tuple:
+    best = None
+    best_stats = None
+
+    for attempt in range(MAX_INCOMPLETE_BUILD_RETRIES + 1):
+        data = _build_record_map_once(page_id)
+        block_count, missing_count = _record_map_stats(data)
+        problem_count = missing_count or (1 if block_count == 0 else 0)
+        if problem_count == 0:
+            if attempt:
+                logger.info(
+                    'Notion record map recovered after retry: page_id=%s attempts=%s block_count=%s',
+                    page_id,
+                    attempt + 1,
+                    block_count,
+                )
+            return data, block_count, missing_count
+
+        if (
+            best is None
+            or problem_count < best_stats[1]
+            or (problem_count == best_stats[1] and block_count > best_stats[0])
+        ):
+            best = data
+            best_stats = (block_count, problem_count)
+
+        if attempt < MAX_INCOMPLETE_BUILD_RETRIES:
+            logger.warning(
+                'Notion record map incomplete, retrying: page_id=%s attempt=%s block_count=%s missing_count=%s',
+                page_id,
+                attempt + 1,
+                block_count,
+                problem_count,
+            )
+            _time.sleep(0.5)
+
+    block_count, missing_count = best_stats
+    pruned_count = _prune_missing_block_refs(best)
+    logger.warning(
+        'Notion record map incomplete after retries; pruned missing refs: page_id=%s block_count=%s missing_count=%s pruned_count=%s',
+        page_id,
+        block_count,
+        missing_count,
+        pruned_count,
+    )
+    return best, block_count, missing_count
 
 
 def _refresh_cache(page_id: str):
     key = _cache_key(page_id)
     try:
-        data = _build_record_map(page_id)
-        new_block_count, new_missing_count = _record_map_stats(data)
+        data, new_block_count, new_missing_count = _build_record_map(page_id)
         with _cache_lock:
             cached = _cache.get(key)
             if cached:
-                old_block_count, old_missing_count = _record_map_stats(cached['data'])
-                if new_block_count < old_block_count and new_missing_count > old_missing_count:
+                old_block_count, fallback_missing_count = _record_map_stats(cached['data'])
+                old_missing_count = cached.get('missing_count', fallback_missing_count)
+                if new_missing_count > old_missing_count:
                     cached['expires'] = _time.time() + CACHE_TTL
                     logger.warning(
                         'Notion cache refresh rejected: page_id=%s old_blocks=%s new_blocks=%s old_missing=%s new_missing=%s',
@@ -233,7 +299,12 @@ def _refresh_cache(page_id: str):
                         new_missing_count,
                     )
                     return
-            _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+            ttl = CACHE_TTL if new_missing_count == 0 else INCOMPLETE_CACHE_TTL
+            _cache[key] = {
+                'data': data,
+                'expires': _time.time() + ttl,
+                'missing_count': new_missing_count,
+            }
         logger.info(
             'Notion cache refreshed: %s (%s blocks, %s missing)',
             key,
@@ -272,7 +343,12 @@ def fetch_page(page_id: str) -> dict:
         if cached:
             return cached['data']
 
-        data = _build_record_map(key)
+        data, _block_count, missing_count = _build_record_map(key)
+        ttl = CACHE_TTL if missing_count == 0 else INCOMPLETE_CACHE_TTL
         with _cache_lock:
-            _cache[key] = {'data': data, 'expires': _time.time() + CACHE_TTL}
+            _cache[key] = {
+                'data': data,
+                'expires': _time.time() + ttl,
+                'missing_count': missing_count,
+            }
         return data

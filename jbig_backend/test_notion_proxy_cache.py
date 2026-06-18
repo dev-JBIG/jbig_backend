@@ -69,21 +69,28 @@ class NotionProxyCacheReproductionTests(TestCase):
         notion._build_locks.clear()
 
     def test_expired_cache_refresh_keeps_complete_cache_when_refresh_is_partial(self):
-        complete = {
-            'block': {
-                'root': block_record('root', ['a', 'b', 'c']),
-                'a': block_record('a'),
-                'b': block_record('b'),
-                'c': block_record('c'),
+        def complete_map():
+            return {
+                'block': {
+                    'root': block_record('root', ['a', 'b', 'c']),
+                    'a': block_record('a'),
+                    'b': block_record('b'),
+                    'c': block_record('c'),
+                }
             }
-        }
-        partial = {
-            'block': {
-                'root': block_record('root', ['a', 'b', 'c']),
-                'a': block_record('a'),
+
+        def partial_map():
+            return {
+                'block': {
+                    'root': block_record('root', ['a', 'b', 'c']),
+                    'a': block_record('a'),
+                }
             }
-        }
-        load_page_responses = [complete, partial]
+
+        load_page_responses = [complete_map()] + [
+            partial_map()
+            for _ in range(notion.MAX_INCOMPLETE_BUILD_RETRIES + 1)
+        ]
 
         def fake_notion_post(endpoint, body, retries=2):
             if endpoint == 'loadPageChunk':
@@ -118,6 +125,80 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.assertEqual(refreshed.status_code, 200)
         self.assertEqual(len(refreshed.json()['block']), 4)
         self.assertEqual(missing_block_count(refreshed.json()), 0)
+
+    def test_initial_load_retries_incomplete_record_map_before_caching(self):
+        partial = {
+            'block': {
+                'root': block_record('root', ['a', 'b']),
+                'a': block_record('a'),
+            }
+        }
+        complete = {
+            'block': {
+                'root': block_record('root', ['a', 'b']),
+                'a': block_record('a'),
+                'b': block_record('b'),
+            }
+        }
+        load_page_responses = [partial, complete]
+        load_page_calls = []
+
+        def fake_notion_post(endpoint, body, retries=2):
+            if endpoint == 'loadPageChunk':
+                load_page_calls.append(body['page']['id'])
+                return {
+                    'recordMap': load_page_responses.pop(0),
+                    'cursor': {'stack': []},
+                }
+            if endpoint == 'syncRecordValues':
+                return {'recordMap': {'block': {}}}
+            raise AssertionError(f'unexpected endpoint: {endpoint}')
+
+        notion._notion_post = fake_notion_post
+
+        response = self.client.get(f'/api/notion/{PAGE_ID}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(load_page_calls), 2)
+        self.assertEqual(len(response.json()['block']), 3)
+        self.assertEqual(missing_block_count(response.json()), 0)
+        self.assertEqual(notion._cache[PAGE_ID]['missing_count'], 0)
+
+    def test_initial_load_prunes_unresolved_children_after_bounded_retries(self):
+        def partial_map():
+            return {
+                'block': {
+                    'root': block_record('root', ['a', 'b']),
+                    'a': block_record('a'),
+                }
+            }
+
+        load_page_calls = []
+
+        def fake_notion_post(endpoint, body, retries=2):
+            if endpoint == 'loadPageChunk':
+                load_page_calls.append(body['page']['id'])
+                return {
+                    'recordMap': partial_map(),
+                    'cursor': {'stack': []},
+                }
+            if endpoint == 'syncRecordValues':
+                return {'recordMap': {'block': {}}}
+            raise AssertionError(f'unexpected endpoint: {endpoint}')
+
+        notion._notion_post = fake_notion_post
+
+        response = self.client.get(f'/api/notion/{PAGE_ID}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(load_page_calls), notion.MAX_INCOMPLETE_BUILD_RETRIES + 1)
+        self.assertEqual(response.json()['block']['root']['value']['content'], ['a'])
+        self.assertEqual(missing_block_count(response.json()), 0)
+        self.assertEqual(notion._cache[PAGE_ID]['missing_count'], 1)
+        self.assertLessEqual(
+            notion._cache[PAGE_ID]['expires'] - notion._time.time(),
+            notion.INCOMPLETE_CACHE_TTL + 1,
+        )
 
     def test_hyphenated_and_plain_page_ids_share_one_cache_entry(self):
         load_page_calls = []
