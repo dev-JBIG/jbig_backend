@@ -167,13 +167,19 @@ class NotionPageView(APIView):
         if len(clean) != 32:
             return Response({'error': '잘못된 페이지 ID입니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        from .notion import diagnostic_headers, fetch_page, new_request_diagnostics
+
+        diagnostics = new_request_diagnostics(clean)
         try:
-            from .notion import fetch_page
-            record_map = fetch_page(clean)
-            return Response(record_map)
+            record_map = fetch_page(clean, diagnostics=diagnostics)
+            response = Response(record_map)
         except Exception as e:
             logger.error(f'Notion API error: {e}')
-            return Response({'error': '페이지를 불러올 수 없습니다.'}, status=status.HTTP_502_BAD_GATEWAY)
+            response = Response({'error': '페이지를 불러올 수 없습니다.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        for header, value in diagnostic_headers(diagnostics).items():
+            response[header] = value
+        return response
 
 
 @extend_schema(tags=['Calendar'])

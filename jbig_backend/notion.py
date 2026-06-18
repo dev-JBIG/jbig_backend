@@ -33,6 +33,103 @@ MAX_MISSING_ROUNDS = 10
 MAX_INCOMPLETE_BUILD_RETRIES = 0
 
 
+def _new_diagnostics(page_id: str, source: str) -> dict:
+    return {
+        'page_id': page_id,
+        'source': source,
+        'trace_id': f'{int(_time.time() * 1000)}-{threading.get_ident()}',
+        'started_at': _time.monotonic(),
+        'endpoints': {},
+    }
+
+
+def _record_endpoint_attempt(
+    diagnostics: dict,
+    endpoint: str,
+    attempt: int,
+    elapsed_ms: int,
+    status_code=None,
+    timeout=False,
+):
+    if diagnostics is None:
+        return
+
+    stats = diagnostics['endpoints'].setdefault(endpoint, {
+        'attempts': 0,
+        'elapsed_ms': 0,
+        'timeouts': 0,
+        'statuses': {},
+    })
+    stats['attempts'] += 1
+    stats['elapsed_ms'] += elapsed_ms
+    if timeout:
+        stats['timeouts'] += 1
+    if status_code is not None:
+        stats['statuses'][status_code] = stats['statuses'].get(status_code, 0) + 1
+
+
+def _finish_diagnostics(diagnostics: dict, event: str, **fields):
+    if diagnostics is None:
+        return
+
+    diagnostics['event'] = event
+    diagnostics['elapsed_ms'] = int((_time.monotonic() - diagnostics['started_at']) * 1000)
+    diagnostics['fields'] = fields
+
+
+def new_request_diagnostics(page_id: str) -> dict:
+    return _new_diagnostics(_cache_key(page_id), 'request')
+
+
+def diagnostic_headers(diagnostics: dict) -> dict:
+    if diagnostics is None:
+        return {}
+
+    elapsed_ms = diagnostics.get('elapsed_ms')
+    if elapsed_ms is None:
+        elapsed_ms = int((_time.monotonic() - diagnostics['started_at']) * 1000)
+
+    fields = diagnostics.get('fields', {})
+    event = diagnostics.get('event', 'in_progress')
+    cache_state = {
+        'cache_hit': 'hit',
+        'cache_hit_after_lock': 'hit',
+        'cache_stale': 'stale',
+        'cache_miss_complete': 'miss',
+        'request_error': 'error',
+    }.get(event, '-')
+
+    headers = {
+        'X-Notion-Trace-Id': diagnostics['trace_id'],
+        'X-Notion-Event': event,
+        'X-Notion-Cache': cache_state,
+        'X-Notion-Elapsed-Ms': str(elapsed_ms),
+    }
+
+    if 'block_count' in fields:
+        headers['X-Notion-Block-Count'] = str(fields['block_count'])
+    if 'missing_count' in fields:
+        headers['X-Notion-Missing-Count'] = str(fields['missing_count'])
+
+    for endpoint, header_key in (
+        ('loadPageChunk', 'LoadPageChunk'),
+        ('syncRecordValues', 'SyncRecordValues'),
+    ):
+        stats = diagnostics['endpoints'].get(endpoint)
+        if not stats:
+            continue
+        statuses = ','.join(
+            f'{status}:{count}'
+            for status, count in sorted(stats['statuses'].items())
+        ) or '-'
+        headers[f'X-Notion-{header_key}-Attempts'] = str(stats['attempts'])
+        headers[f'X-Notion-{header_key}-Ms'] = str(stats['elapsed_ms'])
+        headers[f'X-Notion-{header_key}-Timeouts'] = str(stats['timeouts'])
+        headers[f'X-Notion-{header_key}-Statuses'] = statuses
+
+    return headers
+
+
 def _format_uuid(page_id: str) -> str:
     clean = re.sub(r'[^a-fA-F0-9]', '', page_id)
     if len(clean) != 32:
@@ -47,11 +144,20 @@ def _cache_key(page_id: str) -> str:
     return clean.lower()
 
 
-def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
+def _notion_post(endpoint: str, body: dict, retries: int = 2, diagnostics: dict = None) -> dict:
     url = f'{NOTION_API}/{endpoint}'
     for attempt in range(retries + 1):
+        started_at = _time.monotonic()
         try:
             resp = requests.post(url, json=body, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            elapsed_ms = int((_time.monotonic() - started_at) * 1000)
+            _record_endpoint_attempt(
+                diagnostics,
+                endpoint,
+                attempt + 1,
+                elapsed_ms,
+                status_code=resp.status_code,
+            )
             if resp.status_code == 200:
                 return resp.json()
             if resp.status_code == 429:
@@ -64,6 +170,14 @@ def _notion_post(endpoint: str, body: dict, retries: int = 2) -> dict:
                 continue
             raise Exception(f'Notion API {endpoint} returned {resp.status_code}')
         except requests.exceptions.Timeout:
+            elapsed_ms = int((_time.monotonic() - started_at) * 1000)
+            _record_endpoint_attempt(
+                diagnostics,
+                endpoint,
+                attempt + 1,
+                elapsed_ms,
+                timeout=True,
+            )
             if attempt < retries:
                 logger.warning(f'Notion {endpoint} timeout, retrying')
                 continue
@@ -158,7 +272,7 @@ def _prune_missing_block_refs(record_map: dict) -> int:
     return pruned
 
 
-def _fetch_missing_blocks(missing_ids: list) -> dict:
+def _fetch_missing_blocks(missing_ids: list, diagnostics: dict = None) -> dict:
     results = {}
     for i in range(0, len(missing_ids), 100):
         batch = missing_ids[i:i + 100]
@@ -167,7 +281,7 @@ def _fetch_missing_blocks(missing_ids: list) -> dict:
                 {'pointer': {'table': 'block', 'id': bid}, 'version': -1}
                 for bid in batch
             ]
-        })
+        }, diagnostics=diagnostics)
         block_data = (
             data.get('recordMap', {}).get('block')
             or data.get('recordMapWithRoles', {}).get('block')
@@ -181,7 +295,7 @@ def _fetch_missing_blocks(missing_ids: list) -> dict:
     return results
 
 
-def _build_record_map_once(page_id: str) -> dict:
+def _build_record_map_once(page_id: str, diagnostics: dict = None) -> dict:
     uuid = _format_uuid(page_id)
     merged = {}
 
@@ -195,7 +309,7 @@ def _build_record_map_once(page_id: str) -> dict:
             'cursor': cursor,
             'chunkNumber': chunk_number,
             'verticalColumns': False,
-        })
+        }, diagnostics=diagnostics)
 
         _merge_record_maps(merged, data.get('recordMap', {}))
 
@@ -214,7 +328,7 @@ def _build_record_map_once(page_id: str) -> dict:
         missing = _find_missing_block_ids(merged)
         if not missing:
             break
-        fetched = _fetch_missing_blocks(missing)
+        fetched = _fetch_missing_blocks(missing, diagnostics=diagnostics)
         for bid, bdata in list(fetched.items()):
             if isinstance(bdata, dict) and 'value' in bdata:
                 inner = bdata['value']
@@ -231,12 +345,12 @@ def _build_record_map_once(page_id: str) -> dict:
     return merged
 
 
-def _build_record_map(page_id: str) -> tuple:
+def _build_record_map(page_id: str, diagnostics: dict = None) -> tuple:
     best = None
     best_stats = None
 
     for attempt in range(MAX_INCOMPLETE_BUILD_RETRIES + 1):
-        data = _build_record_map_once(page_id)
+        data = _build_record_map_once(page_id, diagnostics=diagnostics)
         block_count, missing_count = _record_map_stats(data)
         problem_count = missing_count or (1 if block_count == 0 else 0)
         if problem_count == 0:
@@ -281,8 +395,9 @@ def _build_record_map(page_id: str) -> tuple:
 
 def _refresh_cache(page_id: str):
     key = _cache_key(page_id)
+    diagnostics = _new_diagnostics(key, 'refresh')
     try:
-        data, new_block_count, new_missing_count = _build_record_map(page_id)
+        data, new_block_count, new_missing_count = _build_record_map(page_id, diagnostics=diagnostics)
         with _cache_lock:
             cached = _cache.get(key)
             if cached:
@@ -311,7 +426,14 @@ def _refresh_cache(page_id: str):
             new_block_count,
             new_missing_count,
         )
+        _finish_diagnostics(
+            diagnostics,
+            'refresh_complete',
+            block_count=new_block_count,
+            missing_count=new_missing_count,
+        )
     except Exception as e:
+        _finish_diagnostics(diagnostics, 'refresh_error')
         logger.error(f'Notion cache refresh failed: {key}: {e}')
 
 
@@ -322,16 +444,32 @@ def _get_build_lock(page_id: str) -> threading.Lock:
         return _build_locks[page_id]
 
 
-def fetch_page(page_id: str) -> dict:
+def fetch_page(page_id: str, diagnostics: dict = None) -> dict:
     key = _cache_key(page_id)
+    if diagnostics is None:
+        diagnostics = new_request_diagnostics(key)
     with _cache_lock:
         cached = _cache.get(key)
 
     if cached:
         if _time.time() < cached['expires']:
+            block_count, missing_count = _record_map_stats(cached['data'])
+            _finish_diagnostics(
+                diagnostics,
+                'cache_hit',
+                block_count=block_count,
+                missing_count=missing_count,
+            )
             return cached['data']
         # 만료 → stale 반환 + 백그라운드 갱신
         threading.Thread(target=_refresh_cache, args=(key,), daemon=True).start()
+        block_count, missing_count = _record_map_stats(cached['data'])
+        _finish_diagnostics(
+            diagnostics,
+            'cache_stale',
+            block_count=block_count,
+            missing_count=missing_count,
+        )
         return cached['data']
 
     # 첫 요청 → 동기 빌드 (page별 lock으로 동시 빌드 방지)
@@ -341,9 +479,20 @@ def fetch_page(page_id: str) -> dict:
         with _cache_lock:
             cached = _cache.get(key)
         if cached:
+            block_count, missing_count = _record_map_stats(cached['data'])
+            _finish_diagnostics(
+                diagnostics,
+                'cache_hit_after_lock',
+                block_count=block_count,
+                missing_count=missing_count,
+            )
             return cached['data']
 
-        data, _block_count, missing_count = _build_record_map(key)
+        try:
+            data, block_count, missing_count = _build_record_map(key, diagnostics=diagnostics)
+        except Exception:
+            _finish_diagnostics(diagnostics, 'request_error')
+            raise
         ttl = CACHE_TTL if missing_count == 0 else INCOMPLETE_CACHE_TTL
         with _cache_lock:
             _cache[key] = {
@@ -351,4 +500,10 @@ def fetch_page(page_id: str) -> dict:
                 'expires': _time.time() + ttl,
                 'missing_count': missing_count,
             }
+        _finish_diagnostics(
+            diagnostics,
+            'cache_miss_complete',
+            block_count=block_count,
+            missing_count=missing_count,
+        )
         return data

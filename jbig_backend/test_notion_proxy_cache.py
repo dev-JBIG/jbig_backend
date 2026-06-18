@@ -94,7 +94,7 @@ class NotionProxyCacheReproductionTests(TestCase):
             for _ in range(notion.MAX_INCOMPLETE_BUILD_RETRIES + 1)
         ]
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 return {
                     'recordMap': load_page_responses.pop(0),
@@ -147,7 +147,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         load_page_responses = [partial, complete]
         load_page_calls = []
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 load_page_calls.append(body['page']['id'])
                 return {
@@ -179,7 +179,7 @@ class NotionProxyCacheReproductionTests(TestCase):
 
         load_page_calls = []
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 load_page_calls.append(body['page']['id'])
                 return {
@@ -207,7 +207,7 @@ class NotionProxyCacheReproductionTests(TestCase):
     def test_hyphenated_and_plain_page_ids_share_one_cache_entry(self):
         load_page_calls = []
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 load_page_calls.append(body['page']['id'])
                 return {
@@ -225,6 +225,11 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.assertEqual(dashed.status_code, 200)
         self.assertEqual(len(load_page_calls), 1)
         self.assertEqual(set(notion._cache.keys()), {PAGE_ID})
+        self.assertEqual(plain.headers['X-Notion-Cache'], 'miss')
+        self.assertEqual(dashed.headers['X-Notion-Cache'], 'hit')
+        self.assertEqual(plain.headers['X-Notion-Block-Count'], '1')
+        self.assertEqual(plain.headers['X-Notion-Missing-Count'], '0')
+        self.assertIn('X-Notion-Elapsed-Ms', plain.headers)
 
     def test_build_returns_successfully_after_max_missing_rounds_even_with_unresolved_child(self):
         child_chain = {
@@ -233,7 +238,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         }
         child_chain['b6'] = block_record('b6')
 
-        def fake_notion_post(endpoint, body, retries=2):
+        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 return {
                     'recordMap': {'block': {'root': block_record('root', ['b1'])}},
