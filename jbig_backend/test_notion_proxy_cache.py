@@ -94,7 +94,7 @@ class NotionProxyCacheReproductionTests(TestCase):
             for _ in range(notion.MAX_INCOMPLETE_BUILD_RETRIES + 1)
         ]
 
-        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
+        def fake_notion_post(endpoint, body, retries=1, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 return {
                     'recordMap': load_page_responses.pop(0),
@@ -147,7 +147,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         load_page_responses = [partial, complete]
         load_page_calls = []
 
-        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
+        def fake_notion_post(endpoint, body, retries=1, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 load_page_calls.append(body['page']['id'])
                 return {
@@ -179,7 +179,7 @@ class NotionProxyCacheReproductionTests(TestCase):
 
         load_page_calls = []
 
-        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
+        def fake_notion_post(endpoint, body, retries=1, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 load_page_calls.append(body['page']['id'])
                 return {
@@ -207,7 +207,7 @@ class NotionProxyCacheReproductionTests(TestCase):
     def test_hyphenated_and_plain_page_ids_share_one_cache_entry(self):
         load_page_calls = []
 
-        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
+        def fake_notion_post(endpoint, body, retries=1, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 load_page_calls.append(body['page']['id'])
                 return {
@@ -238,7 +238,7 @@ class NotionProxyCacheReproductionTests(TestCase):
         }
         child_chain['b6'] = block_record('b6')
 
-        def fake_notion_post(endpoint, body, retries=2, diagnostics=None):
+        def fake_notion_post(endpoint, body, retries=1, diagnostics=None):
             if endpoint == 'loadPageChunk':
                 return {
                     'recordMap': {'block': {'root': block_record('root', ['b1'])}},

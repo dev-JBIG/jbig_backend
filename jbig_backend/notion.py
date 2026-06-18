@@ -20,7 +20,7 @@ HEADERS = {
     'Content-Type': 'application/json',
     'User-Agent': 'Mozilla/5.0',
 }
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 15
 
 # 메모리 캐시
 _cache = {}
@@ -144,7 +144,7 @@ def _cache_key(page_id: str) -> str:
     return clean.lower()
 
 
-def _notion_post(endpoint: str, body: dict, retries: int = 2, diagnostics: dict = None) -> dict:
+def _notion_post(endpoint: str, body: dict, retries: int = 1, diagnostics: dict = None) -> dict:
     url = f'{NOTION_API}/{endpoint}'
     for attempt in range(retries + 1):
         started_at = _time.monotonic()
