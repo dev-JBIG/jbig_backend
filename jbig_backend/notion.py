@@ -223,15 +223,32 @@ def _unwrap_nested_values(record_map: dict):
             del section[k]
 
 
-def _find_missing_block_ids(record_map: dict) -> list:
+def _same_block_id(left, right) -> bool:
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    return _cache_key(left) == _cache_key(right)
+
+
+def _should_skip_block_content(block_key: str, value: dict, root_page_id: str = None) -> bool:
+    if root_page_id is None or value.get('type') != 'page':
+        return False
+    return not (
+        _same_block_id(block_key, root_page_id)
+        or _same_block_id(value.get('id'), root_page_id)
+    )
+
+
+def _find_missing_block_ids(record_map: dict, root_page_id: str = None) -> list:
     blocks = record_map.get('block', {})
     missing = []
     seen = set()
-    for bdata in blocks.values():
+    for block_key, bdata in blocks.items():
         if not isinstance(bdata, dict):
             continue
         value = bdata.get('value', {})
         if not isinstance(value, dict):
+            continue
+        if _should_skip_block_content(block_key, value, root_page_id):
             continue
         for cid in (value.get('content') or []):
             if isinstance(cid, str) and not _has_record_value(blocks.get(cid)) and cid not in seen:
@@ -240,11 +257,11 @@ def _find_missing_block_ids(record_map: dict) -> list:
     return missing
 
 
-def _record_map_stats(record_map: dict) -> tuple:
+def _record_map_stats(record_map: dict, root_page_id: str = None) -> tuple:
     blocks = record_map.get('block', {})
     if not isinstance(blocks, dict):
         return 0, 0
-    return len(blocks), len(_find_missing_block_ids(record_map))
+    return len(blocks), len(_find_missing_block_ids(record_map, root_page_id))
 
 
 def _fetch_missing_blocks(missing_ids: list, diagnostics: dict = None) -> dict:
@@ -298,9 +315,9 @@ def _build_record_map_once(page_id: str, diagnostics: dict = None) -> dict:
 
     _unwrap_nested_values(merged)
 
-    # 누락 블록 반복 fetch (중첩 토글 자식 등 깊이 무관하게 보완)
+    # 현재 페이지 안의 누락 블록만 보완하고, 하위 page 본문은 클릭 시 별도로 로드한다.
     for _ in range(MAX_MISSING_ROUNDS):
-        missing = _find_missing_block_ids(merged)
+        missing = _find_missing_block_ids(merged, page_id)
         if not missing:
             break
         fetched = _fetch_missing_blocks(missing, diagnostics=diagnostics)
@@ -325,7 +342,7 @@ def _build_record_map(page_id: str, diagnostics: dict = None) -> tuple:
 
     for attempt in range(MAX_INCOMPLETE_BUILD_RETRIES + 1):
         data = _build_record_map_once(page_id, diagnostics=diagnostics)
-        block_count, missing_count = _record_map_stats(data)
+        block_count, missing_count = _record_map_stats(data, page_id)
         problem_count = missing_count or (1 if block_count == 0 else 0)
         if problem_count == 0:
             if attempt:
@@ -379,7 +396,7 @@ def _refresh_cache(page_id: str):
         with _cache_lock:
             cached = _cache.get(key)
             if cached:
-                old_block_count, fallback_missing_count = _record_map_stats(cached['data'])
+                old_block_count, fallback_missing_count = _record_map_stats(cached['data'], key)
                 old_missing_count = cached.get('missing_count', fallback_missing_count)
                 if new_missing_count > old_missing_count:
                     cached['expires'] = _time.time() + CACHE_TTL
@@ -435,7 +452,7 @@ def fetch_page(page_id: str, diagnostics: dict = None) -> dict:
 
     if cached:
         if _time.time() < cached['expires']:
-            block_count, missing_count = _record_map_stats(cached['data'])
+            block_count, missing_count = _record_map_stats(cached['data'], key)
             _finish_diagnostics(
                 diagnostics,
                 'cache_hit',
@@ -445,7 +462,7 @@ def fetch_page(page_id: str, diagnostics: dict = None) -> dict:
             return cached['data']
         # 만료 → stale 반환 + 백그라운드 갱신
         threading.Thread(target=_refresh_cache, args=(key,), daemon=True).start()
-        block_count, missing_count = _record_map_stats(cached['data'])
+        block_count, missing_count = _record_map_stats(cached['data'], key)
         _finish_diagnostics(
             diagnostics,
             'cache_stale',
@@ -461,7 +478,7 @@ def fetch_page(page_id: str, diagnostics: dict = None) -> dict:
         with _cache_lock:
             cached = _cache.get(key)
         if cached:
-            block_count, missing_count = _record_map_stats(cached['data'])
+            block_count, missing_count = _record_map_stats(cached['data'], key)
             _finish_diagnostics(
                 diagnostics,
                 'cache_hit_after_lock',

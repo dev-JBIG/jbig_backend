@@ -28,6 +28,31 @@ class NotionRecordMapTests(SimpleTestCase):
             ['child-page'],
         )
 
+    def test_find_missing_blocks_stops_at_nested_page_content(self):
+        record_map = {
+            'block': {
+                'root-page': {
+                    'value': {
+                        'id': 'root-page',
+                        'type': 'page',
+                        'content': ['lesson-page', 'missing-root-child'],
+                    }
+                },
+                'lesson-page': {
+                    'value': {
+                        'id': 'lesson-page',
+                        'type': 'page',
+                        'content': ['lesson-body'],
+                    }
+                },
+            }
+        }
+
+        self.assertEqual(
+            _find_missing_block_ids(record_map, root_page_id='root-page'),
+            ['missing-root-child'],
+        )
+
     def test_merge_does_not_downgrade_existing_block_value(self):
         record_map = {
             'block': {

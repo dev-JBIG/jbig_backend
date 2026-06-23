@@ -16,6 +16,13 @@ def block_record(block_id, content=None):
     return {'value': value}
 
 
+def page_record(block_id, content=None):
+    value = {'id': block_id, 'type': 'page'}
+    if content is not None:
+        value['content'] = content
+    return {'value': value}
+
+
 def missing_block_count(record_map):
     blocks = record_map.get('block', {})
     missing = 0
@@ -201,6 +208,34 @@ class NotionProxyCacheReproductionTests(TestCase):
         self.assertEqual(response.headers['X-Notion-Block-Count'], '2')
         self.assertEqual(response.headers['X-Notion-Missing-Count'], '1')
         self.assertNotIn(PAGE_ID, notion._cache)
+
+    def test_initial_load_does_not_hydrate_nested_page_contents(self):
+        sync_calls = []
+
+        def fake_notion_post(endpoint, body, retries=1, diagnostics=None):
+            if endpoint == 'loadPageChunk':
+                return {
+                    'recordMap': {
+                        'block': {
+                            PAGE_ID: page_record(PAGE_ID, ['lesson-page']),
+                            'lesson-page': page_record('lesson-page', ['lesson-body']),
+                        }
+                    },
+                    'cursor': {'stack': []},
+                }
+            if endpoint == 'syncRecordValues':
+                sync_calls.append(body['requests'])
+                return {'recordMap': {'block': {}}}
+            raise AssertionError(f'unexpected endpoint: {endpoint}')
+
+        notion._notion_post = fake_notion_post
+
+        response = self.client.get(f'/api/notion/{PAGE_ID}/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['X-Notion-Missing-Count'], '0')
+        self.assertEqual(sync_calls, [])
+        self.assertEqual(set(response.json()['block'].keys()), {PAGE_ID, 'lesson-page'})
 
     def test_hyphenated_and_plain_page_ids_share_one_cache_entry(self):
         load_page_calls = []
