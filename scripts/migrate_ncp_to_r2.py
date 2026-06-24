@@ -99,19 +99,22 @@ def main():
     for page in paginator.paginate(Bucket=src_bucket, Prefix=args.prefix):
         for obj in page.get('Contents', []):
             key = obj['Key']
+            # 레거시 역슬래시 key는 대상에서 '/'로 정규화 (공개 URL 호환)
+            dst_key = key.replace('\\', '/')
             size = obj['Size']
             total += 1
 
             if not args.overwrite:
-                existing = dest_size(dst, dst_bucket, key)
+                existing = dest_size(dst, dst_bucket, dst_key)
                 if existing == size:
                     skipped += 1
-                    print(f"  SKIP  {key}  ({size} B, 이미 존재)")
+                    print(f"  SKIP  {dst_key}  ({size} B, 이미 존재)")
                     continue
 
             if args.dry_run:
                 copied += 1
-                print(f"  COPY* {key}  ({size} B)   [dry-run]")
+                tag = "  (정규화)" if dst_key != key else ""
+                print(f"  COPY* {dst_key}  ({size} B)   [dry-run]{tag}")
                 continue
 
             try:
@@ -120,10 +123,10 @@ def main():
                 extra = {}
                 if head.get('ContentType'):
                     extra['ContentType'] = head['ContentType']
-                dst.upload_fileobj(body, dst_bucket, key, ExtraArgs=extra or None)
+                dst.upload_fileobj(body, dst_bucket, dst_key, ExtraArgs=extra or None)
                 copied += 1
                 copied_bytes += size
-                print(f"  COPY  {key}  ({size} B)")
+                print(f"  COPY  {dst_key}  ({size} B)")
             except Exception as e:  # noqa: BLE001
                 failed += 1
                 print(f"  FAIL  {key}: {e}", file=sys.stderr)

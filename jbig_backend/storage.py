@@ -47,6 +47,8 @@ def public_media_url(file_key: str) -> str | None:
         return None
     if file_key.startswith('http://') or file_key.startswith('https://'):
         return file_key
+    # 레거시 역슬래시 key 정규화(공개 URL 경로에서 역슬래시는 브라우저가 '/'로 바꿔 깨짐)
+    file_key = file_key.replace('\\', '/')
     if settings.USE_LOCAL_STORAGE:
         return f'{settings.MEDIA_URL}{file_key}'
     if settings.MEDIA_PUBLIC_BASE_URL:

@@ -67,7 +67,10 @@ def get_presigned_attachments(attachments_list):
     for item in attachments_list:
         file_key = item.get('path') or item.get('url')
         name = item.get('name')
-        if not file_key or not name or not file_key.startswith("uploads/"):
+        if not file_key or not name:
+            continue
+        file_key = file_key.replace('\\', '/')  # 레거시 역슬래시 key 정규화
+        if not file_key.startswith("uploads/"):
             continue
         try:
             meta = s3_client.head_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
@@ -691,7 +694,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 return match.group(0)
             return f"{alt_text}({public_media_url(file_key)})"
 
-        pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
+        pattern = r'(!\[.*?\])\(ncp-key://(uploads[\\/][^\s\)]+)\)'
         return re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
 
     def get_attachment_paths(self, obj):
@@ -789,7 +792,7 @@ class DraftSerializer(serializers.ModelSerializer):
                 return match.group(0)
             return f"{alt_text}({public_media_url(file_key)})"
 
-        pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
+        pattern = r'(!\[.*?\])\(ncp-key://(uploads[\\/][^\s\)]+)\)'
         data['content_md'] = re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
         return data
 
