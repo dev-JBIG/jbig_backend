@@ -67,6 +67,27 @@ NCP_BUCKET_NAME = os.getenv('NCP_BUCKET_NAME')
 NCP_ENDPOINT_URL = os.getenv('NCP_ENDPOINT_URL')
 NCP_REGION_NAME = os.getenv('NCP_REGION_NAME')
 
+# ── 오브젝트 스토리지 (S3 호환: NCP Object Storage / Cloudflare R2) ──────────
+# R2로 이전 시 STORAGE_* 환경변수만 R2 값으로 교체하면 된다.
+# (하위호환: STORAGE_* 가 없으면 기존 NCP_* 값을 그대로 사용)
+STORAGE_ENDPOINT_URL = os.getenv('STORAGE_ENDPOINT_URL', NCP_ENDPOINT_URL)
+STORAGE_ACCESS_KEY_ID = os.getenv('STORAGE_ACCESS_KEY_ID', NCP_ACCESS_KEY_ID)
+STORAGE_SECRET_KEY = os.getenv('STORAGE_SECRET_KEY', NCP_SECRET_KEY)
+STORAGE_BUCKET_NAME = os.getenv('STORAGE_BUCKET_NAME', NCP_BUCKET_NAME)
+# R2는 region이 'auto'
+STORAGE_REGION_NAME = os.getenv('STORAGE_REGION_NAME', NCP_REGION_NAME or 'auto')
+
+# 미디어 공개(CDN) 베이스 URL.
+#  - 설정 시: 읽기 URL이 "{MEDIA_PUBLIC_BASE_URL}/{key}" 형태의 고정 URL이 되어 CDN 캐시가 동작.
+#    예) https://cdn.jbig.co.kr  (R2 버킷에 연결된 Cloudflare 커스텀 도메인)
+#  - 미설정 시: 기존 "{endpoint}/{bucket}/{key}" 공개 URL로 폴백.
+MEDIA_PUBLIC_BASE_URL = os.getenv('MEDIA_PUBLIC_BASE_URL', '').rstrip('/')
+
+# 객체 단위 ACL 지원 여부.
+#  - NCP Object Storage: 지원(True) → put_object_acl 로 public-read 설정
+#  - Cloudflare R2: 미지원(False) → 공개는 버킷에 연결된 커스텀 도메인 단위로 처리
+STORAGE_SUPPORTS_ACL = get_env_bool('STORAGE_SUPPORTS_ACL', True)
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 

@@ -19,20 +19,41 @@ _thread_local = threading.local()
 
 
 def get_s3_client():
-    """NCP용 thread-local S3 클라이언트 반환"""
+    """S3 호환 스토리지(NCP / R2)용 thread-local 클라이언트 반환"""
     if not hasattr(_thread_local, 's3_client'):
         _thread_local.s3_client = boto3.client(
             's3',
-            endpoint_url=settings.NCP_ENDPOINT_URL,
-            aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.NCP_SECRET_KEY,
+            endpoint_url=settings.STORAGE_ENDPOINT_URL,
+            aws_access_key_id=settings.STORAGE_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.STORAGE_SECRET_KEY,
             config=Config(
                 signature_version='s3v4',
                 s3={'addressing_style': 'path'},
-                region_name=settings.NCP_REGION_NAME,
+                region_name=settings.STORAGE_REGION_NAME,
             ),
         )
     return _thread_local.s3_client
+
+
+def public_media_url(file_key: str) -> str | None:
+    """파일 key를 공개(CDN) URL로 변환한다.
+
+    - 로컬               : /media/<key>
+    - MEDIA_PUBLIC_BASE_URL 설정 시: <base>/<key>  (Cloudflare CDN 등 고정 URL → 캐시 가능)
+    - 미설정 시          : <endpoint>/<bucket>/<key>  (기존 공개 URL 폴백)
+    이미 http(s) URL이면 그대로 반환한다.
+    """
+    if not file_key:
+        return None
+    if file_key.startswith('http://') or file_key.startswith('https://'):
+        return file_key
+    # 레거시 역슬래시 key 정규화(공개 URL 경로에서 역슬래시는 브라우저가 '/'로 바꿔 깨짐)
+    file_key = file_key.replace('\\', '/')
+    if settings.USE_LOCAL_STORAGE:
+        return f'{settings.MEDIA_URL}{file_key}'
+    if settings.MEDIA_PUBLIC_BASE_URL:
+        return f'{settings.MEDIA_PUBLIC_BASE_URL}/{file_key}'
+    return f'{settings.STORAGE_ENDPOINT_URL}/{settings.STORAGE_BUCKET_NAME}/{file_key}'
 
 
 # ── 공용 인터페이스 ──────────────────────────────────────────────
@@ -61,14 +82,13 @@ def generate_presigned_upload_url(file_key: str, request=None, expires_in: int =
     s3_client = get_s3_client()
     upload_url = s3_client.generate_presigned_url(
         'put_object',
-        Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
+        Params={'Bucket': settings.STORAGE_BUCKET_NAME, 'Key': file_key},
         ExpiresIn=expires_in,
     )
-    public_url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
     return {
         'upload_url': upload_url,
         'file_key': file_key,
-        'url': public_url,
+        'url': public_media_url(file_key),
     }
 
 
@@ -89,7 +109,7 @@ def generate_presigned_download_url(file_key: str, expires_in: int = 3600) -> st
         s3_client = get_s3_client()
         return s3_client.generate_presigned_url(
             'get_object',
-            Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key},
+            Params={'Bucket': settings.STORAGE_BUCKET_NAME, 'Key': file_key},
             ExpiresIn=expires_in,
         )
     except Exception as e:
@@ -115,7 +135,7 @@ def delete_file(file_key: str) -> bool:
 
     try:
         s3_client = get_s3_client()
-        s3_client.delete_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
+        s3_client.delete_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
         logger.info(f"NCP 파일 삭제 완료: {file_key}")
         return True
     except ClientError as e:
@@ -130,14 +150,18 @@ def delete_files(file_keys: set[str]) -> None:
 
 
 def set_public_acl(file_key: str) -> bool:
-    """파일에 public-read ACL을 설정한다. 로컬에서는 no-op."""
+    """파일에 public-read ACL을 설정한다. 로컬/ACL 미지원 스토리지에서는 no-op."""
     if settings.USE_LOCAL_STORAGE:
+        return True
+
+    # R2 등 객체 ACL 미지원 스토리지: 공개는 도메인 단위로 처리되므로 no-op.
+    if not settings.STORAGE_SUPPORTS_ACL:
         return True
 
     try:
         s3_client = get_s3_client()
         s3_client.put_object_acl(
-            Bucket=settings.NCP_BUCKET_NAME, Key=file_key, ACL='public-read'
+            Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key, ACL='public-read'
         )
         return True
     except ClientError as e:
@@ -152,7 +176,7 @@ def file_exists(file_key: str) -> bool:
 
     try:
         s3_client = get_s3_client()
-        s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
+        s3_client.head_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
         return True
     except ClientError:
         return False
