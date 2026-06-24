@@ -2,7 +2,7 @@ import logging
 
 from rest_framework import serializers
 from .models import CalendarEvent, Popup
-from .storage import generate_presigned_download_url
+from .storage import public_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +50,10 @@ class PopupSerializer(serializers.ModelSerializer):
         return data
 
     def get_image_url(self, obj):
-        """NCP 경로를 Presigned URL로 변환 (로컬이면 /media/ URL)"""
+        """저장된 key를 공개(CDN) URL로 변환 (로컬이면 /media/ URL)"""
         if not obj.image_url:
             return None
-        return generate_presigned_download_url(obj.image_url)
+        return public_media_url(obj.image_url)
 
     def get_auto_generated(self, obj):
         return obj.source_post_id is not None

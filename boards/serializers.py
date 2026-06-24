@@ -1,9 +1,7 @@
 import re
 import logging
 
-import boto3
 import bleach
-from botocore.client import Config
 from botocore.exceptions import ClientError
 
 from django.conf import settings
@@ -11,6 +9,7 @@ from django.db import transaction
 from rest_framework import serializers
 
 from .models import Category, Board, Post, Comment, Notification, Draft, generate_anonymous_nickname
+from jbig_backend.storage import get_s3_client, public_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -50,30 +49,12 @@ def sanitize_markdown(value: str) -> str:
     )
 
 
-# Thread-local storage for S3 client (process/fork 안전)
-import threading
-_thread_local = threading.local()
-
-
-def get_s3_client():
-    """
-    Thread-local S3 클라이언트 반환.
-    각 스레드/프로세스별로 독립적인 클라이언트를 유지하여
-    gunicorn prefork 등 멀티프로세스 환경에서도 안전하게 동작.
-    """
-    if not hasattr(_thread_local, 's3_client'):
-        _thread_local.s3_client = boto3.client(
-            's3',
-            endpoint_url=settings.NCP_ENDPOINT_URL,
-            aws_access_key_id=settings.NCP_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.NCP_SECRET_KEY,
-            config=Config(signature_version='s3v4', s3={'addressing_style': 'path'}, region_name=settings.NCP_REGION_NAME)
-        )
-    return _thread_local.s3_client
-
-
 def get_presigned_attachments(attachments_list):
-    """첨부파일 목록에 대해 presigned URL을 생성하는 공통 함수"""
+    """첨부파일 목록을 공개(CDN) URL + 메타로 변환하는 공통 함수.
+
+    URL은 고정 공개 URL(public_media_url)이라 CDN 캐시가 동작한다.
+    size 표시를 위해 head_object 만 호출한다(메타데이터 조회, egress 아님).
+    """
     if not attachments_list or not isinstance(attachments_list, list):
         return []
     try:
@@ -89,9 +70,9 @@ def get_presigned_attachments(attachments_list):
         if not file_key or not name or not file_key.startswith("uploads/"):
             continue
         try:
-            meta = s3_client.head_object(Bucket=settings.NCP_BUCKET_NAME, Key=file_key)
+            meta = s3_client.head_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
             presigned_attachments.append({
-                "url": s3_client.generate_presigned_url('get_object', Params={'Bucket': settings.NCP_BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600),
+                "url": public_media_url(file_key),
                 "name": name,
                 "size": meta.get('ContentLength')
             })
@@ -708,8 +689,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
             file_key = match.group(2)
             if not file_key:
                 return match.group(0)
-            url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
-            return f"{alt_text}({url})"
+            return f"{alt_text}({public_media_url(file_key)})"
 
         pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
         return re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
@@ -807,8 +787,7 @@ class DraftSerializer(serializers.ModelSerializer):
             file_key = match.group(2)
             if not file_key:
                 return match.group(0)
-            url = f"{settings.NCP_ENDPOINT_URL}/{settings.NCP_BUCKET_NAME}/{file_key}"
-            return f"{alt_text}({url})"
+            return f"{alt_text}({public_media_url(file_key)})"
 
         pattern = r'(!\[.*?\])\(ncp-key://(uploads/[^\s\)]+)\)'
         data['content_md'] = re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
