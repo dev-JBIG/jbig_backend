@@ -16,6 +16,7 @@ from .views import (
     PublicProfileView,
     ResumeUpdateView,
     ProfileBlocksUpdateView,
+    ProfileHtmlUpdateView,
     DeleteAccountView,
 )
 
@@ -27,6 +28,7 @@ urlpatterns = [
     path('token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('profile/blocks/', ProfileBlocksUpdateView.as_view(), name='profile-blocks-update'),
+    path('profile/html/', ProfileHtmlUpdateView.as_view(), name='profile-html-update'),
     path('profile/<str:username>/', PublicProfileView.as_view(), name='public-profile'),
     path('profile/', ResumeUpdateView.as_view(), name='resume-update'),
     path('delete-account/', DeleteAccountView.as_view(), name='delete-account'),

@@ -20,7 +20,8 @@ from .serializers import (
     PasswordResetSerializer,
     PublicProfileSerializer,
     ResumeUpdateSerializer,
-    ProfileBlocksUpdateSerializer
+    ProfileBlocksUpdateSerializer,
+    ProfileHtmlUpdateSerializer
 )
 from .models import User, EmailVerificationCode
 from .password_reset_token import (
@@ -862,6 +863,24 @@ class ResumeUpdateView(generics.UpdateAPIView):
 class ProfileBlocksUpdateView(generics.UpdateAPIView):
     queryset = User.objects.all()
     serializer_class = ProfileBlocksUpdateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+
+@extend_schema(
+    tags=["사용자"],
+    summary="프로필 방식/HTML 수정",
+    description="본인의 프로필 방식(blocks/html) 및 업로드된 raw HTML을 수정합니다.",
+    request=ProfileHtmlUpdateSerializer
+)
+class ProfileHtmlUpdateView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = ProfileHtmlUpdateSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):

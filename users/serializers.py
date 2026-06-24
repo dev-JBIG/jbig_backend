@@ -244,15 +244,20 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     last_login = serializers.SerializerMethodField()
     posts = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
+    profile_html = serializers.SerializerMethodField()
 
     username=serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('username', 'email_id', 'semester', 'resume', 'profile_blocks', 'date_joined', 'last_login', 'is_self', 'posts', 'comments')
+        fields = ('username', 'email_id', 'semester', 'resume', 'profile_blocks', 'profile_type', 'profile_html', 'date_joined', 'last_login', 'is_self', 'posts', 'comments')
 
     def get_username(self, obj):
         return obj.username
+
+    def get_profile_html(self, obj):
+        # HTML 방식일 때만 본문 전송 (블록 방식이면 불필요한 대용량 전송 방지)
+        return obj.profile_html if obj.profile_type == User.PROFILE_TYPE_HTML else ''
 
     def get_email_id(self, obj):
         return obj.email.split('@')[0] if obj.email else ''
@@ -370,4 +375,30 @@ class ProfileBlocksUpdateSerializer(serializers.ModelSerializer):
             data = block.get('data')
             if isinstance(data, dict) and isinstance(data.get('markdown'), str):
                 data['markdown'] = sanitize_markdown(data['markdown'])
+        return value
+
+
+MAX_PROFILE_HTML_SIZE = 2 * 1024 * 1024  # 2MB (base64 인라인 이미지 포함 여유분)
+
+
+class ProfileHtmlUpdateSerializer(serializers.ModelSerializer):
+    """프로필 방식(blocks/html) 및 업로드된 raw HTML 수정."""
+
+    class Meta:
+        model = User
+        fields = ('profile_type', 'profile_html')
+
+    def validate_profile_type(self, value):
+        valid = {choice[0] for choice in User.PROFILE_TYPE_CHOICES}
+        if value not in valid:
+            raise serializers.ValidationError(f"허용되지 않는 프로필 방식입니다: {value}")
+        return value
+
+    def validate_profile_html(self, value):
+        value = value or ''
+        # bytes 기준 크기 제한 (멀티바이트 문자 고려)
+        if len(value.encode('utf-8')) > MAX_PROFILE_HTML_SIZE:
+            raise serializers.ValidationError(
+                f"HTML은 {MAX_PROFILE_HTML_SIZE // (1024 * 1024)}MB 이하여야 합니다."
+            )
         return value

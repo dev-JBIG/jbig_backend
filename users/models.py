@@ -45,6 +45,19 @@ class User(AbstractUser):
     password_changed_at = models.DateTimeField(null=True, blank=True)
     resume = models.TextField(blank=True, default='', verbose_name='자기소개')
     profile_blocks = models.JSONField(default=list, blank=True, verbose_name='프로필 블록')
+    PROFILE_TYPE_BLOCKS = 'blocks'
+    PROFILE_TYPE_HTML = 'html'
+    PROFILE_TYPE_CHOICES = (
+        (PROFILE_TYPE_BLOCKS, '블록'),
+        (PROFILE_TYPE_HTML, 'HTML'),
+    )
+    profile_type = models.CharField(
+        max_length=10,
+        choices=PROFILE_TYPE_CHOICES,
+        default=PROFILE_TYPE_BLOCKS,
+        verbose_name='프로필 방식',
+    )
+    profile_html = models.TextField(blank=True, default='', verbose_name='프로필 HTML')
 
     objects = UserManager()
 
