@@ -1,7 +1,7 @@
 """
-스토리지 유틸리티 — NCP Object Storage / 로컬 파일시스템 자동 전환
+스토리지 유틸리티 — S3 호환 오브젝트 스토리지(Cloudflare R2) / 로컬 파일시스템 자동 전환
 
-.env에 NCP 키가 있으면 NCP, 없으면 로컬 media/ 디렉토리를 사용한다.
+USE_LOCAL_STORAGE=False 이면 R2(STORAGE_* 환경변수), True 이면 로컬 media/ 디렉토리를 사용한다.
 """
 import os
 import logging
@@ -14,12 +14,12 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# ── NCP S3 클라이언트 (thread-local) ──────────────────────────────
+# ── S3 호환 스토리지 클라이언트 (thread-local) ──────────────────────────────
 _thread_local = threading.local()
 
 
 def get_s3_client():
-    """S3 호환 스토리지(NCP / R2)용 thread-local 클라이언트 반환"""
+    """S3 호환 스토리지(Cloudflare R2)용 thread-local 클라이언트 반환"""
     if not hasattr(_thread_local, 's3_client'):
         _thread_local.s3_client = boto3.client(
             's3',
@@ -62,8 +62,8 @@ def generate_presigned_upload_url(file_key: str, request=None, expires_in: int =
     """
     업로드용 URL + 메타 정보를 반환한다.
 
-    로컬 모드: upload_url = http://localhost:8000/api/local-upload/<file_key>  (PUT)
-    NCP 모드 : upload_url = presigned PUT URL
+    로컬 모드   : upload_url = http://localhost:8000/api/local-upload/<file_key>  (PUT)
+    스토리지 모드: upload_url = presigned PUT URL
     """
     if settings.USE_LOCAL_STORAGE:
         path = f'/api/local-upload/{file_key}'
@@ -136,10 +136,10 @@ def delete_file(file_key: str) -> bool:
     try:
         s3_client = get_s3_client()
         s3_client.delete_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
-        logger.info(f"NCP 파일 삭제 완료: {file_key}")
+        logger.info(f"스토리지 파일 삭제 완료: {file_key}")
         return True
     except ClientError as e:
-        logger.error(f"NCP 파일 삭제 실패 (Key: {file_key}): {e}")
+        logger.error(f"스토리지 파일 삭제 실패 (Key: {file_key}): {e}")
         return False
 
 

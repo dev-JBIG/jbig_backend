@@ -52,7 +52,7 @@ class Popup(models.Model):
     )
     title = models.CharField(max_length=255, verbose_name='팝업 제목')
     content = models.TextField(blank=True, verbose_name='팝업 내용')
-    image_url = models.CharField(max_length=500, blank=True, null=True, verbose_name='이미지 경로 (NCP key)')
+    image_url = models.CharField(max_length=500, blank=True, null=True, verbose_name='이미지 경로 (스토리지 key)')
     start_date = models.DateTimeField(verbose_name='시작 일시')
     end_date = models.DateTimeField(verbose_name='종료 일시')
     is_active = models.BooleanField(default=True, verbose_name='활성 여부')

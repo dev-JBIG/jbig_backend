@@ -424,17 +424,18 @@ class PostListSerializer(serializers.ModelSerializer):
         return get_presigned_attachments(obj.attachment_paths)
 
 
-def normalize_ncp_urls(content):
-    """NCP presigned URL을 ncp-key:// 형식으로 정규화
+def normalize_media_urls(content):
+    """본문의 퍼블릭/CDN 이미지 URL을 ncp-key:// 키 형식으로 정규화한다.
 
-    다양한 NCP 엔드포인트/버킷명을 지원하도록 유연한 패턴 사용
+    R2 엔드포인트, Cloudflare CDN 커스텀 도메인, 구 NCP 등 어떤 스토리지의
+    퍼블릭 URL이든 ".../uploads/<key>" 형태이면 내부 키(ncp-key://uploads/...)로
+    환원해 저장한다. 도메인이 바뀌어도 저장 포맷이 일정해, 첨부 삭제 추적과
+    공개 URL 변환이 일관되게 동작한다.
+    (ncp-key:// 는 기존 데이터와의 호환을 위해 유지하는 벤더 중립적 키 마커다.)
     """
     if not content:
         return content
-    # 다양한 NCP Object Storage URL 패턴 지원:
-    # - https://kr.object.ncloudstorage.com/버킷명/uploads/...
-    # - https://*.ncloudstorage.com/버킷명/uploads/...
-    pattern = r'https://[^/]+\.ncloudstorage\.com/[^/]+/(uploads/[^?\s\)]+)(?:\?[^\s\)]*)?'
+    pattern = r'https?://[^\s\)]+?/(uploads/[^?\s\)]+)(?:\?[^\s\)]*)?'
     return re.sub(pattern, r'ncp-key://\1', content)
 
 
@@ -570,7 +571,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         """
         첨부 경로는 반드시 요청자 본인이 업로드한 파일만 허용한다.
         경로 포맷: `uploads/<y>/<m>/<d>/<user_id>/<uuid>.<ext>` — 서버에서 생성되는 형식.
-        타인의 파일을 첨부 후 게시글 삭제 시점에 해당 파일이 NCP에서 연쇄 삭제되는
+        타인의 파일을 첨부 후 게시글 삭제 시점에 해당 파일이 스토리지에서 연쇄 삭제되는
         cross-user file-deletion 공격을 차단한다.
         """
         request = self.context.get('request')
@@ -679,7 +680,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         board = validated_data.get('board')
 
         post = Post(**validated_data)
-        post.content_md = sanitize_markdown(normalize_ncp_urls(content_md))
+        post.content_md = sanitize_markdown(normalize_media_urls(content_md))
         if is_link_share_board(board):
             metadata = fetch_open_graph_metadata(link_url)
             parsed = urlparse(link_url)
@@ -734,7 +735,7 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
             target_board = Board.objects.filter(id=board_id).first() or target_board
 
         if content_md is not None:
-            instance.content_md = sanitize_markdown(normalize_ncp_urls(content_md))
+            instance.content_md = sanitize_markdown(normalize_media_urls(content_md))
 
         if attachment_paths is not None:
             instance.attachment_paths = attachment_paths
@@ -1016,7 +1017,7 @@ class DraftSerializer(serializers.ModelSerializer):
             defaults={
                 'board': board,
                 'title': validated_data.get('title', ''),
-                'content_md': sanitize_markdown(normalize_ncp_urls(validated_data.get('content_md', ''))),
+                'content_md': sanitize_markdown(normalize_media_urls(validated_data.get('content_md', ''))),
                 'uploaded_paths': validated_data.get('uploaded_paths', [])
             }
         )
@@ -1029,7 +1030,7 @@ class DraftSerializer(serializers.ModelSerializer):
         
         instance.title = validated_data.get('title', instance.title)
         content_md = validated_data.get('content_md', instance.content_md)
-        instance.content_md = sanitize_markdown(normalize_ncp_urls(content_md))
+        instance.content_md = sanitize_markdown(normalize_media_urls(content_md))
         instance.uploaded_paths = validated_data.get('uploaded_paths', instance.uploaded_paths)
         instance.save()
         return instance

@@ -528,7 +528,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
-        """게시글 수정 시 제거된 파일들을 NCP에서 삭제"""
+        """게시글 수정 시 제거된 파일들을 스토리지에서 삭제"""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
@@ -578,7 +578,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         # 삭제할 파일 키 계산 (기존에 있었지만 새로운 버전에 없는 것)
         keys_to_delete = (old_attachment_keys - new_attachment_keys) | (old_content_keys - new_content_keys)
 
-        # 삭제된 파일 제거 (NCP 또는 로컬)
+        # 삭제된 파일 제거 (스토리지 또는 로컬)
         if keys_to_delete:
             delete_files(keys_to_delete)
 
@@ -590,7 +590,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
-        """게시글 삭제 시 NCP에 저장된 파일들도 함께 삭제"""
+        """게시글 삭제 시 스토리지에 저장된 파일들도 함께 삭제"""
         instance = self.get_object()
         author_id = getattr(instance.author, 'id', None)
 
@@ -614,8 +614,8 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
                         keys_to_delete.append(file_key)
 
         if instance.content_md:
-            ncp_keys = re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md)
-            keys_to_delete.extend(k for k in ncp_keys if _is_owned(k))
+            content_keys = re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md)
+            keys_to_delete.extend(k for k in content_keys if _is_owned(k))
 
         if keys_to_delete:
             delete_files(set(keys_to_delete))
@@ -799,7 +799,7 @@ MAX_EXTENSION_LENGTH = 10
 @extend_schema(
     tags=['파일'],
     summary="업로드된 파일 삭제",
-    description="NCP Object Storage에 업로드된 파일을 삭제합니다. 본인이 업로드한 파일만 삭제할 수 있습니다.",
+    description="오브젝트 스토리지에 업로드된 파일을 삭제합니다. 본인이 업로드한 파일만 삭제할 수 있습니다.",
     request={
         'application/json': {
             'type': 'object',
@@ -817,7 +817,7 @@ MAX_EXTENSION_LENGTH = 10
     }
 )
 class DeleteFileAPIView(APIView):
-    """업로드된 파일을 NCP에서 삭제하는 API"""
+    """업로드된 파일을 스토리지에서 삭제하는 API"""
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, *args, **kwargs):
@@ -869,7 +869,7 @@ class DeleteFileAPIView(APIView):
         if not file_exists(file_key):
             return Response({"error": "File not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # 파일 삭제 (NCP 또는 로컬)
+        # 파일 삭제 (스토리지 또는 로컬)
         if delete_file(file_key):
             return Response({"message": "File deleted successfully."}, status=status.HTTP_200_OK)
         else:
@@ -917,7 +917,7 @@ class ConfirmUploadAPIView(APIView):
 @extend_schema(
     tags=['파일'], # API 문서에서 '파일' 태그로 분류
     summary="파일 업로드용 Presigned URL 생성",
-    description="NCP Object Storage에 파일을 직접 업로드할 수 있는 10분 만료 Presigned URL을 발급받습니다.",
+    description="오브젝트 스토리지에 파일을 직접 업로드할 수 있는 10분 만료 Presigned URL을 발급받습니다.",
     request={
         'application/json': {
             'type': 'object',
@@ -934,7 +934,7 @@ class ConfirmUploadAPIView(APIView):
                 OpenApiExample(
                     'Success',
                     value={
-                        "upload_url": "https://kr.object.ncloudstorage.com/jbig/uploads/2025/10/28/12/a1b2c3d4-....png?AWSAccessKeyId=...",
+                        "upload_url": "https://<account>.r2.cloudflarestorage.com/jbig/uploads/2025/10/28/12/a1b2c3d4-....png?X-Amz-Signature=...",
                         "file_key": "uploads/2025/10/28/12/a1b2c3d4-....png"
                     }
                 )
@@ -983,7 +983,7 @@ class GeneratePresignedURLAPIView(APIView):
         now = datetime.now()
         file_key = f"uploads/{now:%Y}/{now:%m}/{now:%d}/{user.id}/{uuid.uuid4()}.{extension}"
 
-        # 3. 업로드 URL 생성 (NCP presigned URL 또는 로컬 엔드포인트)
+        # 3. 업로드 URL 생성 (스토리지 presigned URL 또는 로컬 엔드포인트)
         try:
             result = generate_presigned_upload_url(file_key, request=request)
             return Response(result, status=status.HTTP_200_OK)
