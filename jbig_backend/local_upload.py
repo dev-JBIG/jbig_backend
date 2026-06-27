@@ -11,7 +11,7 @@ from .storage import save_local_file
 class LocalFileUploadView(View):
     """
     PUT 요청으로 파일 바이너리를 받아 media/ 에 저장한다.
-    NCP presigned URL처럼 인증 없이 동작 (로컬 전용).
+    스토리지 presigned URL처럼 인증 없이 동작 (로컬 전용).
     """
 
     def put(self, request, file_key):
