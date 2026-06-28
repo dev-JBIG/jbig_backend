@@ -425,18 +425,18 @@ class PostListSerializer(serializers.ModelSerializer):
 
 
 def normalize_media_urls(content):
-    """본문의 퍼블릭/CDN 이미지 URL을 ncp-key:// 키 형식으로 정규화한다.
+    """본문의 퍼블릭/CDN 이미지 URL을 media-key:// 키 형식으로 정규화한다.
 
-    R2 엔드포인트, Cloudflare CDN 커스텀 도메인, 구 NCP 등 어떤 스토리지의
-    퍼블릭 URL이든 ".../uploads/<key>" 형태이면 내부 키(ncp-key://uploads/...)로
+    R2 엔드포인트, Cloudflare CDN 커스텀 도메인 등 어떤 스토리지의 퍼블릭
+    URL이든 ".../uploads/<key>" 형태이면 내부 키(media-key://uploads/...)로
     환원해 저장한다. 도메인이 바뀌어도 저장 포맷이 일정해, 첨부 삭제 추적과
     공개 URL 변환이 일관되게 동작한다.
-    (ncp-key:// 는 기존 데이터와의 호환을 위해 유지하는 벤더 중립적 키 마커다.)
+    (media-key:// 는 스토리지 벤더와 무관한 내부 키 마커다.)
     """
     if not content:
         return content
     pattern = r'https?://[^\s\)]+?/(uploads/[^?\s\)]+)(?:\?[^\s\)]*)?'
-    return re.sub(pattern, r'ncp-key://\1', content)
+    return re.sub(pattern, r'media-key://\1', content)
 
 
 MAX_ATTACHMENTS_PER_POST = 30
@@ -904,7 +904,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 return match.group(0)
             return f"{alt_text}({public_media_url(file_key)})"
 
-        pattern = r'(!\[.*?\])\(ncp-key://(uploads[\\/][^\s\)]+)\)'
+        pattern = r'(!\[.*?\])\(media-key://(uploads[\\/][^\s\)]+)\)'
         return re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
 
     def get_attachment_paths(self, obj):
@@ -989,7 +989,7 @@ class DraftSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at', 'board_name']
 
     def to_representation(self, instance):
-        """조회 시 ncp-key:// URL을 퍼블릭 URL로 변환"""
+        """조회 시 media-key:// URL을 퍼블릭 URL로 변환"""
         data = super().to_representation(instance)
         raw_md = data.get('content_md', '')
         if not raw_md:
@@ -1002,7 +1002,7 @@ class DraftSerializer(serializers.ModelSerializer):
                 return match.group(0)
             return f"{alt_text}({public_media_url(file_key)})"
 
-        pattern = r'(!\[.*?\])\(ncp-key://(uploads[\\/][^\s\)]+)\)'
+        pattern = r'(!\[.*?\])\(media-key://(uploads[\\/][^\s\)]+)\)'
         data['content_md'] = re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
         return data
 
