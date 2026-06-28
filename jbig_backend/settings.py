@@ -80,6 +80,12 @@ MEDIA_PUBLIC_BASE_URL = os.getenv('MEDIA_PUBLIC_BASE_URL', '').rstrip('/')
 #  - S3 호환 중 ACL 지원 스토리지: True → put_object_acl 로 public-read 설정
 STORAGE_SUPPORTS_ACL = get_env_bool('STORAGE_SUPPORTS_ACL', False)
 
+# ── 링크 미리보기(OG) Worker ─────────────────────────────────────────
+# 원격 사이트 크롤링은 오리진 대신 Cloudflare Worker에 위임한다.
+# 미설정(빈 값)이면 미리보기만 생략되고 링크 저장은 정상 동작한다.
+OG_WORKER_URL = os.getenv('OG_WORKER_URL', '')
+OG_WORKER_SECRET = os.getenv('OG_WORKER_SECRET', '')
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 

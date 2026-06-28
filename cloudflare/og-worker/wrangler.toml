@@ -1,0 +1,9 @@
+name = "jbig-og"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# workers.dev 서브도메인 사용 (커스텀 도메인/route 없이 바로 배포)
+workers_dev = true
+
+# 시크릿은 코드/설정에 두지 않는다. 배포 시 아래로 등록:
+#   npx wrangler secret put OG_SECRET

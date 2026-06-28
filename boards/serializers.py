@@ -2,12 +2,11 @@ import re
 import logging
 import ipaddress
 import socket
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import bleach
 import requests
 from botocore.exceptions import ClientError
-from bs4 import BeautifulSoup
 
 from django.conf import settings
 from django.db import transaction
@@ -19,8 +18,6 @@ from jbig_backend.storage import get_s3_client, public_media_url
 logger = logging.getLogger(__name__)
 
 LINK_SHARE_BOARD_NAME = '링크공유'
-OG_FETCH_MAX_BYTES = 512 * 1024
-OG_FETCH_MAX_REDIRECTS = 3
 
 from bleach.css_sanitizer import CSSSanitizer
 
@@ -466,86 +463,51 @@ def _reject_private_or_invalid_url(value: str) -> str:
     return url
 
 
-def _first_meta_content(soup: BeautifulSoup, *selectors: tuple[str, str]) -> str:
-    for attr, value in selectors:
-        tag = soup.find('meta', attrs={attr: value})
-        content = tag.get('content') if tag else None
-        if content:
-            return str(content).strip()
-    return ''
-
-
 def _truncate(value: str, max_length: int) -> str:
     value = re.sub(r'\s+', ' ', (value or '').strip())
     return value[:max_length]
 
 
 def fetch_open_graph_metadata(url: str) -> dict[str, str]:
-    """Best-effort Open Graph fetch. Failures should not block link saves."""
-    current_url = _reject_private_or_invalid_url(url)
-    headers = {
-        'User-Agent': 'JBIG-LinkPreview/1.0 (+https://jbig.kr)',
-        'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
-    }
+    """링크 미리보기(OG) 메타데이터를 Cloudflare Worker에 위임해 가져온다.
+
+    원격 사이트 크롤링을 오리진 서버에서 직접 하지 않는다(egress IP 격리 · SSRF
+    격리 · 워커 부하 방지 · 문자셋 처리). Worker가 fetch/파싱/캐싱을 담당하고
+    백엔드는 결과만 받는다. 실패는 링크 저장을 막지 않는다(best-effort).
+    """
+    target = (url or '').strip()
+    parsed = urlparse(target)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        return {}
+
+    worker_url = getattr(settings, 'OG_WORKER_URL', '')
+    if not worker_url:
+        # 미설정이면 미리보기만 생략하고 저장은 정상 진행
+        return {}
 
     try:
-        for _ in range(OG_FETCH_MAX_REDIRECTS + 1):
-            response = requests.get(
-                current_url,
-                headers=headers,
-                timeout=(3, 6),
-                stream=True,
-                allow_redirects=False,
-            )
-
-            if 300 <= response.status_code < 400 and response.headers.get('Location'):
-                next_url = urljoin(current_url, response.headers['Location'])
-                current_url = _reject_private_or_invalid_url(next_url)
-                continue
-            break
-
-        content_type = response.headers.get('Content-Type', '').lower()
-        if 'text/html' not in content_type and 'application/xhtml+xml' not in content_type:
+        response = requests.get(
+            worker_url,
+            params={'url': target},
+            headers={'X-OG-Secret': getattr(settings, 'OG_WORKER_SECRET', '')},
+            timeout=(3, 8),
+        )
+        if response.status_code != 200:
             return {}
-
-        body = bytearray()
-        for chunk in response.iter_content(chunk_size=8192):
-            if not chunk:
-                continue
-            body.extend(chunk)
-            if len(body) > OG_FETCH_MAX_BYTES:
-                break
-
-        html = bytes(body).decode(response.encoding or 'utf-8', errors='replace')
-        soup = BeautifulSoup(html, 'html.parser')
-
-        title = (
-            _first_meta_content(soup, ('property', 'og:title'), ('name', 'twitter:title'))
-            or (soup.title.string.strip() if soup.title and soup.title.string else '')
-        )
-        description = _first_meta_content(
-            soup,
-            ('property', 'og:description'),
-            ('name', 'twitter:description'),
-            ('name', 'description'),
-        )
-        image_url = _first_meta_content(soup, ('property', 'og:image'), ('name', 'twitter:image'))
-        site_name = _first_meta_content(soup, ('property', 'og:site_name'), ('name', 'application-name'))
-
-        if image_url:
-            image_url = urljoin(current_url, image_url)
-
-        return {
-            'link_title': _truncate(title, 300),
-            'link_description': _truncate(description, 1000),
-            'link_image_url': _truncate(image_url, 2048),
-            'link_site_name': _truncate(site_name, 200),
-        }
-    except serializers.ValidationError:
-        raise
+        data = response.json()
     except Exception as exc:
         logger.info("Open Graph fetch failed for %s: %s", url, exc)
         return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    return {
+        'link_title': _truncate(data.get('title') or '', 300),
+        'link_description': _truncate(data.get('description') or '', 1000),
+        'link_image_url': _truncate(data.get('image') or '', 2048),
+        'link_site_name': _truncate(data.get('siteName') or '', 200),
+    }
 
 
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
