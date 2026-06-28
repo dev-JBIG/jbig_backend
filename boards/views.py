@@ -554,7 +554,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
 
         old_content_keys = set()
         if instance.content_md:
-            old_content_keys = set(re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md))
+            old_content_keys = set(re.findall(r'media-key://(uploads/[^\s\)]+)', instance.content_md))
 
         # 실제 수정 수행
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
@@ -573,7 +573,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
 
         new_content_keys = set()
         if instance.content_md:
-            new_content_keys = set(re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md))
+            new_content_keys = set(re.findall(r'media-key://(uploads/[^\s\)]+)', instance.content_md))
 
         # 삭제할 파일 키 계산 (기존에 있었지만 새로운 버전에 없는 것)
         keys_to_delete = (old_attachment_keys - new_attachment_keys) | (old_content_keys - new_content_keys)
@@ -614,7 +614,7 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
                         keys_to_delete.append(file_key)
 
         if instance.content_md:
-            content_keys = re.findall(r'ncp-key://(uploads/[^\s\)]+)', instance.content_md)
+            content_keys = re.findall(r'media-key://(uploads/[^\s\)]+)', instance.content_md)
             keys_to_delete.extend(k for k in content_keys if _is_owned(k))
 
         if keys_to_delete:
@@ -854,7 +854,7 @@ class DeleteFileAPIView(APIView):
                 {"error": "이 파일은 게시글에 첨부되어 있어 삭제할 수 없습니다."},
                 status=status.HTTP_409_CONFLICT,
             )
-        if Post.objects.filter(content_md__contains=f'ncp-key://{file_key}').exists():
+        if Post.objects.filter(content_md__contains=f'media-key://{file_key}').exists():
             return Response(
                 {"error": "이 파일은 게시글 본문에서 참조 중이라 삭제할 수 없습니다."},
                 status=status.HTTP_409_CONFLICT,
