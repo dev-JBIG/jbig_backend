@@ -15,8 +15,8 @@ class BoardAdmin(admin.ModelAdmin):
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
-    list_display = ('id', 'board_post_id', 'title', 'author', 'board', 'link_url', 'created_at', 'views')
-    search_fields = ('title', 'link_url', 'link_title', 'author__username')
+    list_display = ('id', 'board_post_id', 'title', 'author', 'board', 'created_at', 'views')
+    search_fields = ('title', 'author__username')
     list_filter = ('board', 'created_at')
     raw_id_fields = ('author', 'board', 'likes')
 

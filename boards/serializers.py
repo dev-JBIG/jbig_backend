@@ -1,13 +1,8 @@
 import re
 import logging
-import ipaddress
-import socket
-from urllib.parse import urljoin, urlparse
 
 import bleach
-import requests
 from botocore.exceptions import ClientError
-from bs4 import BeautifulSoup
 
 from django.conf import settings
 from django.db import transaction
@@ -17,10 +12,6 @@ from .models import Category, Board, Post, Comment, Notification, Draft, generat
 from jbig_backend.storage import get_s3_client, public_media_url
 
 logger = logging.getLogger(__name__)
-
-LINK_SHARE_BOARD_NAME = '링크공유'
-OG_FETCH_MAX_BYTES = 512 * 1024
-OG_FETCH_MAX_REDIRECTS = 3
 
 from bleach.css_sanitizer import CSSSanitizer
 
@@ -317,28 +308,11 @@ class PostListSerializer(serializers.ModelSerializer):
     is_anonymous = serializers.BooleanField(read_only=True)
     tag = serializers.CharField(read_only=True)
     recruitment_info = serializers.SerializerMethodField()
-    link_url = serializers.URLField(read_only=True)
-    link_title = serializers.CharField(read_only=True)
-    link_description = serializers.CharField(read_only=True)
-    link_image_url = serializers.URLField(read_only=True)
-    link_site_name = serializers.CharField(read_only=True)
-    link_comment = serializers.SerializerMethodField()
 
 
     class Meta:
         model = Post
-        fields = [
-            'id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester',
-            'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths',
-            'board_id', 'board_name', 'is_anonymous', 'tag', 'recruitment_info',
-            'link_url', 'link_title', 'link_description', 'link_image_url', 'link_site_name',
-            'link_comment'
-        ]
-
-    def get_link_comment(self, obj):
-        if not is_link_share_board(obj.board):
-            return ''
-        return obj.content_md or ''
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name', 'is_anonymous', 'tag', 'recruitment_info']
 
     def get_recruitment_info(self, obj):
         """모집 게시글이면 모집 요약 정보 반환"""
@@ -442,114 +416,7 @@ def normalize_media_urls(content):
 MAX_ATTACHMENTS_PER_POST = 30
 
 
-def is_link_share_board(board: Board | None) -> bool:
-    if not board:
-        return False
-    return board.form_type == Board.FormType.LINK_SHARE or board.name == LINK_SHARE_BOARD_NAME
-
-
-def _reject_private_or_invalid_url(value: str) -> str:
-    url = (value or '').strip()
-    parsed = urlparse(url)
-    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
-        raise serializers.ValidationError('http 또는 https 링크만 입력할 수 있습니다.')
-
-    try:
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80), type=socket.SOCK_STREAM)
-    except socket.gaierror:
-        raise serializers.ValidationError('링크 주소를 확인할 수 없습니다.')
-
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
-            raise serializers.ValidationError('공개 인터넷 링크만 등록할 수 있습니다.')
-    return url
-
-
-def _first_meta_content(soup: BeautifulSoup, *selectors: tuple[str, str]) -> str:
-    for attr, value in selectors:
-        tag = soup.find('meta', attrs={attr: value})
-        content = tag.get('content') if tag else None
-        if content:
-            return str(content).strip()
-    return ''
-
-
-def _truncate(value: str, max_length: int) -> str:
-    value = re.sub(r'\s+', ' ', (value or '').strip())
-    return value[:max_length]
-
-
-def fetch_open_graph_metadata(url: str) -> dict[str, str]:
-    """Best-effort Open Graph fetch. Failures should not block link saves."""
-    current_url = _reject_private_or_invalid_url(url)
-    headers = {
-        'User-Agent': 'JBIG-LinkPreview/1.0 (+https://jbig.kr)',
-        'Accept': 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
-    }
-
-    try:
-        for _ in range(OG_FETCH_MAX_REDIRECTS + 1):
-            response = requests.get(
-                current_url,
-                headers=headers,
-                timeout=(3, 6),
-                stream=True,
-                allow_redirects=False,
-            )
-
-            if 300 <= response.status_code < 400 and response.headers.get('Location'):
-                next_url = urljoin(current_url, response.headers['Location'])
-                current_url = _reject_private_or_invalid_url(next_url)
-                continue
-            break
-
-        content_type = response.headers.get('Content-Type', '').lower()
-        if 'text/html' not in content_type and 'application/xhtml+xml' not in content_type:
-            return {}
-
-        body = bytearray()
-        for chunk in response.iter_content(chunk_size=8192):
-            if not chunk:
-                continue
-            body.extend(chunk)
-            if len(body) > OG_FETCH_MAX_BYTES:
-                break
-
-        html = bytes(body).decode(response.encoding or 'utf-8', errors='replace')
-        soup = BeautifulSoup(html, 'html.parser')
-
-        title = (
-            _first_meta_content(soup, ('property', 'og:title'), ('name', 'twitter:title'))
-            or (soup.title.string.strip() if soup.title and soup.title.string else '')
-        )
-        description = _first_meta_content(
-            soup,
-            ('property', 'og:description'),
-            ('name', 'twitter:description'),
-            ('name', 'description'),
-        )
-        image_url = _first_meta_content(soup, ('property', 'og:image'), ('name', 'twitter:image'))
-        site_name = _first_meta_content(soup, ('property', 'og:site_name'), ('name', 'application-name'))
-
-        if image_url:
-            image_url = urljoin(current_url, image_url)
-
-        return {
-            'link_title': _truncate(title, 300),
-            'link_description': _truncate(description, 1000),
-            'link_image_url': _truncate(image_url, 2048),
-            'link_site_name': _truncate(site_name, 200),
-        }
-    except serializers.ValidationError:
-        raise
-    except Exception as exc:
-        logger.info("Open Graph fetch failed for %s: %s", url, exc)
-        return {}
-
-
 class PostCreateUpdateSerializer(serializers.ModelSerializer):
-    title = serializers.CharField(required=False, allow_blank=True, max_length=200)
     attachment_paths = serializers.ListField(
         child=serializers.DictField(),
         write_only=True,
@@ -561,11 +428,10 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
     is_anonymous = serializers.BooleanField(required=False, default=True)
     tag = serializers.CharField(required=False, allow_blank=True, default='')
     recruitment = serializers.DictField(write_only=True, required=False)
-    link_url = serializers.URLField(required=False, allow_blank=True, max_length=2048)
 
     class Meta:
         model = Post
-        fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id', 'is_anonymous', 'tag', 'recruitment', 'link_url']
+        fields = ['title', 'content_md', 'attachment_paths', 'post_type', 'board_id', 'is_anonymous', 'tag', 'recruitment']
 
     def validate_attachment_paths(self, value):
         """
@@ -622,30 +488,6 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         board = self._resolve_board(attrs)
-        link_board = is_link_share_board(board)
-
-        if link_board:
-            link_url = attrs.get('link_url')
-            if link_url is None and getattr(self, 'instance', None):
-                link_url = self.instance.link_url
-            if not link_url:
-                raise serializers.ValidationError({"link_url": "링크 URL을 입력하세요."})
-            attrs['link_url'] = _reject_private_or_invalid_url(link_url)
-
-            attachments = attrs.get('attachment_paths')
-            if attachments:
-                raise serializers.ValidationError({"attachment_paths": "링크공유 게시판은 첨부파일을 사용할 수 없습니다."})
-            return attrs
-
-        if not getattr(self, 'instance', None) and not str(attrs.get('title', '')).strip():
-            raise serializers.ValidationError({"title": "제목을 입력하세요."})
-
-        if getattr(self, 'instance', None) and 'title' in attrs and not str(attrs.get('title', '')).strip():
-            raise serializers.ValidationError({"title": "제목을 입력하세요."})
-
-        if attrs.get('link_url'):
-            raise serializers.ValidationError({"link_url": "링크 URL은 링크공유 게시판에서만 사용할 수 있습니다."})
-
         if self._is_photo_board(board):
             content = attrs.get('content_md')
             if content is None and getattr(self, 'instance', None):
@@ -676,28 +518,10 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         attachment_paths = validated_data.pop('attachment_paths', [])
         content_md = validated_data.pop('content_md', '')
         recruitment_data = validated_data.pop('recruitment', None)
-        link_url = validated_data.pop('link_url', '').strip()
-        board = validated_data.get('board')
 
         post = Post(**validated_data)
         post.content_md = sanitize_markdown(normalize_media_urls(content_md))
-        if is_link_share_board(board):
-            metadata = fetch_open_graph_metadata(link_url)
-            parsed = urlparse(link_url)
-            post.link_url = link_url
-            post.link_title = metadata.get('link_title') or ''
-            post.link_description = metadata.get('link_description') or ''
-            post.link_image_url = metadata.get('link_image_url') or ''
-            post.link_site_name = metadata.get('link_site_name') or ''
-            post.title = post.link_title or parsed.netloc or link_url
-            post.attachment_paths = []
-        else:
-            post.link_url = None
-            post.link_title = ''
-            post.link_description = ''
-            post.link_image_url = ''
-            post.link_site_name = ''
-            post.attachment_paths = attachment_paths
+        post.attachment_paths = attachment_paths
         post.save()
         post.update_search_vector()
         if post.search_vector is not None:
@@ -717,7 +541,6 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
         attachment_paths = validated_data.pop('attachment_paths', None)
         content_md = validated_data.pop('content_md', None)
         board_id = validated_data.pop('board_id', None)
-        link_url = validated_data.pop('link_url', None)
         validated_data.pop('recruitment', None)  # 모집 수정은 별도 API로
         # post_type은 board_type 기반으로 서버에서 결정되는 값이므로 수정 요청에서 제거한다.
         validated_data.pop('post_type', None)
@@ -729,10 +552,6 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
                 instance.recruitment.delete()
             except Exception:
                 pass
-
-        target_board = instance.board
-        if board_id is not None:
-            target_board = Board.objects.filter(id=board_id).first() or target_board
 
         if content_md is not None:
             instance.content_md = sanitize_markdown(normalize_media_urls(content_md))
@@ -746,28 +565,6 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
                 # 게시판이 실제로 변경되는 경우, board_post_id를 초기화하여 새로 할당되도록 함
                 instance.board = new_board
                 instance.board_post_id = None
-
-        if is_link_share_board(target_board):
-            if link_url is not None:
-                link_url = _reject_private_or_invalid_url(link_url)
-                metadata = fetch_open_graph_metadata(link_url)
-                parsed = urlparse(link_url)
-                instance.link_url = link_url
-                instance.link_title = metadata.get('link_title') or ''
-                instance.link_description = metadata.get('link_description') or ''
-                instance.link_image_url = metadata.get('link_image_url') or ''
-                instance.link_site_name = metadata.get('link_site_name') or ''
-                instance.title = instance.link_title or parsed.netloc or link_url
-            if not instance.link_url:
-                raise serializers.ValidationError({"link_url": "링크 URL을 입력하세요."})
-            instance.attachment_paths = []
-            validated_data.pop('title', None)
-        else:
-            instance.link_url = None
-            instance.link_title = ''
-            instance.link_description = ''
-            instance.link_image_url = ''
-            instance.link_site_name = ''
 
         instance = super().update(instance, validated_data)
         instance.update_search_vector()
@@ -790,11 +587,6 @@ class PostDetailSerializer(serializers.ModelSerializer):
     is_anonymous = serializers.BooleanField(read_only=True)
     tag = serializers.CharField(read_only=True)
     recruitment = serializers.SerializerMethodField()
-    link_url = serializers.URLField(read_only=True)
-    link_title = serializers.CharField(read_only=True)
-    link_description = serializers.CharField(read_only=True)
-    link_image_url = serializers.URLField(read_only=True)
-    link_site_name = serializers.CharField(read_only=True)
 
     class Meta:
         model = Post
@@ -802,8 +594,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
             'id', 'board_post_id', 'title', 'content_md', 'user_id', 'author', 'author_semester',
             'created_at', 'updated_at', 'views', 'board', 'comments', 'attachment_paths',
             'likes_count', 'comments_count', 'is_liked', 'post_type', 'is_owner', 'is_anonymous',
-            'tag', 'recruitment', 'link_url', 'link_title', 'link_description', 'link_image_url',
-            'link_site_name'
+            'tag', 'recruitment'
         ]
 
     def get_recruitment(self, obj):

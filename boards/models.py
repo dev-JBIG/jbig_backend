@@ -74,7 +74,6 @@ class Board(models.Model):
         NONE = 0, 'None'
         ABSENCE = 1, 'Absence'
         FEEDBACK = 2, 'Feedback'
-        LINK_SHARE = 3, 'Link Share'
 
     name = models.CharField(max_length=50)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='boards')
@@ -155,11 +154,6 @@ class Post(models.Model):
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='posts')
     title = models.CharField(max_length=200)
     content_md = models.TextField(null=True, blank=True)
-    link_url = models.URLField(max_length=2048, null=True, blank=True)
-    link_title = models.CharField(max_length=300, null=True, blank=True)
-    link_description = models.TextField(null=True, blank=True)
-    link_image_url = models.URLField(max_length=2048, null=True, blank=True)
-    link_site_name = models.CharField(max_length=200, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -208,13 +202,6 @@ class Post(models.Model):
                 content_text = soup.get_text()
             except Exception:
                 content_text = ''
-        link_text = ' '.join(filter(None, [
-            self.link_url or '',
-            self.link_title or '',
-            self.link_description or '',
-            self.link_site_name or '',
-        ]))
-        content_text = f"{content_text} {link_text}".strip()
         self.search_vector = SearchVector('title', weight='A') + SearchVector(models.Value(content_text), weight='B')
 
 
