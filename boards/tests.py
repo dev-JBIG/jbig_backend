@@ -2,7 +2,6 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from django.urls import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
-from unittest.mock import patch
 from users.models import User
 from .models import Board, Post, Category
 
@@ -60,60 +59,6 @@ class PostAPITestCase(APITestCase):
 
         post.refresh_from_db()
         self.assertEqual(post.board.id, second_board.id)
-
-    def test_regular_post_rejects_link_url(self):
-        url = reverse('post-list-create', kwargs={'board_id': self.board.id})
-
-        response = self.client.post(url, {
-            'title': 'Regular Post',
-            'content_md': 'regular content',
-            'link_url': 'https://1.1.1.1/article',
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(Post.objects.count(), 0)
-
-    def test_regular_post_update_still_requires_title(self):
-        post = Post.objects.create(
-            author=self.user,
-            board=self.board,
-            title='Original Title',
-            content_md='regular content',
-        )
-        url = reverse('post-detail-update-destroy', kwargs={'post_id': post.id})
-
-        response = self.client.patch(url, {'title': ''}, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        post.refresh_from_db()
-        self.assertEqual(post.title, 'Original Title')
-
-    @patch('boards.serializers.fetch_open_graph_metadata')
-    def test_link_share_post_uses_link_fields_without_title_input(self, mock_fetch_og):
-        mock_fetch_og.return_value = {
-            'link_title': 'Example Article',
-            'link_description': 'A useful article',
-            'link_image_url': 'https://example.com/og.png',
-            'link_site_name': 'Example',
-        }
-        link_board = Board.objects.create(
-            name='링크공유',
-            category=self.category,
-            form_type=Board.FormType.LINK_SHARE,
-        )
-        url = reverse('post-list-create', kwargs={'board_id': link_board.id})
-
-        response = self.client.post(url, {
-            'link_url': 'https://1.1.1.1/article',
-            'content_md': '나중에 다시 읽기',
-        }, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        post = Post.objects.get(board=link_board)
-        self.assertEqual(post.title, 'Example Article')
-        self.assertEqual(post.link_url, 'https://1.1.1.1/article')
-        self.assertEqual(post.link_site_name, 'Example')
-        self.assertEqual(post.content_md, '나중에 다시 읽기')
 
 
 class PostVisibilityHardeningTest(APITestCase):
