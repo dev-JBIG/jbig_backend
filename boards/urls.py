@@ -18,6 +18,7 @@ from .views import (
     NotificationMarkReadAPIView,
     DraftRetrieveCreateAPIView,
     DraftDeleteAPIView,
+    board_post_og_preview,
 )
 
 router = DefaultRouter()
@@ -28,6 +29,7 @@ urlpatterns = [
     path('boards/', BoardListAPIView.as_view(), name='board-list'),
     path('boards/<int:board_id>/', BoardDetailAPIView.as_view(), name='board-detail'),
     path('boards/<int:board_id>/posts/', PostListCreateAPIView.as_view(), name='post-list-create'),
+    path('og/board/<int:board_id>/<int:post_id>/', board_post_og_preview, name='board-post-og'),
     path('boards/<int:board_id>/search/', PostSearchView.as_view(), name='post-search-in-board'),
     path('posts/all/', AllPostListAPIView.as_view(), name='all-posts-list'),
     path('posts/all/search/', AllPostSearchView.as_view(), name='post-search-all'),

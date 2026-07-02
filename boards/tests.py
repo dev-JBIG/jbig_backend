@@ -1,5 +1,6 @@
 from rest_framework.test import APITestCase
 from rest_framework import status
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import User
@@ -139,3 +140,132 @@ class PostVisibilityHardeningTest(APITestCase):
             'attachment_paths': [{'path': own_path, 'name': 'abc.png'}],
         }, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+
+@override_settings(USE_LOCAL_STORAGE=True, MEDIA_URL='/media/')
+class BoardPostOGPreviewTest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='oguser', email='og@example.com', password='password123',
+            is_verified=True, is_active=True,
+        )
+        self.category = Category.objects.create(name='OG Category')
+        self.board = Board.objects.create(name='Public Board', category=self.category)
+
+    def _url(self, board_id, post_id):
+        return reverse('board-post-og', kwargs={'board_id': board_id, 'post_id': post_id})
+
+    def _create_post(self, **kwargs):
+        data = {
+            'author': self.user,
+            'board': self.board,
+            'title': 'Public title',
+            'content_md': '',
+            'post_type': Post.PostType.DEFAULT,
+        }
+        data.update(kwargs)
+        return Post.objects.create(**data)
+
+    def assertDefaultOG(self, response):
+        self.assertContains(response, '<meta property="og:title" content="JBIG">')
+        self.assertContains(response, '<meta property="og:description" content="Data are profoundly dumb.">')
+        self.assertContains(response, '<meta property="og:image" content="https://jbig.co.kr/JBIG-logo-1200x630.png">')
+
+    def test_public_default_post_returns_post_title_and_jbig_description(self):
+        post = self._create_post(title='Visible post')
+
+        response = self.client.get(self._url(self.board.id, post.id))
+
+        self.assertEqual(response['Content-Type'], 'text/html; charset=utf-8')
+        self.assertContains(response, '<meta property="og:title" content="Visible post">')
+        self.assertContains(response, '<meta property="og:description" content="JBIG">')
+        self.assertContains(response, '<meta name="twitter:card" content="summary_large_image">')
+
+    def test_staff_only_post_falls_back_without_title(self):
+        post = self._create_post(title='staff secret', post_type=Post.PostType.STAFF_ONLY)
+
+        response = self.client.get(self._url(self.board.id, post.id))
+
+        self.assertDefaultOG(response)
+        self.assertNotContains(response, 'staff secret')
+
+    def test_justification_post_falls_back_without_title(self):
+        post = self._create_post(title='justification secret', post_type=Post.PostType.JUSTIFICATION_LETTER)
+
+        response = self.client.get(self._url(self.board.id, post.id))
+
+        self.assertDefaultOG(response)
+        self.assertNotContains(response, 'justification secret')
+
+    def test_staff_read_board_post_falls_back_without_title(self):
+        staff_board = Board.objects.create(name='Staff Board', category=self.category)
+        Board.objects.filter(id=staff_board.id).update(read_permission='staff')
+        staff_board.refresh_from_db()
+        post = self._create_post(board=staff_board, title='private board secret')
+
+        response = self.client.get(self._url(staff_board.id, post.id))
+
+        self.assertDefaultOG(response)
+        self.assertNotContains(response, 'private board secret')
+
+    def test_attachment_image_is_selected(self):
+        post = self._create_post(
+            content_md=f'![body](media-key://uploads/2026/01/01/{self.user.id}/body.jpg)',
+            attachment_paths=[{
+                'path': f'uploads/2026/01/01/{self.user.id}/attached.png',
+                'name': 'attached.png',
+            }],
+        )
+
+        response = self.client.get(self._url(self.board.id, post.id))
+
+        self.assertContains(
+            response,
+            f'<meta property="og:image" content="/media/uploads/2026/01/01/{self.user.id}/attached.png">',
+        )
+        self.assertNotContains(response, f'/media/uploads/2026/01/01/{self.user.id}/body.jpg')
+
+    def test_markdown_image_is_selected(self):
+        post = self._create_post(
+            content_md=f'Intro\n\n![preview](media-key://uploads/2026/01/02/{self.user.id}/body.webp)',
+        )
+
+        response = self.client.get(self._url(self.board.id, post.id))
+
+        self.assertContains(
+            response,
+            f'<meta property="og:image" content="/media/uploads/2026/01/02/{self.user.id}/body.webp">',
+        )
+
+    def test_missing_image_falls_back_to_default_logo(self):
+        post = self._create_post()
+
+        response = self.client.get(self._url(self.board.id, post.id))
+
+        self.assertContains(response, '<meta property="og:image" content="https://jbig.co.kr/JBIG-logo-1200x630.png">')
+
+    def test_title_is_html_escaped(self):
+        post = self._create_post(title='<script>"&')
+
+        response = self.client.get(self._url(self.board.id, post.id))
+
+        self.assertContains(response, '<meta property="og:title" content="&lt;script&gt;&quot;&amp;">')
+        self.assertNotContains(response, '<meta property="og:title" content="<script>"&">')
+
+    def test_og_endpoint_does_not_increment_views(self):
+        post = self._create_post(views=7)
+
+        self.client.get(self._url(self.board.id, post.id))
+
+        post.refresh_from_db()
+        self.assertEqual(post.views, 7)
+
+    def test_board_post_mismatch_falls_back_to_default_og(self):
+        other_board = Board.objects.create(name='Other Board', category=self.category)
+        post = self._create_post(title='wrong board title')
+
+        response = self.client.get(self._url(other_board.id, post.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertDefaultOG(response)
+        self.assertNotContains(response, 'wrong board title')
