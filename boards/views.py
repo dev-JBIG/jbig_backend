@@ -10,7 +10,7 @@ import requests
 from django.conf import settings
 from django.shortcuts import get_object_or_404, render
 from django.db.models import (
-    F, Q, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery
+    F, Q, Count, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery
 )
 from django.views.decorators.http import require_GET
 
@@ -28,6 +28,7 @@ OG_SITE_BASE_URL = 'https://jbig.co.kr'
 OG_DEFAULT_TITLE = 'JBIG'
 OG_DEFAULT_DESCRIPTION = 'Data are profoundly dumb.'
 OG_DEFAULT_IMAGE = 'https://jbig.co.kr/JBIG-logo-1200x630.png'
+
 
 from .models import Board, Post, Comment, Category, Notification, Draft
 from .serializers import (
@@ -50,6 +51,14 @@ from jbig_backend.storage import (
     set_public_acl,
     public_media_url,
 )
+
+
+def _with_post_list_summary(queryset):
+    return queryset.select_related('author', 'board', 'recruitment').annotate(
+        likes_count=Count('likes', distinct=True),
+        comment_count=Count('comments', distinct=True),
+    )
+
 
 # Cloudflare Turnstile 검증 함수
 def verify_turnstile(token: str, ip: str) -> bool:
@@ -419,8 +428,8 @@ class PostSearchView(generics.ListAPIView):
             Q(author__username__icontains=query)
         )
 
-        queryset = queryset.filter(search_filter).distinct().order_by('-created_at')
-        return queryset
+        queryset = queryset.filter(search_filter).distinct()
+        return _with_post_list_summary(queryset).order_by('-created_at')
 
 @extend_schema(
     tags=['게시글'],
@@ -585,7 +594,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         tag = self.request.query_params.get('tag')
         if tag:
             qs = qs.filter(tag=tag)
-        return qs.select_related('recruitment').order_by('-created_at')
+        return _with_post_list_summary(qs).order_by('-created_at')
 
     def get_object(self):
         board_id = self.kwargs.get(self.lookup_url_kwarg)
@@ -901,7 +910,7 @@ class AllPostListAPIView(generics.ListAPIView):
 
         queryset = queryset.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
 
-        return queryset.order_by('-created_at')
+        return _with_post_list_summary(queryset).order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())

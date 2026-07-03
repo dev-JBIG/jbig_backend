@@ -49,19 +49,22 @@ def sanitize_markdown(value: str) -> str:
     )
 
 
-def get_presigned_attachments(attachments_list):
+def get_presigned_attachments(attachments_list, include_size=True):
     """첨부파일 목록을 공개(CDN) URL + 메타로 변환하는 공통 함수.
 
     URL은 고정 공개 URL(public_media_url)이라 CDN 캐시가 동작한다.
-    size 표시를 위해 head_object 만 호출한다(메타데이터 조회, egress 아님).
+    include_size=True일 때만 size 표시를 위해 head_object를 호출한다.
     """
     if not attachments_list or not isinstance(attachments_list, list):
         return []
-    try:
-        s3_client = get_s3_client()
-    except Exception as e:
-        logger.error(f"S3 클라이언트 생성 실패: {e}")
-        return []
+
+    s3_client = None
+    if include_size:
+        try:
+            s3_client = get_s3_client()
+        except Exception as e:
+            logger.error(f"S3 클라이언트 생성 실패: {e}")
+            return []
 
     presigned_attachments = []
     for item in attachments_list:
@@ -72,15 +75,18 @@ def get_presigned_attachments(attachments_list):
         file_key = file_key.replace('\\', '/')  # 레거시 역슬래시 key 정규화
         if not file_key.startswith("uploads/"):
             continue
-        try:
-            meta = s3_client.head_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
-            presigned_attachments.append({
-                "url": public_media_url(file_key),
-                "name": name,
-                "size": meta.get('ContentLength')
-            })
-        except ClientError as e:
-            logger.error(f"S3 에러 (Key: {file_key}): {e}")
+        attachment = {
+            "url": public_media_url(file_key),
+            "name": name,
+        }
+        if include_size:
+            try:
+                meta = s3_client.head_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
+                attachment["size"] = meta.get('ContentLength')
+            except ClientError as e:
+                logger.error(f"S3 에러 (Key: {file_key}): {e}")
+                continue
+        presigned_attachments.append(attachment)
     return presigned_attachments
 
 
@@ -308,8 +314,8 @@ class PostListSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
     author_semester = serializers.SerializerMethodField()
-    likes_count = serializers.IntegerField(source='likes.count', read_only=True)
-    comment_count = serializers.SerializerMethodField()
+    likes_count = serializers.IntegerField(read_only=True)
+    comment_count = serializers.IntegerField(read_only=True)
     attachment_paths = serializers.SerializerMethodField()
     board_id = serializers.IntegerField(source='board.id', read_only=True)
     board_name = serializers.CharField(source='board.name', read_only=True)
@@ -399,11 +405,8 @@ class PostListSerializer(serializers.ModelSerializer):
         
         return obj.author.semester
 
-    def get_comment_count(self, obj):
-        return obj.comments.count()
-
     def get_attachment_paths(self, obj):
-        return get_presigned_attachments(obj.attachment_paths)
+        return get_presigned_attachments(obj.attachment_paths, include_size=False)
 
 
 def normalize_media_urls(content):

@@ -81,7 +81,10 @@ class UserPostListView(generics.ListAPIView):
         if not request_user.is_authenticated:
             queryset = queryset.filter(is_anonymous=False)
         
-        return queryset.order_by('-created_at')
+        return queryset.select_related('author', 'board', 'recruitment').annotate(
+            likes_count=models.Count('likes', distinct=True),
+            comment_count=models.Count('comments', distinct=True),
+        ).order_by('-created_at')
 
 
 @extend_schema(

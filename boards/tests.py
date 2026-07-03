@@ -1,12 +1,16 @@
+from unittest.mock import patch
+
 from rest_framework.test import APITestCase
 from rest_framework import status
+from django.db import connection
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import User
-from .models import Board, Post, Category
+from .models import Board, Post, Category, Comment
 
 
 class PostAPITestCase(APITestCase):
@@ -62,6 +66,111 @@ class PostAPITestCase(APITestCase):
 
         post.refresh_from_db()
         self.assertEqual(post.board.id, second_board.id)
+
+
+@override_settings(USE_LOCAL_STORAGE=True, MEDIA_URL='/media/')
+class PostListPerformanceTest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='u', email='u@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.other_user = User.objects.create_user(
+            username='other', email='other@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.category = Category.objects.create(name='Cat')
+        self.board = Board.objects.create(name='Board', category=self.category)
+
+        token = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+    def test_list_keeps_attachment_url_name_without_head_object(self):
+        file_key = f'uploads/2026/07/03/{self.user.id}/image.jpg'
+        Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='with attachment',
+            content_md='x',
+            attachment_paths=[{'path': file_key, 'name': 'image.jpg'}],
+        )
+
+        with patch('boards.serializers.get_s3_client') as get_s3_client:
+            response = self.client.get(reverse('post-list-create', kwargs={'board_id': self.board.id}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        get_s3_client.assert_not_called()
+        attachments = response.data['results'][0]['attachment_paths']
+        self.assertEqual(attachments, [{'url': f'/media/{file_key}', 'name': 'image.jpg'}])
+        self.assertNotIn('size', attachments[0])
+
+    def test_list_counts_are_annotated_without_per_row_count_queries(self):
+        post = Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='counted',
+            content_md='x',
+        )
+        post.likes.add(self.user, self.other_user)
+        for idx in range(3):
+            Comment.objects.create(post=post, author=self.other_user, content=f'comment {idx}')
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(
+                reverse('post-list-create', kwargs={'board_id': self.board.id}),
+                {'page_size': 10},
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item = response.data['results'][0]
+        self.assertEqual(item['likes_count'], 2)
+        self.assertEqual(item['comment_count'], 3)
+
+        per_row_count_queries = [
+            query['sql']
+            for query in queries.captured_queries
+            if (
+                'COUNT' in query['sql']
+                and (
+                    ('FROM "comment"' in query['sql'] and 'WHERE "comment"."post_id"' in query['sql'])
+                    or ('FROM "post_like"' in query['sql'] and 'WHERE "post_like"."post_id"' in query['sql'])
+                )
+            )
+        ]
+        self.assertEqual(per_row_count_queries, [])
+
+    def test_all_posts_list_keeps_private_boundaries(self):
+        Post.objects.create(author=self.user, board=self.board, title='public', content_md='x')
+        Post.objects.create(
+            author=self.other_user,
+            board=self.board,
+            title='staff only',
+            content_md='x',
+            post_type=Post.PostType.STAFF_ONLY,
+        )
+        Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='own justification',
+            content_md='x',
+            post_type=Post.PostType.JUSTIFICATION_LETTER,
+        )
+        Post.objects.create(
+            author=self.other_user,
+            board=self.board,
+            title='other justification',
+            content_md='x',
+            post_type=Post.PostType.JUSTIFICATION_LETTER,
+        )
+        staff_board = Board.objects.create(name='Staff Board', category=self.category)
+        Board.objects.filter(pk=staff_board.pk).update(read_permission='staff')
+        Post.objects.create(author=self.other_user, board=staff_board, title='private board', content_md='x')
+
+        response = self.client.get(reverse('all-posts-list'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = {item['title'] for item in response.data['results']}
+        self.assertEqual(titles, {'public', 'own justification'})
 
 
 class PostVisibilityHardeningTest(APITestCase):
