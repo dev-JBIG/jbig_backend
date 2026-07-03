@@ -32,7 +32,8 @@ OG_DEFAULT_IMAGE = 'https://jbig.co.kr/JBIG-logo-1200x630.png'
 
 from .models import Board, Post, Comment, Category, Notification, Draft
 from .serializers import (
-    BoardSerializer, PostListSerializer, PostDetailSerializer, PostCreateUpdateSerializer,
+    BoardSerializer, PostListSerializer, PostSummarySerializer, PhotoPostSummarySerializer,
+    PostDetailSerializer, PostCreateUpdateSerializer,
     CommentSerializer, CategoryListResponseSerializer, PostListResponseSerializer, NotificationSerializer,
     DraftSerializer
 )
@@ -391,7 +392,7 @@ class CommentLikeAPIView(generics.GenericAPIView):
 
 
 class PostSearchView(generics.ListAPIView):
-    serializer_class = PostListSerializer
+    serializer_class = PostSummarySerializer
 
     def get_queryset(self):
         query = self.request.query_params.get('q', None)
@@ -461,10 +462,10 @@ class AllPostSearchView(PostSearchView):
 )
 class BoardListViewSet(viewsets.ViewSet):
     def list(self, request, *args, **kwargs):
-        total_post_count = Post.objects.count()
         latest_visible_posts = Post.objects.visible_for_user(request.user)
         if not (request.user.is_authenticated and request.user.is_staff):
             latest_visible_posts = latest_visible_posts.filter(board__read_permission='all')
+        total_post_count = latest_visible_posts.count()
 
         boards = Board.objects.annotate(
             latest_post_created_at=Subquery(
@@ -532,9 +533,7 @@ class BoardListAPIView(generics.ListAPIView):
                                     "created_at": "2025-09-17T12:30:00Z",
                                     "views": 150,
                                     "likes_count": 10,
-                                    "attachments": [
-                                        {"id": 1, "file": "/media/attachments/file1.pdf", "filename": "file1.pdf"}
-                                    ]
+                                    "comment_count": 2
                                 }
                             ]
                         }
@@ -585,7 +584,9 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return PostCreateUpdateSerializer
-        return PostListSerializer
+        if self.request.query_params.get('view') == 'photo':
+            return PhotoPostSummarySerializer
+        return PostSummarySerializer
 
     def get_queryset(self):
         board_id = self.kwargs.get('board_id')
@@ -594,6 +595,8 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         tag = self.request.query_params.get('tag')
         if tag:
             qs = qs.filter(tag=tag)
+        if self.request.query_params.get('view') == 'photo':
+            return qs.only('id', 'title', 'created_at', 'attachment_paths', 'board_id', 'post_type').order_by('-created_at')
         return _with_post_list_summary(qs).order_by('-created_at')
 
     def get_object(self):
@@ -671,6 +674,14 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsBoardReadable, PostDetailPermission]
     lookup_url_kwarg = 'post_id'
 
+    def get_queryset(self):
+        return Post.objects.select_related('author', 'board', 'board__category', 'recruitment')
+
+    def get_object(self):
+        if not hasattr(self, '_post_object'):
+            self._post_object = super().get_object()
+        return self._post_object
+
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
             return PostCreateUpdateSerializer
@@ -678,8 +689,8 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
+        Post.objects.filter(pk=instance.pk).update(views=F('views') + 1)
         instance.views += 1
-        instance.save(update_fields=['views'])
 
         serializer = self.get_serializer(instance, context={'request': request})
         return Response(serializer.data)
@@ -898,7 +909,7 @@ class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     )
 )
 class AllPostListAPIView(generics.ListAPIView):
-    serializer_class = PostListSerializer
+    serializer_class = PostSummarySerializer
     permission_classes = [AllowAny]
 
     def get_queryset(self):
@@ -1175,7 +1186,12 @@ class NotificationListAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user).order_by('-created_at')[:50]
+        return (
+            Notification.objects
+            .filter(recipient=self.request.user)
+            .select_related('actor', 'post', 'post__board', 'comment')
+            .order_by('-created_at')[:50]
+        )
 
 
 @extend_schema(tags=['알림'])

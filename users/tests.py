@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
+from boards.models import Board, Category, Comment, Post
 from users.models import EmailVerificationCode, PasswordResetToken, User
 from users.password_reset_token import (
     RESET_TOKEN_TTL_SECONDS,
@@ -494,3 +495,66 @@ class TokenRefreshGuardTest(TestCase):
         self.user.save(update_fields=['is_verified'])
         response = self.client.post(self.refresh_url, {'refresh': refresh}, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+@override_settings(REST_FRAMEWORK=NO_THROTTLE_REST_FRAMEWORK)
+class PublicProfileActivityVisibilityTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.target = User.objects.create_user(
+            email='target@jbnu.ac.kr',
+            username='target',
+            password='Password!1x',
+            semester=1,
+        )
+        self.target.is_active = True
+        self.target.is_verified = True
+        self.target.save()
+
+        self.category = Category.objects.create(name='Cat')
+        self.public_board = Board.objects.create(name='Public', category=self.category)
+        self.staff_board = Board.objects.create(name='Staff', category=self.category)
+        Board.objects.filter(pk=self.staff_board.pk).update(read_permission='staff')
+
+        self.public_post = Post.objects.create(
+            author=self.target,
+            board=self.public_board,
+            title='public visible',
+            content_md='x',
+            is_anonymous=False,
+        )
+        self.staff_only_post = Post.objects.create(
+            author=self.target,
+            board=self.public_board,
+            title='staff secret',
+            content_md='x',
+            post_type=Post.PostType.STAFF_ONLY,
+            is_anonymous=False,
+        )
+        self.staff_board_post = Post.objects.create(
+            author=self.target,
+            board=self.staff_board,
+            title='board secret',
+            content_md='x',
+            is_anonymous=False,
+        )
+        Comment.objects.create(author=self.target, post=self.public_post, content='public comment', is_anonymous=False)
+        Comment.objects.create(author=self.target, post=self.staff_only_post, content='staff comment', is_anonymous=False)
+        Comment.objects.create(author=self.target, post=self.staff_board_post, content='board comment', is_anonymous=False)
+
+    def _url(self):
+        return reverse('public-profile', kwargs={'username': 'target'})
+
+    def test_profile_omits_activity_until_requested(self):
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['posts'], [])
+        self.assertEqual(response.data['comments'], [])
+
+    def test_activity_excludes_unreadable_posts_for_anonymous_user(self):
+        response = self.client.get(self._url(), {'include_activity': '1'})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([item['title'] for item in response.data['posts']], ['public visible'])
+        self.assertEqual([item['content'] for item in response.data['comments']], ['public comment'])

@@ -273,16 +273,29 @@ class PublicProfileSerializer(serializers.ModelSerializer):
             return request.user == obj
         return False
 
-    def get_posts(self, obj):
+    def _include_activity(self):
         request = self.context.get('request')
-        is_self = request and request.user.is_authenticated and request.user == obj
+        if not request:
+            return False
+        return request.query_params.get('include_activity') in {'1', 'true', 'yes'}
+
+    def get_posts(self, obj):
+        if not self._include_activity():
+            return []
+
+        from boards.models import Post
+
+        request = self.context.get('request')
+        if not request:
+            return []
+        request_user = request.user if request else None
+        is_staff = request_user and request_user.is_authenticated and request_user.is_staff
         is_authenticated = request and request.user.is_authenticated
 
-        posts = obj.posts.order_by('-created_at')
+        posts = Post.objects.filter(author=obj).visible_for_user(request_user).order_by('-created_at')
 
-        # 본인이 아닌 경우 비공개 게시글(post_type=3) 제외
-        if not is_self:
-            posts = posts.exclude(post_type=3)
+        if not is_staff:
+            posts = posts.filter(board__read_permission='all')
 
         # 비회원인 경우 익명 글(is_anonymous=True) 제외
         if not is_authenticated:
@@ -300,16 +313,28 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         } for p in posts]
 
     def get_comments(self, obj):
-        from boards.models import Comment
+        if not self._include_activity():
+            return []
+
+        from boards.models import Comment, Post
+
         request = self.context.get('request')
-        is_self = request and request.user.is_authenticated and request.user == obj
+        if not request:
+            return []
+        request_user = request.user if request else None
+        is_staff = request_user and request_user.is_authenticated and request_user.is_staff
         is_authenticated = request and request.user.is_authenticated
 
-        comments = Comment.objects.filter(author=obj, is_deleted=False).select_related('post').order_by('-created_at')
+        visible_posts = Post.objects.visible_for_user(request_user)
+        if not is_staff:
+            visible_posts = visible_posts.filter(board__read_permission='all')
 
-        # 본인이 아닌 경우 비공개 게시글(post_type=3)의 댓글 제외
-        if not is_self:
-            comments = comments.exclude(post__post_type=3)
+        comments = (
+            Comment.objects
+            .filter(author=obj, is_deleted=False, post__in=visible_posts)
+            .select_related('post')
+            .order_by('-created_at')
+        )
 
         # 비회원인 경우 익명 댓글(is_anonymous=True) 제외
         if not is_authenticated:

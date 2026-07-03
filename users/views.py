@@ -43,7 +43,7 @@ from django.shortcuts import get_object_or_404
 import pytz
 
 from rest_framework_simplejwt.exceptions import TokenError
-from boards.serializers import PostListSerializer, CommentSerializer
+from boards.serializers import PostSummarySerializer, CommentSerializer
 from boards.models import Post, Comment
 
 
@@ -67,7 +67,7 @@ from boards.models import Post, Comment
     ]
 )
 class UserPostListView(generics.ListAPIView):
-    serializer_class = PostListSerializer
+    serializer_class = PostSummarySerializer
     permission_classes = [AllowAny]
 
     def get_queryset(self):
@@ -75,7 +75,10 @@ class UserPostListView(generics.ListAPIView):
         target_user = get_object_or_404(User, email__iexact=f'{username}@jbnu.ac.kr')
         request_user = self.request.user
 
-        queryset = Post.objects.filter(author=target_user)
+        queryset = Post.objects.filter(author=target_user).visible_for_user(request_user)
+
+        if not (request_user.is_authenticated and request_user.is_staff):
+            queryset = queryset.filter(board__read_permission='all')
         
         # 로그인하지 않은 사용자는 익명 글을 볼 수 없음
         if not request_user.is_authenticated:
@@ -113,7 +116,11 @@ class UserCommentListView(generics.ListAPIView):
         target_user = get_object_or_404(User, email__iexact=f'{user_id}@jbnu.ac.kr')
         request_user = self.request.user
 
-        queryset = Comment.objects.filter(author=target_user)
+        visible_posts = Post.objects.visible_for_user(request_user)
+        if not (request_user.is_authenticated and request_user.is_staff):
+            visible_posts = visible_posts.filter(board__read_permission='all')
+
+        queryset = Comment.objects.filter(author=target_user, post__in=visible_posts)
         
         # 로그인하지 않은 사용자는 익명 댓글을 볼 수 없음
         if not request_user.is_authenticated:

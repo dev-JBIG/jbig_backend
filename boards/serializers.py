@@ -310,13 +310,12 @@ class CommentSerializer(serializers.ModelSerializer):
             representation['user_id'] = '알 수 없는 사용자'
         return representation
 
-class PostListSerializer(serializers.ModelSerializer):
+class PostSummarySerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
     author_semester = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(read_only=True)
     comment_count = serializers.IntegerField(read_only=True)
-    attachment_paths = serializers.SerializerMethodField()
     board_id = serializers.IntegerField(source='board.id', read_only=True)
     board_name = serializers.CharField(source='board.name', read_only=True)
     is_anonymous = serializers.BooleanField(read_only=True)
@@ -326,7 +325,7 @@ class PostListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Post
-        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'attachment_paths', 'board_id', 'board_name', 'is_anonymous', 'tag', 'recruitment_info']
+        fields = ['id', 'board_post_id', 'title', 'user_id', 'author', 'author_semester', 'created_at', 'views', 'likes_count', 'comment_count', 'board_id', 'board_name', 'post_type', 'is_anonymous', 'tag', 'recruitment_info']
 
     def get_recruitment_info(self, obj):
         """모집 게시글이면 모집 요약 정보 반환"""
@@ -404,6 +403,23 @@ class PostListSerializer(serializers.ModelSerializer):
             return ''
         
         return obj.author.semester
+
+class PostListSerializer(PostSummarySerializer):
+    attachment_paths = serializers.SerializerMethodField()
+
+    class Meta(PostSummarySerializer.Meta):
+        fields = PostSummarySerializer.Meta.fields + ['attachment_paths']
+
+    def get_attachment_paths(self, obj):
+        return get_presigned_attachments(obj.attachment_paths, include_size=False)
+
+
+class PhotoPostSummarySerializer(serializers.ModelSerializer):
+    attachment_paths = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = ['id', 'title', 'created_at', 'attachment_paths']
 
     def get_attachment_paths(self, obj):
         return get_presigned_attachments(obj.attachment_paths, include_size=False)
@@ -715,7 +731,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
 
 class PostListResponseSerializer(serializers.Serializer):
     board = BoardSerializer()
-    posts = PostListSerializer(many=True)
+    posts = PostSummarySerializer(many=True)
     count = serializers.IntegerField()
     next = serializers.URLField(allow_null=True)
     previous = serializers.URLField(allow_null=True)

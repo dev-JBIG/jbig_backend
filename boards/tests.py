@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import User
-from .models import Board, Post, Category, Comment
+from .models import Board, Post, Category, Comment, Notification
 
 
 class PostAPITestCase(APITestCase):
@@ -53,6 +53,39 @@ class PostAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['title'], 'Detail Test Post')
 
+    def test_post_detail_increments_views_with_atomic_update(self):
+        post = Post.objects.create(
+            author=self.user, board=self.board,
+            title='Viewed Post', content_md='detail test content', views=7,
+        )
+        url = reverse('post-detail-update-destroy', kwargs={'post_id': post.id})
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['views'], 8)
+
+        post.refresh_from_db()
+        self.assertEqual(post.views, 8)
+
+        post_selects = [
+            query['sql']
+            for query in queries.captured_queries
+            if query['sql'].startswith('SELECT')
+            and 'FROM "post"' in query['sql']
+            and 'WHERE "post"."id"' in query['sql']
+        ]
+        self.assertEqual(len(post_selects), 1)
+
+        atomic_view_updates = [
+            query['sql']
+            for query in queries.captured_queries
+            if query['sql'].startswith('UPDATE "post"')
+            and '"views" = ("post"."views" + 1)' in query['sql']
+        ]
+        self.assertEqual(len(atomic_view_updates), 1)
+
     def test_post_update_board(self):
         second_board = Board.objects.create(name='Second Board', category=self.category)
         post = Post.objects.create(
@@ -85,7 +118,7 @@ class PostListPerformanceTest(APITestCase):
         token = RefreshToken.for_user(self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
 
-    def test_list_keeps_attachment_url_name_without_head_object(self):
+    def test_default_list_omits_attachments_and_photo_view_keeps_url_name_without_head_object(self):
         file_key = f'uploads/2026/07/03/{self.user.id}/image.jpg'
         Post.objects.create(
             author=self.user,
@@ -97,6 +130,16 @@ class PostListPerformanceTest(APITestCase):
 
         with patch('boards.serializers.get_s3_client') as get_s3_client:
             response = self.client.get(reverse('post-list-create', kwargs={'board_id': self.board.id}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        get_s3_client.assert_not_called()
+        self.assertNotIn('attachment_paths', response.data['results'][0])
+
+        with patch('boards.serializers.get_s3_client') as get_s3_client:
+            response = self.client.get(
+                reverse('post-list-create', kwargs={'board_id': self.board.id}),
+                {'view': 'photo'},
+            )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         get_s3_client.assert_not_called()
@@ -171,6 +214,92 @@ class PostListPerformanceTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         titles = {item['title'] for item in response.data['results']}
         self.assertEqual(titles, {'public', 'own justification'})
+
+
+class NotificationPerformanceTest(APITestCase):
+    def setUp(self):
+        self.recipient = User.objects.create_user(
+            username='recipient', email='recipient@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.actor = User.objects.create_user(
+            username='actor', email='actor@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.category = Category.objects.create(name='Cat')
+        self.board = Board.objects.create(name='Board', category=self.category)
+
+        token = RefreshToken.for_user(self.recipient)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+    def _create_notification(self, idx, is_read=False):
+        post = Post.objects.create(
+            author=self.recipient,
+            board=self.board,
+            title=f'post {idx}',
+            content_md='x',
+        )
+        comment = Comment.objects.create(
+            post=post,
+            author=self.actor,
+            content=f'comment {idx}',
+        )
+        return Notification.objects.create(
+            recipient=self.recipient,
+            actor=self.actor,
+            notification_type=Notification.NotificationType.COMMENT,
+            post=post,
+            comment=comment,
+            is_read=is_read,
+        )
+
+    def test_notification_list_selects_related_objects(self):
+        for idx in range(50):
+            self._create_notification(idx)
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse('notification-list'), {'page_size': 50})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 50)
+
+        related_lookup_queries = [
+            query['sql']
+            for query in queries.captured_queries
+            if (
+                ('FROM "post"' in query['sql'] and 'WHERE "post"."id"' in query['sql'])
+                or ('FROM "board"' in query['sql'] and 'WHERE "board"."id"' in query['sql'])
+                or ('FROM "comment"' in query['sql'] and 'WHERE "comment"."id"' in query['sql'])
+                or (
+                    'FROM "user"' in query['sql']
+                    and f'WHERE "user"."id" = {self.actor.id}' in query['sql']
+                )
+            )
+        ]
+        self.assertEqual(related_lookup_queries, [])
+
+    def test_unread_count_and_mark_read_are_unchanged(self):
+        first = self._create_notification(1)
+        self._create_notification(2)
+        self._create_notification(3, is_read=True)
+
+        response = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['unread_count'], 2)
+
+        response = self.client.post(reverse('notification-mark-read', kwargs={'notification_id': first.id}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['success'], True)
+
+        response = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(response.data['unread_count'], 1)
+
+        response = self.client.post(reverse('notification-mark-all-read'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['success'], True)
+
+        response = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(response.data['unread_count'], 0)
 
 
 class PostVisibilityHardeningTest(APITestCase):
@@ -313,6 +442,34 @@ class CategoryLatestPostTest(APITestCase):
         private_board = next(item for item in boards if item['id'] == staff_board.id)
         self.assertIsNone(public_board['latest_post_created_at'])
         self.assertIsNone(private_board['latest_post_created_at'])
+
+    def test_category_total_count_does_not_include_unreadable_posts(self):
+        Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='public',
+            content_md='x',
+        )
+        Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='staff only',
+            content_md='x',
+            post_type=Post.PostType.STAFF_ONLY,
+        )
+        staff_board = Board.objects.create(name='Staff Board', category=self.category)
+        Board.objects.filter(pk=staff_board.pk).update(read_permission='staff')
+        Post.objects.create(
+            author=self.user,
+            board=staff_board,
+            title='private board',
+            content_md='x',
+        )
+
+        res = self.client.get(reverse('category-list-list'))
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['total_post_count'], 1)
 
 
 @override_settings(USE_LOCAL_STORAGE=True, MEDIA_URL='/media/')
