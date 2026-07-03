@@ -133,9 +133,17 @@ class BoardSerializer(serializers.ModelSerializer):
         return user.is_staff
 
 class BoardIdNameSerializer(serializers.ModelSerializer):
+    latest_post_created_at = serializers.SerializerMethodField()
+
     class Meta:
         model = Board
-        fields = ['id', 'name', 'board_type', 'form_type', 'available_tags']
+        fields = ['id', 'name', 'board_type', 'form_type', 'available_tags', 'latest_post_created_at']
+
+    def get_latest_post_created_at(self, obj):
+        value = getattr(obj, 'latest_post_created_at', None)
+        if value is None:
+            return None
+        return serializers.DateTimeField().to_representation(value)
 
 class CategoryWithBoardsSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source='name')

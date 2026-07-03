@@ -9,7 +9,9 @@ import requests
 
 from django.conf import settings
 from django.shortcuts import get_object_or_404, render
-from django.db.models import F, Q, Value, CharField, Func
+from django.db.models import (
+    F, Q, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery
+)
 from django.views.decorators.http import require_GET
 
 from rest_framework import generics, status, viewsets
@@ -451,12 +453,25 @@ class AllPostSearchView(PostSearchView):
 class BoardListViewSet(viewsets.ViewSet):
     def list(self, request, *args, **kwargs):
         total_post_count = Post.objects.count()
-        categories = Category.objects.prefetch_related('boards').all()
+        latest_visible_posts = Post.objects.visible_for_user(request.user)
+        if not (request.user.is_authenticated and request.user.is_staff):
+            latest_visible_posts = latest_visible_posts.filter(board__read_permission='all')
+
+        boards = Board.objects.annotate(
+            latest_post_created_at=Subquery(
+                latest_visible_posts
+                .filter(board=OuterRef('pk'))
+                .order_by('-created_at')
+                .values('created_at')[:1],
+                output_field=DateTimeField(),
+            )
+        )
+        categories = Category.objects.prefetch_related(Prefetch('boards', queryset=boards)).all()
         response_payload = {
             "total_post_count": total_post_count,
             "categories": categories
         }
-        serializer = CategoryListResponseSerializer(response_payload)
+        serializer = CategoryListResponseSerializer(response_payload, context={'request': request})
         return Response(serializer.data)
 
 @extend_schema(tags=['게시판'])

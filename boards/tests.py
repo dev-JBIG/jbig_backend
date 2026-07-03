@@ -2,6 +2,8 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import User
 from .models import Board, Post, Category
@@ -140,6 +142,68 @@ class PostVisibilityHardeningTest(APITestCase):
             'attachment_paths': [{'path': own_path, 'name': 'abc.png'}],
         }, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+
+class CategoryLatestPostTest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='u', email='u@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.category = Category.objects.create(name='Cat')
+        self.board = Board.objects.create(name='Public Board', category=self.category)
+
+    def _category_boards(self):
+        res = self.client.get(reverse('category-list-list'))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('categories', res.data)
+        category_data = next(
+            item for item in res.data['categories']
+            if item['category'] == self.category.name
+        )
+        return category_data['boards']
+
+    def test_category_boards_include_latest_post_created_at(self):
+        post = Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='visible',
+            content_md='x',
+        )
+        created_at = timezone.now().replace(microsecond=0)
+        Post.objects.filter(pk=post.pk).update(created_at=created_at)
+
+        boards = self._category_boards()
+
+        board_data = next(item for item in boards if item['id'] == self.board.id)
+        self.assertEqual(parse_datetime(board_data['latest_post_created_at']), created_at)
+
+    def test_category_latest_post_does_not_expose_unreadable_posts(self):
+        staff_post = Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='staff only',
+            content_md='x',
+            post_type=Post.PostType.STAFF_ONLY,
+        )
+        Post.objects.filter(pk=staff_post.pk).update(created_at=timezone.now())
+
+        staff_board = Board.objects.create(name='Staff Board', category=self.category)
+        Board.objects.filter(pk=staff_board.pk).update(read_permission='staff')
+        staff_board_post = Post.objects.create(
+            author=self.user,
+            board=staff_board,
+            title='private board',
+            content_md='x',
+        )
+        Post.objects.filter(pk=staff_board_post.pk).update(created_at=timezone.now())
+
+        boards = self._category_boards()
+
+        public_board = next(item for item in boards if item['id'] == self.board.id)
+        private_board = next(item for item in boards if item['id'] == staff_board.id)
+        self.assertIsNone(public_board['latest_post_created_at'])
+        self.assertIsNone(private_board['latest_post_created_at'])
 
 
 @override_settings(USE_LOCAL_STORAGE=True, MEDIA_URL='/media/')
