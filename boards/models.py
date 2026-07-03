@@ -179,6 +179,7 @@ class Post(models.Model):
         verbose_name_plural = '게시글 목록'
         indexes = [
             GinIndex(fields=['search_vector']),
+            models.Index(fields=['board', '-created_at'], name='post_board_created_at_idx'),
         ]
         unique_together = ('board', 'board_post_id')
 
@@ -296,6 +297,9 @@ class Notification(models.Model):
         verbose_name = '알림'
         verbose_name_plural = '알림 목록'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', '-created_at'], name='noti_recipient_created_idx'),
+        ]
 
     def __str__(self):
         return f'{self.recipient}에게 {self.get_notification_type_display()} 알림'

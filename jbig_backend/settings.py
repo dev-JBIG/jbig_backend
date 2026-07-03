@@ -27,6 +27,13 @@ def get_env_bool(key: str, default: bool = False) -> bool:
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def get_env_int(key: str, default: int) -> int:
+    val = os.getenv(key)
+    if not val:
+        return default
+    return int(val)
+
+
 def get_env_list(key: str, default: list[str] | None = None) -> list[str]:
     val = os.getenv(key)
     if not val:
@@ -56,6 +63,8 @@ else:
             'PASSWORD': os.getenv('DB_PASSWORD'),
             'HOST': os.getenv('DB_HOST'),
             'PORT': os.getenv('DB_PORT'),
+            'CONN_MAX_AGE': get_env_int('DB_CONN_MAX_AGE', 60),
+            'CONN_HEALTH_CHECKS': get_env_bool('DB_CONN_HEALTH_CHECKS', True),
         }
     }
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
