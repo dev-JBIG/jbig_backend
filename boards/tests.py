@@ -333,3 +333,101 @@ class BoardPostOGPreviewTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertDefaultOG(response)
         self.assertNotContains(response, 'wrong board title')
+
+
+class PostListPerformanceTest(APITestCase):
+    """성능 회귀 방지 테스트.
+
+    - 목록/상세 응답이 게시글·댓글 수에 상관없이 '일정한 쿼리 수'로 처리되는지
+      검증(N+1 회귀 감지).
+    - 목록 첨부 응답이 스토리지 head_object 없이 url+name 만 담는지(특성화) 검증.
+    """
+
+    def setUp(self):
+        from .models import Category, Board, Post, Comment, PostLike
+        self.category = Category.objects.create(name='Perf Category')
+        self.board = Board.objects.create(name='Perf Board', category=self.category)
+        self.user = User.objects.create_user(
+            username='perfuser', email='perf@example.com', password='password123',
+            is_verified=True, is_active=True,
+        )
+
+    def _make_posts(self, n, with_attachment=False):
+        from .models import Post, Comment, PostLike
+        for i in range(n):
+            post = Post.objects.create(
+                author=self.user, board=self.board, title=f'Perf Post {i}',
+                content_md='body',
+                attachment_paths=(
+                    [{'path': 'uploads/sample.png', 'name': 'sample.png'}]
+                    if with_attachment else []
+                ),
+            )
+            Comment.objects.create(post=post, author=self.user, content='c')
+            PostLike.objects.create(user=self.user, post=post)
+
+    def test_list_query_count_does_not_grow_with_posts(self):
+        """글이 3개 → 10개로 늘어도 목록 쿼리 수가 동일해야 한다(N+1 없음)."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        url = reverse('post-list-create', kwargs={'board_id': self.board.id})
+
+        self._make_posts(3)
+        with CaptureQueriesContext(connection) as ctx_small:
+            res = self.client.get(url, {'page_size': 50})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data['results']), 3)
+
+        self._make_posts(7)  # 총 10개
+        with CaptureQueriesContext(connection) as ctx_large:
+            res = self.client.get(url, {'page_size': 50})
+        self.assertEqual(len(res.data['results']), 10)
+
+        self.assertEqual(
+            len(ctx_small.captured_queries), len(ctx_large.captured_queries),
+            f"목록에 N+1 회귀 발생: 3글={len(ctx_small.captured_queries)}쿼리, "
+            f"10글={len(ctx_large.captured_queries)}쿼리",
+        )
+
+    def test_list_attachments_have_url_name_but_no_size(self):
+        """특성화: 목록 첨부는 url+name 만 담고 size(head_object)는 담지 않는다."""
+        self._make_posts(1, with_attachment=True)
+        url = reverse('post-list-create', kwargs={'board_id': self.board.id})
+
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        attachments = res.data['results'][0]['attachment_paths']
+        self.assertEqual(len(attachments), 1)
+        entry = attachments[0]
+        self.assertIn('url', entry)
+        self.assertIn('name', entry)
+        self.assertEqual(entry['name'], 'sample.png')
+        self.assertNotIn('size', entry)  # 목록에서는 스토리지 왕복 없음
+
+    def test_detail_comment_tree_query_count_does_not_grow(self):
+        """댓글이 늘어도 상세 조회 쿼리 수가 동일해야 한다(댓글 트리 N+1 없음)."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .models import Post, Comment
+
+        post = Post.objects.create(
+            author=self.user, board=self.board, title='Detail Perf', content_md='b',
+        )
+        url = reverse('post-detail-update-destroy', kwargs={'post_id': post.id})
+
+        for i in range(2):
+            Comment.objects.create(post=post, author=self.user, content=f'c{i}')
+        with CaptureQueriesContext(connection) as ctx_small:
+            self.client.get(url)
+
+        for i in range(8):
+            Comment.objects.create(post=post, author=self.user, content=f'more{i}')
+        with CaptureQueriesContext(connection) as ctx_large:
+            self.client.get(url)
+
+        self.assertEqual(
+            len(ctx_small.captured_queries), len(ctx_large.captured_queries),
+            f"댓글 트리에 N+1 회귀 발생: 2댓글={len(ctx_small.captured_queries)}쿼리, "
+            f"10댓글={len(ctx_large.captured_queries)}쿼리",
+        )

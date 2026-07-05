@@ -179,6 +179,10 @@ class Post(models.Model):
         verbose_name_plural = '게시글 목록'
         indexes = [
             GinIndex(fields=['search_vector']),
+            # 게시판 목록 핫패스: board 로 필터 + created_at 역순 정렬을 인덱스로 커버.
+            models.Index(fields=['board', '-created_at'], name='post_board_created_idx'),
+            # tag 필터 + 최신순(태그별 목록)까지 커버.
+            models.Index(fields=['board', 'tag', '-created_at'], name='post_board_tag_created_idx'),
         ]
         unique_together = ('board', 'board_post_id')
 
@@ -296,6 +300,10 @@ class Notification(models.Model):
         verbose_name = '알림'
         verbose_name_plural = '알림 목록'
         ordering = ['-created_at']
+        indexes = [
+            # 알림 목록 조회: recipient 필터 + 최신순 정렬을 인덱스로 커버.
+            models.Index(fields=['recipient', '-created_at'], name='notif_recipient_created_idx'),
+        ]
 
     def __str__(self):
         return f'{self.recipient}에게 {self.get_notification_type_display()} 알림'

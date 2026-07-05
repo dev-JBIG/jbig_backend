@@ -6,9 +6,10 @@ from botocore.exceptions import ClientError
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Prefetch
 from rest_framework import serializers
 
-from .models import Category, Board, Post, Comment, Notification, Draft, generate_anonymous_nickname
+from .models import Category, Board, Post, Comment, CommentLike, Notification, Draft, generate_anonymous_nickname
 from jbig_backend.storage import get_s3_client, public_media_url
 
 logger = logging.getLogger(__name__)
@@ -49,19 +50,27 @@ def sanitize_markdown(value: str) -> str:
     )
 
 
-def get_presigned_attachments(attachments_list):
+def get_presigned_attachments(attachments_list, with_size=True):
     """첨부파일 목록을 공개(CDN) URL + 메타로 변환하는 공통 함수.
 
-    URL은 고정 공개 URL(public_media_url)이라 CDN 캐시가 동작한다.
-    size 표시를 위해 head_object 만 호출한다(메타데이터 조회, egress 아님).
+    URL은 고정 공개 URL(public_media_url)이라 CDN 캐시가 동작하며, 순수 문자열
+    변환이라 네트워크 비용이 없다.
+
+    with_size=True 이면 파일 크기(size) 표시를 위해 첨부마다 스토리지에
+    head_object(메타데이터 조회)를 호출한다. 이 호출은 CDN 캐시가 걸리지 않는
+    서버↔스토리지 왕복이라, 여러 게시글을 한 번에 내려주는 목록 경로에서는
+    with_size=False 로 호출해 왕복을 생략한다(size 는 목록에서 미사용).
     """
     if not attachments_list or not isinstance(attachments_list, list):
         return []
-    try:
-        s3_client = get_s3_client()
-    except Exception as e:
-        logger.error(f"S3 클라이언트 생성 실패: {e}")
-        return []
+
+    s3_client = None
+    if with_size:
+        try:
+            s3_client = get_s3_client()
+        except Exception as e:
+            logger.error(f"S3 클라이언트 생성 실패: {e}")
+            s3_client = None
 
     presigned_attachments = []
     for item in attachments_list:
@@ -72,15 +81,16 @@ def get_presigned_attachments(attachments_list):
         file_key = file_key.replace('\\', '/')  # 레거시 역슬래시 key 정규화
         if not file_key.startswith("uploads/"):
             continue
-        try:
-            meta = s3_client.head_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
-            presigned_attachments.append({
-                "url": public_media_url(file_key),
-                "name": name,
-                "size": meta.get('ContentLength')
-            })
-        except ClientError as e:
-            logger.error(f"S3 에러 (Key: {file_key}): {e}")
+        # URL·이름은 항상 채운다. head_object 실패 시에도 첨부가 목록에서
+        # 사라지지 않도록 size 만 생략한다(사진첩 썸네일 누락 방지).
+        entry = {"url": public_media_url(file_key), "name": name}
+        if s3_client is not None:
+            try:
+                meta = s3_client.head_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
+                entry["size"] = meta.get('ContentLength')
+            except ClientError as e:
+                logger.error(f"S3 에러 (Key: {file_key}): {e}")
+        presigned_attachments.append(entry)
     return presigned_attachments
 
 
@@ -261,9 +271,15 @@ class CommentSerializer(serializers.ModelSerializer):
         return False
 
     def get_likes(self, obj):
-        return obj.likes.count()
+        # likes 가 prefetch 된 경우 캐시를 사용(추가 쿼리 0). 아니면 count 쿼리 1회.
+        return len(obj.likes.all())
 
     def get_isLiked(self, obj):
+        # 뷰/상위 시리얼라이저가 미리 계산해 넘긴 "내가 누른 댓글 id 집합"이 있으면
+        # per-comment .exists() 쿼리를 피한다.
+        liked_ids = self.context.get('liked_comment_ids')
+        if liked_ids is not None:
+            return obj.id in liked_ids
         user = self.context.get('request').user
         if user and user.is_authenticated:
             return obj.likes.filter(pk=user.pk).exists()
@@ -308,7 +324,7 @@ class PostListSerializer(serializers.ModelSerializer):
     user_id = serializers.SerializerMethodField()
     author = serializers.SerializerMethodField()
     author_semester = serializers.SerializerMethodField()
-    likes_count = serializers.IntegerField(source='likes.count', read_only=True)
+    likes_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
     attachment_paths = serializers.SerializerMethodField()
     board_id = serializers.IntegerField(source='board.id', read_only=True)
@@ -400,10 +416,17 @@ class PostListSerializer(serializers.ModelSerializer):
         return obj.author.semester
 
     def get_comment_count(self, obj):
-        return obj.comments.count()
+        # 뷰에서 annotate 된 값을 우선 사용해 per-row COUNT 쿼리를 피한다.
+        val = getattr(obj, 'annotated_comment_count', None)
+        return val if val is not None else obj.comments.count()
+
+    def get_likes_count(self, obj):
+        val = getattr(obj, 'annotated_likes_count', None)
+        return val if val is not None else obj.likes.count()
 
     def get_attachment_paths(self, obj):
-        return get_presigned_attachments(obj.attachment_paths)
+        # 목록 경로: size(head_object) 생략 — url+name 만 반환(네트워크 왕복 0).
+        return get_presigned_attachments(obj.attachment_paths, with_size=False)
 
 
 def normalize_media_urls(content):
@@ -670,13 +693,44 @@ class PostDetailSerializer(serializers.ModelSerializer):
         return obj.author.semester
 
     def get_comments(self, obj):
-        # 최상위 댓글만 가져오고 created_at 기준 오래된 순으로 정렬 (최신 댓글이 아래에)
-        # likes와 children(답글)의 likes도 함께 prefetch
-        comments = obj.comments.filter(parent__isnull=True).prefetch_related('likes', 'children__likes').order_by('created_at')
-        return CommentSerializer(comments, many=True, context=self.context).data
+        # 최상위 댓글만 가져오고 created_at 기준 오래된 순으로 정렬 (최신 댓글이 아래에).
+        # author/post/board 를 select_related 하고 likes·children 을 prefetch 해서
+        # 댓글 트리 직렬화 중 per-comment N+1(작성자·게시글·좋아요) 을 제거한다.
+        child_qs = (
+            Comment.objects
+            .select_related('author', 'post', 'post__board')
+            .prefetch_related('likes')
+            .order_by('created_at')
+        )
+        comments = list(
+            obj.comments.filter(parent__isnull=True)
+            .select_related('author', 'post', 'post__board')
+            .prefetch_related('likes', Prefetch('children', queryset=child_qs))
+            .order_by('created_at')
+        )
+
+        # "내가 좋아요 누른 댓글 id" 를 트리 전체에 대해 1쿼리로 미리 계산 →
+        # 각 댓글의 isLiked 가 exists() 쿼리를 반복하지 않도록 context 로 전달.
+        context = self.context
+        request = context.get('request')
+        user = request.user if request else None
+        if user and user.is_authenticated:
+            all_ids = []
+            for c in comments:
+                all_ids.append(c.id)
+                all_ids.extend(child.id for child in c.children.all())
+            liked_ids = set(
+                CommentLike.objects
+                .filter(user=user, comment_id__in=all_ids)
+                .values_list('comment_id', flat=True)
+            )
+            context = {**context, 'liked_comment_ids': liked_ids}
+
+        return CommentSerializer(comments, many=True, context=context).data
 
     def get_comments_count(self, obj):
-        return obj.comments.count()
+        val = getattr(obj, 'annotated_comment_count', None)
+        return val if val is not None else obj.comments.count()
 
     def get_is_liked(self, obj):
         user = self.context['request'].user

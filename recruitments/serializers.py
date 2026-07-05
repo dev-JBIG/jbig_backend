@@ -47,17 +47,27 @@ class RecruitmentDetailSerializer(serializers.ModelSerializer):
             'is_owner', 'total_applicants',
         ]
 
+    def _my_application(self, obj):
+        """요청 사용자의 이 모집 지원건을 1회만 조회해 재사용한다.
+        has_applied / my_application_status / contact_info 가 각자 같은
+        쿼리를 반복하던 것을 한 번의 조회로 합친다."""
+        cache = getattr(self, '_my_app_cache', None)
+        if cache is None:
+            cache = {}
+            self._my_app_cache = cache
+        if obj.id not in cache:
+            user = self.context['request'].user
+            cache[obj.id] = (
+                obj.applications.filter(applicant=user).first()
+                if user.is_authenticated else None
+            )
+        return cache[obj.id]
+
     def get_has_applied(self, obj):
-        user = self.context['request'].user
-        if not user.is_authenticated:
-            return False
-        return obj.applications.filter(applicant=user).exists()
+        return self._my_application(obj) is not None
 
     def get_my_application_status(self, obj):
-        user = self.context['request'].user
-        if not user.is_authenticated:
-            return None
-        app = obj.applications.filter(applicant=user).first()
+        app = self._my_application(obj)
         return app.status if app else None
 
     def get_contact_info(self, obj):
@@ -68,7 +78,8 @@ class RecruitmentDetailSerializer(serializers.ModelSerializer):
         if obj.post.author == user or user.is_staff:
             return obj.contact_info
         # 수락된 지원자만 볼 수 있음
-        if obj.applications.filter(applicant=user, status=Application.Status.ACCEPTED).exists():
+        app = self._my_application(obj)
+        if app and app.status == Application.Status.ACCEPTED:
             return obj.contact_info
         return None
 

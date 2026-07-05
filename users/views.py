@@ -45,6 +45,8 @@ import pytz
 from rest_framework_simplejwt.exceptions import TokenError
 from boards.serializers import PostListSerializer, CommentSerializer
 from boards.models import Post, Comment
+from boards.views import annotate_post_list
+from django.db.models import Prefetch
 
 
 
@@ -76,12 +78,12 @@ class UserPostListView(generics.ListAPIView):
         request_user = self.request.user
 
         queryset = Post.objects.filter(author=target_user)
-        
+
         # 로그인하지 않은 사용자는 익명 글을 볼 수 없음
         if not request_user.is_authenticated:
             queryset = queryset.filter(is_anonymous=False)
-        
-        return queryset.order_by('-created_at')
+
+        return annotate_post_list(queryset).order_by('-created_at')
 
 
 @extend_schema(
@@ -111,12 +113,19 @@ class UserCommentListView(generics.ListAPIView):
         request_user = self.request.user
 
         queryset = Comment.objects.filter(author=target_user)
-        
+
         # 로그인하지 않은 사용자는 익명 댓글을 볼 수 없음
         if not request_user.is_authenticated:
             queryset = queryset.filter(is_anonymous=False)
-        
-        return queryset.order_by('-created_at')
+
+        # 작성자·게시글·게시판을 조인하고 좋아요/대댓글을 prefetch 해서
+        # 댓글 목록 직렬화 중 per-comment N+1 을 제거한다.
+        return (
+            queryset
+            .select_related('author', 'post', 'post__board')
+            .prefetch_related('likes', Prefetch('children', queryset=Comment.objects.prefetch_related('likes')))
+            .order_by('-created_at')
+        )
 
 @extend_schema(
     tags=["사용자"],

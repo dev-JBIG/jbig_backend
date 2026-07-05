@@ -148,7 +148,9 @@ class RecruitmentStatusAPIView(APIView):
         return Response(RecruitmentDetailSerializer(recruitment, context={'request': request}).data)
 
     def _notify_pending_closed(self, recruitment, actor):
-        pending = recruitment.applications.filter(status=Application.Status.PENDING)
+        pending = recruitment.applications.filter(
+            status=Application.Status.PENDING
+        ).select_related('applicant')
         notifications = [
             Notification(
                 recipient=app.applicant,

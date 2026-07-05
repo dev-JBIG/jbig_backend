@@ -56,6 +56,10 @@ else:
             'PASSWORD': os.getenv('DB_PASSWORD'),
             'HOST': os.getenv('DB_HOST'),
             'PORT': os.getenv('DB_PORT'),
+            # 요청마다 연결을 새로 맺지 않고 재사용해 TCP/TLS/인증 핸드셰이크 비용을 없앤다.
+            # 트랜잭션 풀러(pgbouncer 등) 뒤에 있으면 0 으로 두고 풀러에 위임할 것.
+            'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '60')),
+            'CONN_HEALTH_CHECKS': True,
         }
     }
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

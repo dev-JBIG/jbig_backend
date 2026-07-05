@@ -10,7 +10,7 @@ import requests
 from django.conf import settings
 from django.shortcuts import get_object_or_404, render
 from django.db.models import (
-    F, Q, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery
+    F, Q, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery, Count
 )
 from django.views.decorators.http import require_GET
 
@@ -381,6 +381,19 @@ class CommentLikeAPIView(generics.GenericAPIView):
 )
 
 
+def annotate_post_list(qs):
+    """목록/검색 응답용 Post 쿼리셋 공통 최적화.
+
+    author·board·recruitment 를 조인(select_related)하고 좋아요/댓글 수를
+    annotate 해서, PostListSerializer 가 게시글마다 별도 쿼리(작성자·게시판·
+    COUNT)를 날리던 N+1 을 단일 쿼리로 접는다.
+    """
+    return qs.select_related('author', 'board', 'recruitment').annotate(
+        annotated_likes_count=Count('likes', distinct=True),
+        annotated_comment_count=Count('comments', distinct=True),
+    )
+
+
 class PostSearchView(generics.ListAPIView):
     serializer_class = PostListSerializer
 
@@ -420,7 +433,7 @@ class PostSearchView(generics.ListAPIView):
         )
 
         queryset = queryset.filter(search_filter).distinct().order_by('-created_at')
-        return queryset
+        return annotate_post_list(queryset)
 
 @extend_schema(
     tags=['게시글'],
@@ -585,7 +598,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         tag = self.request.query_params.get('tag')
         if tag:
             qs = qs.filter(tag=tag)
-        return qs.select_related('recruitment').order_by('-created_at')
+        return annotate_post_list(qs).order_by('-created_at')
 
     def get_object(self):
         board_id = self.kwargs.get(self.lookup_url_kwarg)
@@ -658,7 +671,7 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
     delete=extend_schema(summary="게시글 삭제", description="작성자 또는 스태프만 게시글을 삭제할 수 있습니다.")
 )
 class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Post.objects.all()
+    queryset = Post.objects.select_related('author', 'board', 'board__category', 'recruitment')
     permission_classes = [IsBoardReadable, PostDetailPermission]
     lookup_url_kwarg = 'post_id'
 
@@ -669,8 +682,9 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        instance.views += 1
-        instance.save(update_fields=['views'])
+        # 조회수는 원자적 UPDATE 로 증가시켜 read-modify-write 경쟁(lost update)을 피한다.
+        Post.objects.filter(pk=instance.pk).update(views=F('views') + 1)
+        instance.views += 1  # 방금 증가분을 응답에도 반영
 
         serializer = self.get_serializer(instance, context={'request': request})
         return Response(serializer.data)
@@ -901,7 +915,7 @@ class AllPostListAPIView(generics.ListAPIView):
 
         queryset = queryset.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
 
-        return queryset.order_by('-created_at')
+        return annotate_post_list(queryset).order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
@@ -1166,7 +1180,12 @@ class NotificationListAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user).order_by('-created_at')[:50]
+        return (
+            Notification.objects
+            .filter(recipient=self.request.user)
+            .select_related('actor', 'post', 'post__board', 'comment')
+            .order_by('-created_at')[:50]
+        )
 
 
 @extend_schema(tags=['알림'])
