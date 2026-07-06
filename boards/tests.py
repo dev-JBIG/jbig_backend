@@ -599,3 +599,57 @@ class BoardPostOGPreviewTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertDefaultOG(response)
         self.assertNotContains(response, 'wrong board title')
+
+
+class CommentTreeIsLikedPerfTest(APITestCase):
+    """상세 댓글 트리의 isLiked 를 트리 전체 1쿼리로 선계산 → 댓글 수와
+    무관하게 상세 조회 쿼리 수가 일정한지(N+1 회귀 감지) 검증."""
+
+    def setUp(self):
+        from .models import Category, Board, Post
+        self.category = Category.objects.create(name='ItLike Cat')
+        self.board = Board.objects.create(name='ItLike Board', category=self.category)
+        self.user = User.objects.create_user(
+            username='ituser', email='ituser@example.com', password='password123',
+            is_verified=True, is_active=True,
+        )
+        token = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+        self.post = Post.objects.create(
+            author=self.user, board=self.board, title='ItLike', content_md='x',
+        )
+        self.url = reverse('post-detail-update-destroy', kwargs={'post_id': self.post.id})
+
+    def _add_liked_comments(self, n):
+        from .models import Comment, CommentLike
+        for i in range(n):
+            c = Comment.objects.create(post=self.post, author=self.user, content=f'c{i}')
+            CommentLike.objects.create(user=self.user, comment=c)
+
+    def test_detail_query_count_constant_with_comment_growth(self):
+        self._add_liked_comments(2)
+        with CaptureQueriesContext(connection) as ctx_small:
+            self.client.get(self.url)
+
+        self._add_liked_comments(8)  # 총 10개
+        with CaptureQueriesContext(connection) as ctx_large:
+            self.client.get(self.url)
+
+        self.assertEqual(
+            len(ctx_small.captured_queries), len(ctx_large.captured_queries),
+            f"댓글 트리 isLiked N+1 회귀: 2댓글={len(ctx_small.captured_queries)}쿼리, "
+            f"10댓글={len(ctx_large.captured_queries)}쿼리",
+        )
+
+    def test_isliked_values_are_correct(self):
+        """일괄 계산이 정확한 값을 주는지: 내가 누른 댓글만 isLiked=True."""
+        from .models import Comment, CommentLike
+        liked = Comment.objects.create(post=self.post, author=self.user, content='liked')
+        CommentLike.objects.create(user=self.user, comment=liked)
+        not_liked = Comment.objects.create(post=self.post, author=self.user, content='not')
+
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        by_id = {c['id']: c for c in res.data['comments']}
+        self.assertTrue(by_id[liked.id]['isLiked'])
+        self.assertFalse(by_id[not_liked.id]['isLiked'])

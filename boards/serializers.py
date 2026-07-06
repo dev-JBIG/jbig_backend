@@ -6,9 +6,10 @@ from botocore.exceptions import ClientError
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Prefetch
 from rest_framework import serializers
 
-from .models import Category, Board, Post, Comment, Notification, Draft, generate_anonymous_nickname
+from .models import Category, Board, Post, Comment, CommentLike, Notification, Draft, generate_anonymous_nickname
 from jbig_backend.storage import get_s3_client, public_media_url
 
 logger = logging.getLogger(__name__)
@@ -267,9 +268,15 @@ class CommentSerializer(serializers.ModelSerializer):
         return False
 
     def get_likes(self, obj):
-        return obj.likes.count()
+        # likes 가 prefetch 된 경우 캐시를 사용(추가 쿼리 0). 아니면 count 쿼리 1회.
+        return len(obj.likes.all())
 
     def get_isLiked(self, obj):
+        # 상위 시리얼라이저가 미리 계산해 넘긴 "내가 누른 댓글 id 집합"이 있으면
+        # 댓글마다 .exists() 쿼리를 반복하지 않는다.
+        liked_ids = self.context.get('liked_comment_ids')
+        if liked_ids is not None:
+            return obj.id in liked_ids
         user = self.context.get('request').user
         if user and user.is_authenticated:
             return obj.likes.filter(pk=user.pk).exists()
@@ -689,10 +696,40 @@ class PostDetailSerializer(serializers.ModelSerializer):
         return obj.author.semester
 
     def get_comments(self, obj):
-        # 최상위 댓글만 가져오고 created_at 기준 오래된 순으로 정렬 (최신 댓글이 아래에)
-        # likes와 children(답글)의 likes도 함께 prefetch
-        comments = obj.comments.filter(parent__isnull=True).prefetch_related('likes', 'children__likes').order_by('created_at')
-        return CommentSerializer(comments, many=True, context=self.context).data
+        # 최상위 댓글만 가져오고 created_at 기준 오래된 순으로 정렬 (최신 댓글이 아래에).
+        # author/post/board 를 select_related, likes·children 을 prefetch 해서
+        # 댓글 트리 직렬화 중 per-comment N+1(작성자·게시글·좋아요)을 제거한다.
+        child_qs = (
+            Comment.objects
+            .select_related('author', 'post', 'post__board')
+            .prefetch_related('likes')
+            .order_by('created_at')
+        )
+        comments = list(
+            obj.comments.filter(parent__isnull=True)
+            .select_related('author', 'post', 'post__board')
+            .prefetch_related('likes', Prefetch('children', queryset=child_qs))
+            .order_by('created_at')
+        )
+
+        # "내가 좋아요 누른 댓글 id"를 트리 전체에 대해 1쿼리로 미리 계산 →
+        # 각 댓글의 isLiked 가 exists() 쿼리를 반복하지 않도록 context 로 전달.
+        context = self.context
+        request = context.get('request')
+        user = request.user if request else None
+        if user and user.is_authenticated:
+            all_ids = []
+            for c in comments:
+                all_ids.append(c.id)
+                all_ids.extend(child.id for child in c.children.all())
+            liked_ids = set(
+                CommentLike.objects
+                .filter(user=user, comment_id__in=all_ids)
+                .values_list('comment_id', flat=True)
+            )
+            context = {**context, 'liked_comment_ids': liked_ids}
+
+        return CommentSerializer(comments, many=True, context=context).data
 
     def get_comments_count(self, obj):
         return obj.comments.count()
