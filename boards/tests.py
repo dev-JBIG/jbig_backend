@@ -773,3 +773,13 @@ class MemberBoardAndAttachmentGateTest(APITestCase):
             {'read_permission': 'everyone'}, format='json',
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_initial_visibility_public_name_matching(self):
+        """초기 공개범위 마이그레이션의 토큰 매칭이 표기 변형을 견디는지."""
+        from importlib import import_module
+        mod = import_module('boards.migrations.0048_set_initial_board_visibility')
+        for name in ['자유게시판', '자랑게시판', '논문리뷰', '논문 리뷰',
+                     '스터디/소모임 홍보', '스터디 홍보', '소모임 홍보']:
+            self.assertTrue(mod._is_public(name), f'{name} 은 공개여야 함')
+        for name in ['자료게시판', '공지사항', '교안', '퀴즈', '족보', '홍보의 정석 후기']:
+            self.assertFalse(mod._is_public(name), f'{name} 은 회원전용이어야 함')
