@@ -3,19 +3,27 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib.sitemaps.views import sitemap
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from users.views import LogoutView
 from .views import QuizUrlView, CalendarEventViewSet, version_info, SiteSettingsView, PopupViewSet, NotionPageView
 from .local_upload import LocalFileUploadView
 
 from boards.views import GeneratePresignedURLAPIView, DeleteFileAPIView, ConfirmUploadAPIView
+from boards.sitemaps import StaticSitemap, PostSitemap
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
 router.register(r'calendar', CalendarEventViewSet, basename='calendar')
 router.register(r'popups', PopupViewSet, basename='popup')
 
+sitemaps = {
+    'static': StaticSitemap,
+    'posts': PostSitemap,
+}
+
 urlpatterns = [
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='django.contrib.sitemaps.views.sitemap'),
     path('api/', include(router.urls)),
     path('django-admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
