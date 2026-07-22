@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Prefetch
+from django.urls import reverse
 from rest_framework import serializers
 
 from .models import Category, Board, Post, Comment, CommentLike, Notification, Draft, generate_anonymous_nickname
@@ -50,14 +51,20 @@ def sanitize_markdown(value: str) -> str:
     )
 
 
-def get_presigned_attachments(attachments_list, include_size=True):
-    """첨부파일 목록을 공개(CDN) URL + 메타로 변환하는 공통 함수.
+def get_presigned_attachments(attachments_list, include_size=True, post=None, request=None):
+    """첨부파일 목록을 클라이언트용 URL + 메타로 변환하는 공통 함수.
 
-    URL은 고정 공개 URL(public_media_url)이라 CDN 캐시가 동작한다.
+    - 공개('all') 게시판: 고정 공개 URL(public_media_url) → CDN 캐시 동작.
+    - 비공개('member'/'staff') 게시판: 권한 게이트된 백엔드 다운로드 엔드포인트 URL로
+      바꿔 내보내고 `gated=True`를 표시한다. 원본 스토리지 URL은 노출하지 않는다.
     include_size=True일 때만 size 표시를 위해 head_object를 호출한다.
     """
     if not attachments_list or not isinstance(attachments_list, list):
         return []
+
+    board = getattr(post, 'board', None)
+    read_perm = getattr(board, 'read_permission', 'all')
+    gated = read_perm in ('member', 'staff') and getattr(post, 'id', None) is not None
 
     s3_client = None
     if include_size:
@@ -68,7 +75,10 @@ def get_presigned_attachments(attachments_list, include_size=True):
             return []
 
     presigned_attachments = []
-    for item in attachments_list:
+    # 다운로드 엔드포인트는 원본 attachment_paths의 인덱스를 사용하므로 enumerate로 원본 인덱스를 유지한다.
+    for idx, item in enumerate(attachments_list):
+        if not isinstance(item, dict):
+            continue
         file_key = item.get('path') or item.get('url')
         name = item.get('name')
         if not file_key or not name:
@@ -76,9 +86,15 @@ def get_presigned_attachments(attachments_list, include_size=True):
         file_key = file_key.replace('\\', '/')  # 레거시 역슬래시 key 정규화
         if not file_key.startswith("uploads/"):
             continue
+        if gated:
+            path = reverse('post-attachment-download', kwargs={'post_id': post.id, 'index': idx})
+            url = request.build_absolute_uri(path) if request is not None else path
+        else:
+            url = public_media_url(file_key)
         attachment = {
-            "url": public_media_url(file_key),
+            "url": url,
             "name": name,
+            "gated": gated,
         }
         if include_size:
             try:
@@ -110,15 +126,21 @@ class BoardSerializer(serializers.ModelSerializer):
     comment_permission = serializers.SerializerMethodField()
     available_tags = serializers.JSONField(read_only=True)
 
+    # read_permission은 하위호환을 위해 "현재 사용자가 읽을 수 있는가"(bool)를 유지하고,
+    # read_scope는 원본 공개범위 값('all'/'member'/'staff')을 그대로 노출한다.
+    read_scope = serializers.CharField(source='read_permission', read_only=True)
+
     class Meta:
         model = Board
-        fields = ['id', 'name', 'category', 'board_type', 'form_type', 'read_permission', 'post_permission', 'comment_permission', 'available_tags']
+        fields = ['id', 'name', 'category', 'board_type', 'form_type', 'read_permission', 'read_scope', 'post_permission', 'comment_permission', 'available_tags']
 
     def get_read_permission(self, instance):
         user = self.context['request'].user
         perm = getattr(instance, 'read_permission', 'staff')
         if perm == 'all':
             return True
+        if perm == 'member':
+            return user.is_authenticated
         return user.is_authenticated and user.is_staff
 
     def get_post_permission(self, instance):
@@ -139,12 +161,30 @@ class BoardSerializer(serializers.ModelSerializer):
             return True
         return user.is_staff
 
+class BoardAdminSerializer(serializers.ModelSerializer):
+    """관리자 게시판 관리 화면용. read_permission(공개범위)만 편집 가능하다."""
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
+    class Meta:
+        model = Board
+        fields = [
+            'id', 'name', 'category', 'category_name', 'board_type', 'form_type',
+            'read_permission', 'post_permission', 'comment_permission',
+        ]
+        read_only_fields = [
+            'id', 'name', 'category', 'category_name', 'board_type', 'form_type',
+            'post_permission', 'comment_permission',
+        ]
+
+
 class BoardIdNameSerializer(serializers.ModelSerializer):
     latest_post_created_at = serializers.SerializerMethodField()
 
     class Meta:
         model = Board
-        fields = ['id', 'name', 'board_type', 'form_type', 'available_tags', 'latest_post_created_at']
+        # read_permission(공개범위)을 그대로 노출해 사이드바에서 회원전용/스태프 게시판에
+        # 잠금 표시나 로그인 유도를 할 수 있게 한다.
+        fields = ['id', 'name', 'board_type', 'form_type', 'available_tags', 'latest_post_created_at', 'read_permission']
 
     def get_latest_post_created_at(self, obj):
         value = getattr(obj, 'latest_post_created_at', None)
@@ -418,7 +458,10 @@ class PostListSerializer(PostSummarySerializer):
         fields = PostSummarySerializer.Meta.fields + ['attachment_paths']
 
     def get_attachment_paths(self, obj):
-        return get_presigned_attachments(obj.attachment_paths, include_size=False)
+        return get_presigned_attachments(
+            obj.attachment_paths, include_size=False,
+            post=obj, request=self.context.get('request'),
+        )
 
 
 class PhotoPostSummarySerializer(serializers.ModelSerializer):
@@ -429,7 +472,10 @@ class PhotoPostSummarySerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'created_at', 'attachment_paths']
 
     def get_attachment_paths(self, obj):
-        return get_presigned_attachments(obj.attachment_paths, include_size=False)
+        return get_presigned_attachments(
+            obj.attachment_paths, include_size=False,
+            post=obj, request=self.context.get('request'),
+        )
 
 
 def normalize_media_urls(content):
@@ -763,7 +809,10 @@ class PostDetailSerializer(serializers.ModelSerializer):
         return re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
 
     def get_attachment_paths(self, obj):
-        return get_presigned_attachments(obj.attachment_paths)
+        return get_presigned_attachments(
+            obj.attachment_paths,
+            post=obj, request=self.context.get('request'),
+        )
 
 
 class PostListResponseSerializer(serializers.Serializer):

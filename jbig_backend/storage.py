@@ -117,6 +117,31 @@ def generate_presigned_download_url(file_key: str, expires_in: int = 3600) -> st
         return None
 
 
+def get_file_stream(file_key: str):
+    """파일을 스트리밍하기 위한 (파일객체, content_type, content_length)를 반환한다.
+
+    권한 게이트된 첨부 다운로드에서 사용한다. 백엔드가 직접 바이트를 흘려보내므로
+    스토리지가 도메인 단위 공개여도 클라이언트에 원본 URL이 노출되지 않는다.
+    로컬/스토리지 모두 지원하며, 실패 시 None을 반환한다.
+    """
+    if not file_key:
+        return None
+
+    if settings.USE_LOCAL_STORAGE:
+        path = os.path.join(settings.MEDIA_ROOT, file_key)
+        if not os.path.exists(path):
+            return None
+        return open(path, 'rb'), None, os.path.getsize(path)
+
+    try:
+        s3_client = get_s3_client()
+        obj = s3_client.get_object(Bucket=settings.STORAGE_BUCKET_NAME, Key=file_key)
+        return obj['Body'], obj.get('ContentType'), obj.get('ContentLength')
+    except ClientError as e:
+        logger.error(f"파일 스트림 조회 실패 (Key: {file_key}): {e}")
+        return None
+
+
 def delete_file(file_key: str) -> bool:
     """파일 하나를 삭제한다."""
     if not file_key or not file_key.startswith('uploads/'):
