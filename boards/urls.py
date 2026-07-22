@@ -13,6 +13,7 @@ from .views import (
     PostSearchView,
     AllPostSearchView,
     PostAttachmentDownloadView,
+    MediaStreamView,
     PostLikeAPIView,
     CommentLikeAPIView,
     BoardDetailAPIView,
@@ -41,6 +42,8 @@ urlpatterns = [
     path('posts/all/search/', AllPostSearchView.as_view(), name='post-search-all'),
     path('posts/<int:post_id>/', PostRetrieveUpdateDestroyAPIView.as_view(), name='post-detail-update-destroy'),
     path('posts/<int:post_id>/attachments/<int:index>/download/', PostAttachmentDownloadView.as_view(), name='post-attachment-download'),
+    # 본문 인라인 이미지: 서명 토큰으로 게이트된 스트리밍(최종 URL: /api/media/stream/?token=...)
+    path('media/stream/', MediaStreamView.as_view(), name='media-stream'),
     path('posts/<int:post_id>/like/', PostLikeAPIView.as_view(), name='post-like'),
     path('posts/<int:post_id>/comments/', CommentListCreateAPIView.as_view(), name='comment-list-create'),
     path('comments/<int:comment_id>/', CommentUpdateDestroyAPIView.as_view(), name='comment-detail-update-destroy'),

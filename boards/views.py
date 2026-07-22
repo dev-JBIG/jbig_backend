@@ -8,8 +8,10 @@ from urllib.parse import urlparse
 import requests
 
 from django.conf import settings
+from django.core import signing
 from django.http import Http404, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from urllib.parse import quote
 from django.db.models import (
     F, Q, Count, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery
@@ -1155,6 +1157,39 @@ def _iter_file(body, chunk_size=8192):
             pass
 
 
+# 본문 인라인 이미지용 서명 토큰의 유효기간(초). <img src>는 Authorization 헤더를
+# 실을 수 없어 URL에 서명 토큰을 넣어 게이트하므로, 페이지 열람 세션 동안만 유효하도록
+# 6시간으로 짧게 잡는다(유출돼도 만료 후 무효).
+MEDIA_STREAM_TOKEN_MAX_AGE = 6 * 3600
+_MEDIA_STREAM_SALT = 'jbig.media.stream'
+
+
+def make_media_stream_token(file_key: str) -> str:
+    """파일 key를 담은 서명·타임스탬프 토큰을 생성한다(TimestampSigner 기반 dumps)."""
+    return signing.dumps({'key': file_key}, salt=_MEDIA_STREAM_SALT)
+
+
+def verify_media_stream_token(token: str) -> str | None:
+    """토큰을 검증해 file_key를 반환한다. 서명 위조/만료/형식오류면 None."""
+    if not token:
+        return None
+    try:
+        data = signing.loads(token, salt=_MEDIA_STREAM_SALT, max_age=MEDIA_STREAM_TOKEN_MAX_AGE)
+    except signing.BadSignature:
+        # SignatureExpired 는 BadSignature 의 하위 클래스라 함께 처리된다.
+        return None
+    if not isinstance(data, dict):
+        return None
+    key = data.get('key')
+    return key if isinstance(key, str) else None
+
+
+def make_media_stream_url(file_key: str) -> str:
+    """토큰을 붙인 미디어 스트림 상대 경로(/api/media/stream/?token=...)를 만든다."""
+    token = make_media_stream_token(file_key)
+    return f"{reverse('media-stream')}?token={quote(token)}"
+
+
 @extend_schema(
     tags=['파일'],
     summary="첨부파일 다운로드(권한 게이트)",
@@ -1219,6 +1254,73 @@ class PostAttachmentDownloadView(APIView):
             f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(file_name)}"
         )
         response['Cache-Control'] = 'private, no-store'
+        return response
+
+
+@extend_schema(
+    tags=['파일'],
+    summary="본문 인라인 이미지 스트리밍(서명 토큰)",
+    description=(
+        "비공개(회원전용/스태프/사유서·스태프전용 글) 본문의 인라인 이미지를 서명 토큰으로 "
+        "게이트해 스트리밍한다. <img src>는 Authorization 헤더를 실을 수 없어 URL의 서명 "
+        "토큰 자체가 접근 권한을 증명하며, 토큰은 6시간 후 만료된다. 이미지가 페이지에서 "
+        "렌더되도록 Content-Disposition은 inline으로 내려간다."
+    ),
+    parameters=[
+        OpenApiParameter(
+            name='token',
+            description='서명된 미디어 스트림 토큰',
+            required=True,
+            type=str,
+            location=OpenApiParameter.QUERY,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(description="파일 스트림(inline)"),
+        403: OpenApiResponse(description="토큰이 없거나 위조/만료되었습니다."),
+        404: OpenApiResponse(description="파일을 찾을 수 없습니다."),
+    },
+)
+class MediaStreamView(APIView):
+    """서명 토큰으로 게이트된 본문 인라인 이미지 스트리밍.
+
+    스토리지가 도메인 단위 공개(R2+CDN)라 공개 URL만으로는 접근을 막을 수 없고,
+    브라우저의 <img src>는 인증 헤더를 실을 수 없다. 그래서 권한 판정 결과를 담은 서명
+    토큰을 URL에 넣어 내려보내고, 이 뷰가 토큰의 서명·만료를 검증한 뒤 바이트를 흘려보낸다.
+    권한 확인은 토큰 자체가 대신하므로 permission_classes는 AllowAny로 둔다.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = request.query_params.get('token')
+        file_key = verify_media_stream_token(token)
+        if file_key is None:
+            return Response({'detail': '유효하지 않은 토큰입니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # 토큰이 유효해도 key 형식을 재검증한다(서명 시점 이후의 방어적 검사).
+        file_key = file_key.replace('\\', '/')
+        if (
+            not isinstance(file_key, str)
+            or not file_key.startswith('uploads/')
+            or '..' in file_key.split('/')
+        ):
+            return Response({'detail': '유효하지 않은 경로입니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        stream = get_file_stream(file_key)
+        if stream is None:
+            raise Http404('파일을 찾을 수 없습니다.')
+        body, content_type, content_length = stream
+
+        response = StreamingHttpResponse(
+            _iter_file(body),
+            content_type=content_type or 'application/octet-stream',
+        )
+        if content_length is not None:
+            response['Content-Length'] = str(content_length)
+        # 이미지는 페이지 내에서 렌더되어야 하므로 다운로드가 아닌 inline 으로 내려보낸다.
+        response['Content-Disposition'] = 'inline'
+        # 서명 토큰이 붙은 사설 리소스라 공용 캐시는 피하고 짧게 사설 캐시만 허용.
+        response['Cache-Control'] = 'private, max-age=3600'
         return response
 
 
