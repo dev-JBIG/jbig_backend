@@ -54,9 +54,10 @@ def sanitize_markdown(value: str) -> str:
 def get_presigned_attachments(attachments_list, include_size=True, post=None, request=None):
     """첨부파일 목록을 클라이언트용 URL + 메타로 변환하는 공통 함수.
 
-    - 공개('all') 게시판: 고정 공개 URL(public_media_url) → CDN 캐시 동작.
-    - 비공개('member'/'staff') 게시판: 권한 게이트된 백엔드 다운로드 엔드포인트 URL로
-      바꿔 내보내고 `gated=True`를 표시한다. 원본 스토리지 URL은 노출하지 않는다.
+    - 공개('all') 게시판의 일반 글: 고정 공개 URL(public_media_url) → CDN 캐시 동작.
+    - 비공개 게시판('member'/'staff') 또는 비공개 글 유형(스태프전용/사유서):
+      권한 게이트된 백엔드 다운로드 엔드포인트 URL로 바꿔 내보내고 `gated=True`를
+      표시한다. 원본 스토리지 URL은 노출하지 않는다.
     include_size=True일 때만 size 표시를 위해 head_object를 호출한다.
     """
     if not attachments_list or not isinstance(attachments_list, list):
@@ -64,7 +65,14 @@ def get_presigned_attachments(attachments_list, include_size=True, post=None, re
 
     board = getattr(post, 'board', None)
     read_perm = getattr(board, 'read_permission', 'all')
-    gated = read_perm in ('member', 'staff') and getattr(post, 'id', None) is not None
+    # 게시판이 공개여도 글 자체가 비공개 유형(사유서/스태프전용)이면 첨부를 게이트한다.
+    private_post_type = getattr(post, 'post_type', None) in (
+        Post.PostType.STAFF_ONLY, Post.PostType.JUSTIFICATION_LETTER,
+    )
+    gated = (
+        (read_perm in ('member', 'staff') or private_post_type)
+        and getattr(post, 'id', None) is not None
+    )
 
     s3_client = None
     if include_size:
@@ -175,6 +183,16 @@ class BoardAdminSerializer(serializers.ModelSerializer):
             'id', 'name', 'category', 'category_name', 'board_type', 'form_type',
             'post_permission', 'comment_permission',
         ]
+
+    def validate_read_permission(self, value):
+        # 사진첩은 이미지가 <img src>로 직접 로드되어(인증 헤더 없음) 비공개로
+        # 전환하면 화면이 깨진다. 게이트 렌더링을 지원하기 전까지 전체공개만 허용.
+        board = self.instance
+        if board and board.board_type == Board.BoardType.PHOTO_ALBUM and value != 'all':
+            raise serializers.ValidationError(
+                '사진첩 게시판은 이미지 렌더링 특성상 전체공개만 지원합니다.'
+            )
+        return value
 
 
 class BoardIdNameSerializer(serializers.ModelSerializer):

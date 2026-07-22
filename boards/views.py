@@ -302,7 +302,8 @@ class PostLikeAPIView(generics.GenericAPIView):
     lookup_url_kwarg = 'post_id'
 
     def get_queryset(self):
-        return Post.objects.visible_for_user(self.request.user)
+        # 읽을 수 없는 게시판의 글에는 좋아요도 불가(존재 확인 차단 포함).
+        return Post.objects.readable_for_user(self.request.user)
 
     def post(self, request, *args, **kwargs):
         post = self.get_object()
@@ -351,8 +352,8 @@ class CommentLikeAPIView(generics.GenericAPIView):
     lookup_url_kwarg = 'comment_id'
 
     def get_queryset(self):
-        visible_posts = Post.objects.visible_for_user(self.request.user)
-        return Comment.objects.filter(post__in=visible_posts)
+        readable_posts = Post.objects.readable_for_user(self.request.user)
+        return Comment.objects.filter(post__in=readable_posts)
 
     def post(self, request, *args, **kwargs):
         comment = self.get_object()
@@ -602,7 +603,14 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         if tag:
             qs = qs.filter(tag=tag)
         if self.request.query_params.get('view') == 'photo':
-            return qs.only('id', 'title', 'created_at', 'attachment_paths', 'board_id', 'post_type').order_by('-created_at')
+            # 시리얼라이저가 gated 판정을 위해 post.board.read_permission에 접근하므로
+            # select_related로 게시글당 board 추가 쿼리(N+1)를 막는다.
+            return (
+                qs.select_related('board')
+                .only('id', 'title', 'created_at', 'attachment_paths', 'post_type',
+                      'board__id', 'board__read_permission')
+                .order_by('-created_at')
+            )
         return _with_post_list_summary(qs).order_by('-created_at')
 
     def get_object(self):
@@ -814,10 +822,12 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         post_id = self.kwargs.get('post_id')
-        visible_posts = Post.objects.visible_for_user(self.request.user)
+        # 게시판 read_permission(회원전용/스태프)까지 적용해, 글을 못 보는 사용자가
+        # 댓글만 따로 읽어가는 우회를 막는다.
+        readable_posts = Post.objects.readable_for_user(self.request.user)
         return Comment.objects.filter(
             post_id=post_id,
-            post__in=visible_posts,
+            post__in=readable_posts,
             parent__isnull=True,
         ).order_by('created_at')
 
@@ -825,9 +835,9 @@ class CommentListCreateAPIView(generics.ListCreateAPIView):
         from rest_framework.exceptions import ValidationError
 
         post_id = self.kwargs.get('post_id')
-        # 비공개 게시글에 대한 댓글 작성/존재 확인을 모두 막는다.
-        visible_posts = Post.objects.visible_for_user(self.request.user)
-        post = get_object_or_404(visible_posts, pk=post_id)
+        # 비공개 게시글/게시판에 대한 댓글 작성·존재 확인을 모두 막는다.
+        readable_posts = Post.objects.readable_for_user(self.request.user)
+        post = get_object_or_404(readable_posts, pk=post_id)
 
         # parent는 반드시 동일 게시글의 댓글이어야 하며, 대댓글은 1단계(depth 1)까지만 허용한다.
         parent = serializer.validated_data.get('parent')
@@ -900,8 +910,8 @@ class CommentUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
     lookup_url_kwarg = 'comment_id'
 
     def get_queryset(self):
-        visible_posts = Post.objects.visible_for_user(self.request.user)
-        return Comment.objects.filter(post__in=visible_posts)
+        readable_posts = Post.objects.readable_for_user(self.request.user)
+        return Comment.objects.filter(post__in=readable_posts)
 
     def perform_destroy(self, instance):
         instance.is_deleted = True
@@ -1172,8 +1182,14 @@ class PostAttachmentDownloadView(APIView):
         post = get_object_or_404(Post.objects.select_related('board'), pk=post_id)
 
         # 글 단위 가시성(사유서/스태프전용 글)과 게시판 read_permission을 모두 확인.
+        # 사유서는 IsBoardReadable과 동일하게 게시판 검사를 우회한다
+        # (글 단위 검사가 이미 작성자/스태프로 제한하므로).
         is_visible = Post.objects.visible_for_user(request.user).filter(pk=post_id).exists()
-        if not is_visible or not board_read_allowed(post.board, request.user):
+        board_ok = (
+            post.post_type == Post.PostType.JUSTIFICATION_LETTER
+            or board_read_allowed(post.board, request.user)
+        )
+        if not is_visible or not board_ok:
             return Response({'detail': '접근 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
 
         attachments = post.attachment_paths if isinstance(post.attachment_paths, list) else []
