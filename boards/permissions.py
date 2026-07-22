@@ -11,10 +11,27 @@ class DebugPermission(permissions.BasePermission):
         logger.warning(f"Is Authenticated: {request.user.is_authenticated}")
         return True
 
+def board_read_allowed(board, user):
+    """게시판 read_permission 기준으로 사용자의 읽기 허용 여부를 판정한다.
+    - 'all'   : 비회원 포함 누구나
+    - 'member': 로그인한 회원 전체
+    - 'staff' : 스태프만
+    파일 다운로드 게이트 등에서도 재사용한다.
+    """
+    read_perm = getattr(board, 'read_permission', 'staff')
+    if read_perm == 'all':
+        return True
+    if read_perm == 'member':
+        return user.is_authenticated
+    # 'staff' (및 알 수 없는 값)은 스태프만
+    return user.is_authenticated and user.is_staff
+
+
 class IsBoardReadable(permissions.BasePermission):
     """
     Allows access based on the board's `read_permission` field.
     - 'all': Anyone can read (including non-authenticated users).
+    - 'member': Any authenticated member can read.
     - 'staff': Only staff members can read.
     """
     def has_permission(self, request, view):
@@ -28,7 +45,7 @@ class IsBoardReadable(permissions.BasePermission):
             # For detail views, the object is a Post, so we get its board.
             elif hasattr(obj, 'board'):
                 board = obj.board
-        
+
         if not board:
             return False
 
@@ -37,13 +54,7 @@ class IsBoardReadable(permissions.BasePermission):
         if isinstance(obj, Post) and obj.post_type == Post.PostType.JUSTIFICATION_LETTER:
             return True
 
-        read_perm = getattr(board, 'read_permission', 'staff')
-
-        if read_perm == 'all':
-            # 'all' 권한인 경우 비로그인 사용자도 접근 가능
-            return True
-        
-        return request.user.is_authenticated and request.user.is_staff
+        return board_read_allowed(board, request.user)
 
 class IsPostWritable(permissions.BasePermission):
     """

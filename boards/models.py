@@ -87,9 +87,17 @@ class Board(models.Model):
 
     PERMISSION_CHOICES = (
         ('all', 'All'),
+        ('member', 'Member'),
         ('staff', 'Staff'),
     )
-    read_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
+    # read_permission 전용 선택지: 'member'(로그인 회원 전체)까지 허용.
+    # post/comment 권한은 회원 세분화가 필요 없어 기존 all/staff 2단계를 유지한다.
+    READ_PERMISSION_CHOICES = (
+        ('all', 'All'),       # 비회원 포함 누구나
+        ('member', 'Member'), # 로그인한 회원 전체
+        ('staff', 'Staff'),   # 스태프만
+    )
+    read_permission = models.CharField(max_length=10, choices=READ_PERMISSION_CHOICES, default='all')
     post_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
     comment_permission = models.CharField(max_length=10, choices=PERMISSION_CHOICES, default='all')
     available_tags = models.JSONField(
@@ -108,19 +116,33 @@ class Board(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
+        # read_permission(공개범위)은 관리자가 게시판별로 직접 지정하는 독립 값이므로
+        # board_type 기반으로 덮어쓰지 않는다. post/comment 권한만 board_type에서 파생한다.
         if self.board_type == self.BoardType.ADMIN:
-            self.read_permission = 'all'
             self.post_permission = 'staff'
             self.comment_permission = 'all'
         elif self.board_type == self.BoardType.GENERAL:
-            self.read_permission = 'all'
             self.post_permission = 'all'
             self.comment_permission = 'all'
         elif self.board_type == self.BoardType.JUSTIFICATION_LETTER:
-            self.read_permission = 'all'
             self.post_permission = 'all'
             self.comment_permission = 'staff'
         super().save(*args, **kwargs)
+
+
+def readable_board_read_permissions(user):
+    """사용자가 목록/검색에서 접근 가능한 게시판 read_permission 값 목록.
+
+    - 스태프: all / member / staff 전부
+    - 로그인 회원: all / member
+    - 비회원: all 만
+    게시판 상세/글 접근은 IsBoardReadable에서 동일 규칙으로 게이트한다.
+    """
+    if user.is_authenticated and user.is_staff:
+        return ['all', 'member', 'staff']
+    if user.is_authenticated:
+        return ['all', 'member']
+    return ['all']
 
 
 class PostQuerySet(models.QuerySet):

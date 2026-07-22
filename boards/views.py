@@ -8,7 +8,9 @@ from urllib.parse import urlparse
 import requests
 
 from django.conf import settings
+from django.http import Http404, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
+from urllib.parse import quote
 from django.db.models import (
     F, Q, Count, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery
 )
@@ -17,7 +19,7 @@ from django.views.decorators.http import require_GET
 from rest_framework import generics, status, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse, OpenApiExample, OpenApiParameter
 
 logger = logging.getLogger(__name__)
@@ -30,19 +32,20 @@ OG_DEFAULT_DESCRIPTION = 'Data are profoundly dumb.'
 OG_DEFAULT_IMAGE = 'https://jbig.co.kr/JBIG-logo-1200x630.png'
 
 
-from .models import Board, Post, Comment, Category, Notification, Draft
+from .models import Board, Post, Comment, Category, Notification, Draft, readable_board_read_permissions
 from .serializers import (
     BoardSerializer, PostListSerializer, PostSummarySerializer, PhotoPostSummarySerializer,
     PostDetailSerializer, PostCreateUpdateSerializer,
     CommentSerializer, CategoryListResponseSerializer, PostListResponseSerializer, NotificationSerializer,
-    DraftSerializer
+    DraftSerializer, BoardAdminSerializer
 )
 from .permissions import (
     IsOwnerOrReadOnly,
     IsBoardReadable,
     IsPostWritable,
     IsCommentWritable,
-    PostDetailPermission
+    PostDetailPermission,
+    board_read_allowed,
 )
 from jbig_backend.storage import (
     generate_presigned_upload_url,
@@ -51,6 +54,7 @@ from jbig_backend.storage import (
     file_exists,
     set_public_acl,
     public_media_url,
+    get_file_stream,
 )
 
 
@@ -404,13 +408,14 @@ class PostSearchView(generics.ListAPIView):
 
         if board_id:
             board = get_object_or_404(Board, id=board_id)
-            if board.read_permission == 'staff' and not (user.is_authenticated and user.is_staff):
+            if not board_read_allowed(board, user):
                 return Post.objects.none()
             base_queryset = Post.objects.filter(board_id=board_id)
         else:
             base_queryset = Post.objects.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
-            if not (user.is_authenticated and user.is_staff):
-                base_queryset = base_queryset.filter(board__read_permission='all')
+            base_queryset = base_queryset.filter(
+                board__read_permission__in=readable_board_read_permissions(user)
+            )
 
         queryset = base_queryset.visible_for_user(user)
 
@@ -463,8 +468,9 @@ class AllPostSearchView(PostSearchView):
 class BoardListViewSet(viewsets.ViewSet):
     def list(self, request, *args, **kwargs):
         latest_visible_posts = Post.objects.visible_for_user(request.user)
-        if not (request.user.is_authenticated and request.user.is_staff):
-            latest_visible_posts = latest_visible_posts.filter(board__read_permission='all')
+        latest_visible_posts = latest_visible_posts.filter(
+            board__read_permission__in=readable_board_read_permissions(request.user)
+        )
         total_post_count = latest_visible_posts.count()
 
         boards = Board.objects.annotate(
@@ -916,8 +922,9 @@ class AllPostListAPIView(generics.ListAPIView):
         user = self.request.user
         queryset = Post.objects.visible_for_user(user)
 
-        if not (user.is_authenticated and user.is_staff):
-            queryset = queryset.filter(board__read_permission='all')
+        queryset = queryset.filter(
+            board__read_permission__in=readable_board_read_permissions(user)
+        )
 
         queryset = queryset.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
 
@@ -949,6 +956,43 @@ class BoardDetailAPIView(generics.RetrieveAPIView):
     lookup_field = 'id'
     lookup_url_kwarg = 'board_id'
     permission_classes = [IsBoardReadable]
+
+
+@extend_schema(tags=['관리자'])
+@extend_schema_view(
+    get=extend_schema(
+        summary="[관리자] 게시판 목록 조회",
+        description="스태프 전용. 모든 게시판을 공개범위(read_permission) 포함해 조회합니다.",
+    )
+)
+class AdminBoardListAPIView(generics.ListAPIView):
+    """관리자 게시판 관리 화면용 목록. 모든 게시판 + 원본 공개범위 값을 반환한다."""
+    serializer_class = BoardAdminSerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Board.objects.select_related('category').order_by('category__id', 'name')
+
+
+@extend_schema(tags=['관리자'])
+@extend_schema_view(
+    patch=extend_schema(
+        summary="[관리자] 게시판 공개범위 수정",
+        description=(
+            "스태프 전용. 게시판의 read_permission(공개범위)을 변경합니다. "
+            "'all'(전체공개) / 'member'(회원전용) / 'staff'(스태프전용)."
+        ),
+    )
+)
+class AdminBoardUpdateAPIView(generics.UpdateAPIView):
+    """게시판 공개범위(read_permission) 수정. PATCH만 허용."""
+    serializer_class = BoardAdminSerializer
+    permission_classes = [IsAdminUser]
+    queryset = Board.objects.select_related('category').all()
+    lookup_field = 'id'
+    lookup_url_kwarg = 'board_id'
+    http_method_names = ['patch', 'options', 'head']
 
 
 
@@ -1080,6 +1124,86 @@ class ConfirmUploadAPIView(APIView):
             return Response({"error": "Failed to update ACL."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         # 문서 계열은 ACL 변경 없이 성공 응답 (기본 private 유지)
         return Response({"message": "Upload confirmed."}, status=status.HTTP_200_OK)
+
+
+def _iter_file(body, chunk_size=8192):
+    """스토리지/로컬 파일 객체를 청크 단위로 흘려보내는 제너레이터."""
+    try:
+        if hasattr(body, 'iter_chunks'):  # boto3 StreamingBody
+            for chunk in body.iter_chunks(chunk_size):
+                yield chunk
+        else:  # 로컬 파일 객체
+            while True:
+                chunk = body.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+    finally:
+        try:
+            body.close()
+        except Exception:
+            pass
+
+
+@extend_schema(
+    tags=['파일'],
+    summary="첨부파일 다운로드(권한 게이트)",
+    description=(
+        "회원전용/스태프 게시판의 첨부파일을 권한 확인 후 스트리밍한다. "
+        "게시판 read_permission 기준으로 접근을 제어하며, 원본 스토리지 URL은 노출하지 않는다."
+    ),
+    responses={
+        200: OpenApiResponse(description="파일 스트림"),
+        403: OpenApiResponse(description="접근 권한이 없습니다."),
+        404: OpenApiResponse(description="게시글 또는 첨부파일을 찾을 수 없습니다."),
+    },
+)
+class PostAttachmentDownloadView(APIView):
+    """권한 게이트된 첨부파일 다운로드.
+
+    스토리지가 도메인 단위 공개(R2+CDN)라 공개 URL만으로는 접근을 막을 수 없으므로,
+    비공개(member/staff) 범위 게시판의 첨부는 이 엔드포인트로만 내려간다. 인증/권한을
+    직접 확인한 뒤 백엔드가 바이트를 스트리밍하고, 클라이언트에는 원본 키/URL을 주지 않는다.
+    'all' 게시판의 첨부는 시리얼라이저가 공개 URL을 그대로 주므로 이 경로를 타지 않는다.
+    """
+    permission_classes = [AllowAny]  # 실제 게이트는 게시판 read_permission으로 세분 판정
+
+    def get(self, request, post_id, index):
+        post = get_object_or_404(Post.objects.select_related('board'), pk=post_id)
+
+        # 글 단위 가시성(사유서/스태프전용 글)과 게시판 read_permission을 모두 확인.
+        is_visible = Post.objects.visible_for_user(request.user).filter(pk=post_id).exists()
+        if not is_visible or not board_read_allowed(post.board, request.user):
+            return Response({'detail': '접근 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
+
+        attachments = post.attachment_paths if isinstance(post.attachment_paths, list) else []
+        if index < 0 or index >= len(attachments):
+            raise Http404('첨부파일을 찾을 수 없습니다.')
+
+        item = attachments[index] if isinstance(attachments[index], dict) else {}
+        file_key = (item.get('path') or item.get('url') or '').replace('\\', '/')
+        file_name = item.get('name') or (file_key.rsplit('/', 1)[-1] if file_key else 'download')
+        if not file_key.startswith('uploads/') or '..' in file_key.split('/'):
+            raise Http404('첨부파일을 찾을 수 없습니다.')
+
+        stream = get_file_stream(file_key)
+        if stream is None:
+            raise Http404('파일을 찾을 수 없습니다.')
+        body, content_type, content_length = stream
+
+        response = StreamingHttpResponse(
+            _iter_file(body),
+            content_type=content_type or 'application/octet-stream',
+        )
+        if content_length is not None:
+            response['Content-Length'] = str(content_length)
+        # 한글 파일명 대응: ASCII 폴백 + RFC 5987 filename*
+        ascii_name = file_name.encode('ascii', 'ignore').decode().strip() or 'download'
+        response['Content-Disposition'] = (
+            f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(file_name)}"
+        )
+        response['Cache-Control'] = 'private, no-store'
+        return response
 
 
 @extend_schema(

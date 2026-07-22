@@ -144,7 +144,7 @@ class PostListPerformanceTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         get_s3_client.assert_not_called()
         attachments = response.data['results'][0]['attachment_paths']
-        self.assertEqual(attachments, [{'url': f'/media/{file_key}', 'name': 'image.jpg'}])
+        self.assertEqual(attachments, [{'url': f'/media/{file_key}', 'name': 'image.jpg', 'gated': False}])
         self.assertNotIn('size', attachments[0])
 
     def test_list_counts_are_annotated_without_per_row_count_queries(self):
@@ -653,3 +653,123 @@ class CommentTreeIsLikedPerfTest(APITestCase):
         by_id = {c['id']: c for c in res.data['comments']}
         self.assertTrue(by_id[liked.id]['isLiked'])
         self.assertFalse(by_id[not_liked.id]['isLiked'])
+
+
+@override_settings(USE_LOCAL_STORAGE=True, MEDIA_URL='/media/')
+class MemberBoardAndAttachmentGateTest(APITestCase):
+    """회원전용(member) 게시판 접근 게이트 + 첨부 다운로드 게이트 검증."""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username='member', email='member@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.staff = User.objects.create_user(
+            username='staff', email='staff@example.com', password='pw',
+            is_verified=True, is_active=True, is_staff=True,
+        )
+        self.category = Category.objects.create(name='Cat')
+        self.public_board = Board.objects.create(name='공개', category=self.category, read_permission='all')
+        self.member_board = Board.objects.create(name='회원전용', category=self.category, read_permission='member')
+
+        self.file_key = f'uploads/2026/07/03/{self.member.id}/doc.pdf'
+        self.member_post = Post.objects.create(
+            author=self.member, board=self.member_board,
+            title='자료', content_md='x',
+            attachment_paths=[{'path': self.file_key, 'name': 'doc.pdf'}],
+        )
+        self.public_post = Post.objects.create(
+            author=self.member, board=self.public_board,
+            title='공개글', content_md='x',
+            attachment_paths=[{'path': self.file_key, 'name': 'doc.pdf'}],
+        )
+
+    def _auth(self, user):
+        token = RefreshToken.for_user(user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+    def test_member_board_read_permission_stays_member_after_save(self):
+        """Board.save()가 read_permission을 board_type 기준으로 덮어쓰지 않아야 한다."""
+        self.member_board.name = '회원전용-수정'
+        self.member_board.save()
+        self.member_board.refresh_from_db()
+        self.assertEqual(self.member_board.read_permission, 'member')
+
+    def test_anonymous_cannot_list_member_board(self):
+        self.client.credentials()  # 비로그인
+        res = self.client.get(reverse('post-list-create', kwargs={'board_id': self.member_board.id}))
+        # 비로그인은 차단(DRF는 인증 실패 시 401을 반환한다).
+        self.assertIn(res.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
+
+    def test_member_can_list_member_board(self):
+        self._auth(self.member)
+        res = self.client.get(reverse('post-list-create', kwargs={'board_id': self.member_board.id}))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_member_board_attachment_is_gated_public_is_not(self):
+        self._auth(self.member)
+        with patch('boards.serializers.get_s3_client') as get_s3:
+            get_s3.return_value.head_object.return_value = {'ContentLength': 123}
+            member_detail = self.client.get(
+                reverse('post-detail-update-destroy', kwargs={'post_id': self.member_post.id})
+            )
+            public_detail = self.client.get(
+                reverse('post-detail-update-destroy', kwargs={'post_id': self.public_post.id})
+            )
+        m_att = member_detail.data['attachment_paths'][0]
+        p_att = public_detail.data['attachment_paths'][0]
+        self.assertTrue(m_att['gated'])
+        self.assertIn('/attachments/0/download/', m_att['url'])
+        self.assertFalse(p_att['gated'])
+        self.assertEqual(p_att['url'], f'/media/{self.file_key}')
+
+    def test_download_endpoint_blocks_anonymous_for_member_board(self):
+        self.client.credentials()
+        res = self.client.get(reverse('post-attachment-download',
+                                      kwargs={'post_id': self.member_post.id, 'index': 0}))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_download_endpoint_streams_for_member(self):
+        import os as _os
+        # 로컬 스토리지 모드에서 실제 파일을 생성해 스트리밍 확인
+        from django.conf import settings as dj_settings
+        path = _os.path.join(dj_settings.MEDIA_ROOT, self.file_key)
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(b'%PDF-1.4 test')
+        try:
+            self._auth(self.member)
+            res = self.client.get(reverse('post-attachment-download',
+                                          kwargs={'post_id': self.member_post.id, 'index': 0}))
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            self.assertEqual(b''.join(res.streaming_content), b'%PDF-1.4 test')
+            self.assertIn('attachment', res['Content-Disposition'])
+        finally:
+            if _os.path.exists(path):
+                _os.remove(path)
+
+    def test_admin_board_update_requires_staff(self):
+        self._auth(self.member)
+        res = self.client.patch(
+            reverse('admin-board-update', kwargs={'board_id': self.public_board.id}),
+            {'read_permission': 'member'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_update_board_read_permission(self):
+        self._auth(self.staff)
+        res = self.client.patch(
+            reverse('admin-board-update', kwargs={'board_id': self.public_board.id}),
+            {'read_permission': 'member'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.public_board.refresh_from_db()
+        self.assertEqual(self.public_board.read_permission, 'member')
+
+    def test_admin_board_update_rejects_invalid_value(self):
+        self._auth(self.staff)
+        res = self.client.patch(
+            reverse('admin-board-update', kwargs={'board_id': self.public_board.id}),
+            {'read_permission': 'everyone'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
