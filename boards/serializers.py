@@ -51,6 +51,24 @@ def sanitize_markdown(value: str) -> str:
     )
 
 
+def is_post_media_gated(post) -> bool:
+    """해당 게시글의 미디어(첨부/본문 이미지)를 권한 게이트해야 하는지 판정한다.
+
+    - 게시판 공개범위가 'member'/'staff'이거나,
+    - 글 자체가 비공개 유형(스태프전용/사유서)이면 게이트한다.
+    첨부 URL 변환과 본문 이미지 토큰화가 같은 기준을 쓰도록 한 곳에서 판정해,
+    둘 사이의 판정이 어긋나 한쪽만 노출되는 일을 막는다. post=None 이면 False.
+    """
+    if post is None:
+        return False
+    board = getattr(post, 'board', None)
+    read_perm = getattr(board, 'read_permission', 'all')
+    private_post_type = getattr(post, 'post_type', None) in (
+        Post.PostType.STAFF_ONLY, Post.PostType.JUSTIFICATION_LETTER,
+    )
+    return read_perm in ('member', 'staff') or private_post_type
+
+
 def get_presigned_attachments(attachments_list, include_size=True, post=None, request=None):
     """첨부파일 목록을 클라이언트용 URL + 메타로 변환하는 공통 함수.
 
@@ -63,16 +81,9 @@ def get_presigned_attachments(attachments_list, include_size=True, post=None, re
     if not attachments_list or not isinstance(attachments_list, list):
         return []
 
-    board = getattr(post, 'board', None)
-    read_perm = getattr(board, 'read_permission', 'all')
     # 게시판이 공개여도 글 자체가 비공개 유형(사유서/스태프전용)이면 첨부를 게이트한다.
-    private_post_type = getattr(post, 'post_type', None) in (
-        Post.PostType.STAFF_ONLY, Post.PostType.JUSTIFICATION_LETTER,
-    )
-    gated = (
-        (read_perm in ('member', 'staff') or private_post_type)
-        and getattr(post, 'id', None) is not None
-    )
+    # 판정 기준은 is_post_media_gated 하나로 통일해 본문 이미지 토큰화와 어긋나지 않게 한다.
+    gated = is_post_media_gated(post) and getattr(post, 'id', None) is not None
 
     s3_client = None
     if include_size:
@@ -816,6 +827,30 @@ class PostDetailSerializer(serializers.ModelSerializer):
         if not raw_md:
             return ""
 
+        pattern = r'(!\[.*?\])\(media-key://(uploads[\\/][^\s\)]+)\)'
+
+        # 비공개(회원전용/스태프/사유서·스태프전용 글)면 본문 인라인 이미지를 영구 공개 URL이
+        # 아니라 서명된 단기 토큰 스트림 URL로 바꾼다. <img src>는 Authorization 헤더를
+        # 못 실으므로 URL 자체에 서명 토큰을 넣어야 게이트가 성립한다. 첨부와 동일하게
+        # is_post_media_gated 로 판정해 판정이 어긋나지 않게 한다.
+        if is_post_media_gated(obj):
+            # 순환 임포트 회피: 뷰의 토큰 생성 헬퍼를 지연 임포트.
+            from .views import make_media_stream_url
+            request = self.context.get('request')
+
+            def replace_with_stream_url(match):
+                alt_text = match.group(1)
+                file_key = match.group(2)
+                if not file_key:
+                    return match.group(0)
+                file_key = file_key.replace('\\', '/')  # 레거시 역슬래시 key 정규화
+                path = make_media_stream_url(file_key)
+                url = request.build_absolute_uri(path) if request is not None else path
+                return f"{alt_text}({url})"
+
+            return re.sub(pattern, replace_with_stream_url, raw_md, flags=re.DOTALL)
+
+        # 공개 글은 기존대로 고정 공개 URL(public_media_url) → CDN 캐시가 동작한다.
         def replace_with_public_url(match):
             alt_text = match.group(1)
             file_key = match.group(2)
@@ -823,7 +858,6 @@ class PostDetailSerializer(serializers.ModelSerializer):
                 return match.group(0)
             return f"{alt_text}({public_media_url(file_key)})"
 
-        pattern = r'(!\[.*?\])\(media-key://(uploads[\\/][^\s\)]+)\)'
         return re.sub(pattern, replace_with_public_url, raw_md, flags=re.DOTALL)
 
     def get_attachment_paths(self, obj):

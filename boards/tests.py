@@ -876,6 +876,82 @@ class MemberBoardAndAttachmentGateTest(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_member_board_content_image_is_tokenized(self):
+        """회원전용 게시판 글의 본문 인라인 이미지는 서명 토큰 스트림 URL로 바뀌어야 한다."""
+        img_key = f'uploads/2026/07/03/{self.member.id}/pic.png'
+        post = Post.objects.create(
+            author=self.member, board=self.member_board,
+            title='이미지글', content_md=f'![img](media-key://{img_key})',
+        )
+        self._auth(self.member)
+        with patch('boards.serializers.get_s3_client') as get_s3:
+            get_s3.return_value.head_object.return_value = {'ContentLength': 1}
+            res = self.client.get(
+                reverse('post-detail-update-destroy', kwargs={'post_id': post.id})
+            )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        content = res.data['content_md']
+        self.assertIn('/api/media/stream/?token=', content)
+        self.assertNotIn('/media/uploads/', content)
+
+    def test_public_board_content_image_stays_public(self):
+        """공개 게시판 일반 글의 본문 이미지는 공개 URL을 유지하고 토큰화하지 않는다."""
+        img_key = f'uploads/2026/07/03/{self.member.id}/pic.png'
+        post = Post.objects.create(
+            author=self.member, board=self.public_board,
+            title='공개이미지글', content_md=f'![img](media-key://{img_key})',
+        )
+        self._auth(self.member)
+        with patch('boards.serializers.get_s3_client') as get_s3:
+            get_s3.return_value.head_object.return_value = {'ContentLength': 1}
+            res = self.client.get(
+                reverse('post-detail-update-destroy', kwargs={'post_id': post.id})
+            )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        content = res.data['content_md']
+        self.assertIn(f'/media/{img_key}', content)
+        self.assertNotIn('media/stream', content)
+
+    def test_media_stream_valid_token_streams_bytes(self):
+        """유효한 토큰이면 200과 함께 실제 로컬 파일 바이트가 스트리밍되어야 한다."""
+        import os as _os
+        from django.conf import settings as dj_settings
+        from boards.views import make_media_stream_token
+        img_key = f'uploads/2026/07/03/{self.member.id}/pic.png'
+        path = _os.path.join(dj_settings.MEDIA_ROOT, img_key)
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(b'\x89PNG test bytes')
+        try:
+            token = make_media_stream_token(img_key)
+            res = self.client.get(reverse('media-stream'), {'token': token})
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            self.assertEqual(b''.join(res.streaming_content), b'\x89PNG test bytes')
+            self.assertEqual(res['Content-Disposition'], 'inline')
+        finally:
+            if _os.path.exists(path):
+                _os.remove(path)
+
+    def test_media_stream_tampered_or_missing_token_is_forbidden(self):
+        from boards.views import make_media_stream_token
+        img_key = f'uploads/2026/07/03/{self.member.id}/pic.png'
+        token = make_media_stream_token(img_key)
+        # 변조된 토큰
+        tampered = token[:-2] + 'xx'
+        res = self.client.get(reverse('media-stream'), {'token': tampered})
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        # 토큰 누락
+        res = self.client.get(reverse('media-stream'))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_media_stream_wrong_salt_token_is_forbidden(self):
+        """다른 salt로 서명한 토큰은 위조로 간주되어 403이어야 한다."""
+        from django.core import signing
+        img_key = f'uploads/2026/07/03/{self.member.id}/pic.png'
+        forged = signing.dumps({'key': img_key}, salt='other')
+        res = self.client.get(reverse('media-stream'), {'token': forged})
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_initial_visibility_public_name_matching(self):
         """초기 공개범위 마이그레이션의 토큰 매칭이 표기 변형을 견디는지."""
         from importlib import import_module
