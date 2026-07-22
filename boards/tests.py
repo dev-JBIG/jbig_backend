@@ -774,6 +774,108 @@ class MemberBoardAndAttachmentGateTest(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_anonymous_cannot_read_comments_on_member_board(self):
+        """글을 못 보는 사용자가 댓글 API로 내용을 우회 조회하지 못해야 한다."""
+        Comment.objects.create(post=self.member_post, author=self.member, content='비밀 댓글')
+        self.client.credentials()  # 비로그인
+        res = self.client.get(reverse('comment-list-create', kwargs={'post_id': self.member_post.id}))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        results = res.data['results'] if isinstance(res.data, dict) else res.data
+        self.assertEqual(len(results), 0)
+
+    def test_member_can_read_comments_on_member_board(self):
+        Comment.objects.create(post=self.member_post, author=self.member, content='회원 댓글')
+        self._auth(self.member)
+        res = self.client.get(reverse('comment-list-create', kwargs={'post_id': self.member_post.id}))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        results = res.data['results'] if isinstance(res.data, dict) else res.data
+        self.assertEqual(len(results), 1)
+
+    def test_anonymous_cannot_create_comment_on_member_board(self):
+        self.client.credentials()
+        res = self.client.post(
+            reverse('comment-list-create', kwargs={'post_id': self.member_post.id}),
+            {'content': '비회원 댓글'}, format='json',
+        )
+        # 게시글 존재 자체를 숨기기 위해 404
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_private_post_types_attachments_are_gated_on_public_board(self):
+        """공개 게시판이라도 사유서/스태프전용 글의 첨부는 게이트되어야 한다."""
+        justification = Post.objects.create(
+            author=self.member, board=self.public_board,
+            title='사유서', content_md='x',
+            post_type=Post.PostType.JUSTIFICATION_LETTER,
+            attachment_paths=[{'path': self.file_key, 'name': 'doc.pdf'}],
+        )
+        self._auth(self.member)  # 작성자
+        with patch('boards.serializers.get_s3_client') as get_s3:
+            get_s3.return_value.head_object.return_value = {'ContentLength': 1}
+            res = self.client.get(
+                reverse('post-detail-update-destroy', kwargs={'post_id': justification.id})
+            )
+        att = res.data['attachment_paths'][0]
+        self.assertTrue(att['gated'])
+        self.assertIn('/download/', att['url'])
+
+    def test_justification_author_can_download_even_if_board_is_staff_read(self):
+        """다운로드 게이트가 IsBoardReadable의 사유서 우회와 일관되어야 한다."""
+        import os as _os
+        from django.conf import settings as dj_settings
+        staff_board = Board.objects.create(
+            name='사유서', category=self.category,
+            board_type=Board.BoardType.JUSTIFICATION_LETTER, read_permission='staff',
+        )
+        justification = Post.objects.create(
+            author=self.member, board=staff_board,
+            title='사유서', content_md='x',
+            post_type=Post.PostType.JUSTIFICATION_LETTER,
+            attachment_paths=[{'path': self.file_key, 'name': 'doc.pdf'}],
+        )
+        path = _os.path.join(dj_settings.MEDIA_ROOT, self.file_key)
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(b'letter')
+        try:
+            self._auth(self.member)  # 작성자(비스태프)
+            res = self.client.get(reverse('post-attachment-download',
+                                          kwargs={'post_id': justification.id, 'index': 0}))
+            self.assertEqual(res.status_code, status.HTTP_200_OK)
+            # 타인은 차단
+            other = User.objects.create_user(
+                username='other2', email='other2@example.com', password='pw',
+                is_verified=True, is_active=True,
+            )
+            self._auth(other)
+            res = self.client.get(reverse('post-attachment-download',
+                                          kwargs={'post_id': justification.id, 'index': 0}))
+            self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        finally:
+            if _os.path.exists(path):
+                _os.remove(path)
+
+    def test_member_cannot_like_post_on_staff_board(self):
+        staff_read_board = Board.objects.create(
+            name='스태프자료', category=self.category, read_permission='staff',
+        )
+        staff_post = Post.objects.create(
+            author=self.staff, board=staff_read_board, title='s', content_md='x',
+        )
+        self._auth(self.member)
+        res = self.client.post(reverse('post-like', kwargs={'post_id': staff_post.id}))
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_photo_board_cannot_be_set_private(self):
+        photo_board = Board.objects.create(
+            name='사진첩', category=self.category, board_type=Board.BoardType.PHOTO_ALBUM,
+        )
+        self._auth(self.staff)
+        res = self.client.patch(
+            reverse('admin-board-update', kwargs={'board_id': photo_board.id}),
+            {'read_permission': 'member'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_initial_visibility_public_name_matching(self):
         """초기 공개범위 마이그레이션의 토큰 매칭이 표기 변형을 견디는지."""
         from importlib import import_module

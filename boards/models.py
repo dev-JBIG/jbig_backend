@@ -158,12 +158,27 @@ class PostQuerySet(models.QuerySet):
             )
         return self.filter(post_type=Post.PostType.DEFAULT)
 
+    def readable_for_user(self, user):
+        """글 단위 가시성(visible_for_user) + 게시판 read_permission을 모두 적용한다.
+
+        댓글 목록/작성·좋아요 등 '글을 읽을 수 있어야만 허용되는' 부속 API에서 사용.
+        사유서(JUSTIFICATION_LETTER)는 IsBoardReadable과 동일하게 게시판 검사를
+        우회한다(글 단위 검사에서 이미 작성자/스태프로 제한됨).
+        """
+        return self.visible_for_user(user).filter(
+            Q(board__read_permission__in=readable_board_read_permissions(user)) |
+            Q(post_type=Post.PostType.JUSTIFICATION_LETTER)
+        )
+
 class PostManager(models.Manager):
     def get_queryset(self):
         return PostQuerySet(self.model, using=self._db)
 
     def visible_for_user(self, user):
         return self.get_queryset().visible_for_user(user)
+
+    def readable_for_user(self, user):
+        return self.get_queryset().readable_for_user(user)
 
 
 class Post(models.Model):
