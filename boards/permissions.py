@@ -12,16 +12,18 @@ class DebugPermission(permissions.BasePermission):
         return True
 
 def board_read_allowed(board, user):
-    """게시판 read_permission 기준으로 사용자의 읽기 허용 여부를 판정한다.
+    """게시판 read_permission 기준으로 사용자의 '게시판 진입' 허용 여부를 판정한다.
     - 'all'   : 비회원 포함 누구나
     - 'member': 로그인한 회원 전체
+    - 'author': 로그인한 회원 전체 진입 가능 — 단, 글은 본인 것만 보인다.
+                (글 단위 필터는 readable_for_user/PostDetailPermission이 담당)
     - 'staff' : 스태프만
     파일 다운로드 게이트 등에서도 재사용한다.
     """
     read_perm = getattr(board, 'read_permission', 'staff')
     if read_perm == 'all':
         return True
-    if read_perm == 'member':
+    if read_perm in ('member', 'author'):
         return user.is_authenticated
     # 'staff' (및 알 수 없는 값)은 스태프만
     return user.is_authenticated and user.is_staff
@@ -126,6 +128,12 @@ class PostDetailPermission(permissions.BasePermission):
                 )
             if obj.post_type == Post.PostType.STAFF_ONLY:
                 return request.user.is_authenticated and request.user.is_staff
+            # DEFAULT 글이라도 'author' 게시판에 있으면 작성자 본인+스태프만.
+            # (게시판을 나중에 author로 조였을 때 기존 글까지 소급 잠그기 위함)
+            if getattr(obj.board, 'read_permission', '') == 'author':
+                return request.user.is_authenticated and (
+                    (obj.author and obj.author.id == request.user.id) or request.user.is_staff
+                )
             return True  # DEFAULT posts
 
         # Handle WRITE permissions (PUT, PATCH, DELETE)

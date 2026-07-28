@@ -66,10 +66,11 @@ class Board(models.Model):
         JUSTIFICATION_LETTER = 3, 'Justification Letter'
         PHOTO_ALBUM = 4, 'Photo Album'
 
-    # board_type은 접근 권한(공개/비공개)을 결정하고, form_type은 작성 화면에서
-    # 어떤 입력 폼을 띄울지를 결정한다. 두 개념은 직교한다.
-    # 예: 사유서와 에러/피드백 제보는 둘 다 board_type=3(작성자·스태프만 조회)이지만,
-    #     입력 폼은 각각 결석사유서/피드백으로 다르므로 form_type으로 구분한다.
+    # 접근 권한은 read/post/comment_permission 세 필드가 결정하고(관리자 페이지에서 편집),
+    # form_type은 작성 화면에서 어떤 입력 폼을 띄울지를 결정한다. board_type은 렌더링
+    # 특성(사진첩)과 글 스탬프 정책(사유서형 → 글 단위 본인+스태프 잠금)에만 관여한다.
+    # 예: 사유서와 에러/피드백 제보는 둘 다 board_type=3이지만, 입력 폼은 각각
+    #     결석사유서/피드백으로 다르므로 form_type으로 구분한다.
     class FormType(models.IntegerChoices):
         NONE = 0, 'None'
         ABSENCE = 1, 'Absence'
@@ -90,11 +91,12 @@ class Board(models.Model):
         ('member', 'Member'),
         ('staff', 'Staff'),
     )
-    # read_permission 전용 선택지: 'member'(로그인 회원 전체)까지 허용.
-    # post/comment 권한은 회원 세분화가 필요 없어 기존 all/staff 2단계를 유지한다.
+    # read_permission 전용 선택지. post/comment 권한은 회원 세분화가 필요 없어
+    # all/staff 2단계를 유지한다(관리자 API가 'member'를 거부한다).
     READ_PERMISSION_CHOICES = (
         ('all', 'All'),       # 비회원 포함 누구나
         ('member', 'Member'), # 로그인한 회원 전체
+        ('author', 'Author'), # 글 작성자 본인 + 스태프 (게시판 진입은 로그인 회원)
         ('staff', 'Staff'),   # 스태프만
     )
     read_permission = models.CharField(max_length=10, choices=READ_PERMISSION_CHOICES, default='all')
@@ -115,33 +117,19 @@ class Board(models.Model):
     def __str__(self):
         return self.name
 
-    def save(self, *args, **kwargs):
-        # read_permission(공개범위)은 관리자가 게시판별로 직접 지정하는 독립 값이므로
-        # board_type 기반으로 덮어쓰지 않는다. post/comment 권한만 board_type에서 파생한다.
-        if self.board_type == self.BoardType.ADMIN:
-            self.post_permission = 'staff'
-            self.comment_permission = 'all'
-        elif self.board_type == self.BoardType.GENERAL:
-            self.post_permission = 'all'
-            self.comment_permission = 'all'
-        elif self.board_type == self.BoardType.JUSTIFICATION_LETTER:
-            self.post_permission = 'all'
-            self.comment_permission = 'staff'
-        super().save(*args, **kwargs)
-
-
 def readable_board_read_permissions(user):
     """사용자가 목록/검색에서 접근 가능한 게시판 read_permission 값 목록.
 
-    - 스태프: all / member / staff 전부
-    - 로그인 회원: all / member
+    - 스태프: all / member / author / staff 전부
+    - 로그인 회원: all / member / author ('author' 게시판은 진입만 허용, 글은 본인 것만)
     - 비회원: all 만
-    게시판 상세/글 접근은 IsBoardReadable에서 동일 규칙으로 게이트한다.
+    게시판 상세/글 접근은 IsBoardReadable에서 동일 규칙으로 게이트하고,
+    'author' 게시판의 글 단위 필터는 readable_for_user가 적용한다.
     """
     if user.is_authenticated and user.is_staff:
-        return ['all', 'member', 'staff']
+        return ['all', 'member', 'author', 'staff']
     if user.is_authenticated:
-        return ['all', 'member']
+        return ['all', 'member', 'author']
     return ['all']
 
 
@@ -164,11 +152,18 @@ class PostQuerySet(models.QuerySet):
         댓글 목록/작성·좋아요 등 '글을 읽을 수 있어야만 허용되는' 부속 API에서 사용.
         사유서(JUSTIFICATION_LETTER)는 IsBoardReadable과 동일하게 게시판 검사를
         우회한다(글 단위 검사에서 이미 작성자/스태프로 제한됨).
+        'author' 게시판은 진입은 회원 전체에 열리지만 글은 본인 것만 보인다
+        (post_type 스탬프와 무관하게 게시판 단위로 소급 적용, 스태프 예외).
         """
-        return self.visible_for_user(user).filter(
+        qs = self.visible_for_user(user).filter(
             Q(board__read_permission__in=readable_board_read_permissions(user)) |
             Q(post_type=Post.PostType.JUSTIFICATION_LETTER)
         )
+        if user.is_authenticated and not user.is_staff:
+            qs = qs.exclude(
+                Q(board__read_permission='author') & ~Q(author__id=user.id)
+            )
+        return qs
 
 class PostManager(models.Manager):
     def get_queryset(self):

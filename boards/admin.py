@@ -8,8 +8,10 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'board_type', 'form_type', 'category')
-    list_filter = ('board_type', 'form_type', 'category')
+    # save()의 board_type 기반 권한 자동 파생이 제거되어 세 권한 필드를 직접 지정한다.
+    list_display = ('id', 'name', 'board_type', 'form_type', 'category',
+                    'read_permission', 'post_permission', 'comment_permission')
+    list_filter = ('board_type', 'form_type', 'category', 'read_permission')
     search_fields = ('name',)
     raw_id_fields = ('category',)
 
