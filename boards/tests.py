@@ -865,6 +865,56 @@ class MemberBoardAndAttachmentGateTest(APITestCase):
         res = self.client.post(reverse('post-like', kwargs={'post_id': staff_post.id}))
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_justification_board_read_is_locked_to_author(self):
+        """사유서형 게시판은 글 단위 잠금이 전제라 조회 범위를 author로만 둘 수 있다."""
+        letter_board = Board.objects.create(
+            name='사유서제출', category=self.category,
+            board_type=Board.BoardType.JUSTIFICATION_LETTER, read_permission='author',
+        )
+        self._auth(self.staff)
+        for bad in ('all', 'member', 'staff'):
+            res = self.client.patch(
+                reverse('admin-board-update', kwargs={'board_id': letter_board.id}),
+                {'read_permission': bad}, format='json',
+            )
+            self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        res = self.client.patch(
+            reverse('admin-board-update', kwargs={'board_id': letter_board.id}),
+            {'read_permission': 'author'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_admin_can_update_post_and_comment_permission(self):
+        self._auth(self.staff)
+        res = self.client.patch(
+            reverse('admin-board-update', kwargs={'board_id': self.public_board.id}),
+            {'post_permission': 'staff', 'comment_permission': 'staff'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.public_board.refresh_from_db()
+        self.assertEqual(self.public_board.post_permission, 'staff')
+        self.assertEqual(self.public_board.comment_permission, 'staff')
+
+    def test_post_permission_rejects_member_value(self):
+        """작성/댓글 권한은 all/staff 2단계만 지원한다."""
+        self._auth(self.staff)
+        res = self.client.patch(
+            reverse('admin-board-update', kwargs={'board_id': self.public_board.id}),
+            {'post_permission': 'member'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_board_save_keeps_admin_assigned_permissions(self):
+        """save()가 board_type 기반으로 post/comment 권한을 덮어쓰지 않아야 한다."""
+        notice = Board.objects.create(
+            name='공지', category=self.category, board_type=Board.BoardType.ADMIN,
+            post_permission='all',
+        )
+        notice.name = '공지-수정'
+        notice.save()
+        notice.refresh_from_db()
+        self.assertEqual(notice.post_permission, 'all')
+
     def test_photo_board_cannot_be_set_private(self):
         photo_board = Board.objects.create(
             name='사진첩', category=self.category, board_type=Board.BoardType.PHOTO_ALBUM,
@@ -961,3 +1011,109 @@ class MemberBoardAndAttachmentGateTest(APITestCase):
             self.assertTrue(mod._is_public(name), f'{name} 은 공개여야 함')
         for name in ['자료게시판', '공지사항', '교안', '퀴즈', '족보', '홍보의 정석 후기']:
             self.assertFalse(mod._is_public(name), f'{name} 은 회원전용이어야 함')
+
+
+class AuthorBoardScopeTest(APITestCase):
+    """'author'(본인+스태프) 조회 범위 게시판의 접근 규칙 검증."""
+
+    def setUp(self):
+        self.member_a = User.objects.create_user(
+            username='authorA', email='authorA@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.member_b = User.objects.create_user(
+            username='authorB', email='authorB@example.com', password='pw',
+            is_verified=True, is_active=True,
+        )
+        self.staff = User.objects.create_user(
+            username='authorStaff', email='authorStaff@example.com', password='pw',
+            is_verified=True, is_active=True, is_staff=True,
+        )
+        self.category = Category.objects.create(name='AuthorCat')
+        self.board = Board.objects.create(
+            name='건의함', category=self.category, read_permission='author',
+        )
+        # 과거 공개 범위 시절 남은 DEFAULT 글도 author 게시판에선 소급 잠긴다.
+        self.post_a = Post.objects.create(
+            author=self.member_a, board=self.board, title='A의 건의', content_md='x',
+        )
+        self.post_b = Post.objects.create(
+            author=self.member_b, board=self.board, title='B의 건의', content_md='x',
+        )
+
+    def _auth(self, user):
+        token = RefreshToken.for_user(user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
+
+    def test_anonymous_cannot_enter_author_board(self):
+        self.client.credentials()
+        res = self.client.get(reverse('post-list-create', kwargs={'board_id': self.board.id}))
+        self.assertIn(res.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
+
+    def test_member_sees_only_own_posts_in_list(self):
+        self._auth(self.member_a)
+        res = self.client.get(reverse('post-list-create', kwargs={'board_id': self.board.id}))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        titles = [p['title'] for p in res.data['results']]
+        self.assertEqual(titles, ['A의 건의'])
+
+    def test_staff_sees_all_posts_in_list(self):
+        self._auth(self.staff)
+        res = self.client.get(reverse('post-list-create', kwargs={'board_id': self.board.id}))
+        titles = {p['title'] for p in res.data['results']}
+        self.assertEqual(titles, {'A의 건의', 'B의 건의'})
+
+    def test_member_cannot_read_others_post_detail(self):
+        self._auth(self.member_b)
+        res = self.client.get(
+            reverse('post-detail-update-destroy', kwargs={'post_id': self.post_a.id})
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_author_and_staff_can_read_post_detail(self):
+        self._auth(self.member_a)
+        res = self.client.get(
+            reverse('post-detail-update-destroy', kwargs={'post_id': self.post_a.id})
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self._auth(self.staff)
+        res = self.client.get(
+            reverse('post-detail-update-destroy', kwargs={'post_id': self.post_a.id})
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_new_post_in_author_board_is_stamped_private(self):
+        """author 게시판에서 작성된 글은 글 단위 잠금(post_type)이 스탬프되어야 한다."""
+        self._auth(self.member_a)
+        res = self.client.post(
+            reverse('post-list-create', kwargs={'board_id': self.board.id}),
+            {'title': '새 건의', 'content_md': '본문'}, format='json',
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        post = Post.objects.get(board=self.board, title='새 건의')
+        self.assertEqual(post.post_type, Post.PostType.JUSTIFICATION_LETTER)
+
+    def test_others_posts_hidden_from_all_posts_list(self):
+        self._auth(self.member_b)
+        res = self.client.get(reverse('all-posts-list'))
+        titles = {p['title'] for p in (res.data['results'] if isinstance(res.data, dict) else res.data)}
+        self.assertNotIn('A의 건의', titles)
+        self.assertIn('B의 건의', titles)
+
+    def test_others_posts_hidden_from_search_queryset(self):
+        # 검색 뷰의 REGEXP_REPLACE는 SQLite에 없어 API 호출 대신 쿼리셋 규칙만 검증한다.
+        # (검색 뷰는 이제 동일한 readable_for_user를 사용한다)
+        readable = Post.objects.readable_for_user(self.member_b)
+        titles = set(readable.values_list('title', flat=True))
+        self.assertNotIn('A의 건의', titles)
+        self.assertIn('B의 건의', titles)
+
+    def test_attachment_download_gated_by_author_scope(self):
+        file_key = f'uploads/2026/07/03/{self.member_a.id}/doc.pdf'
+        Post.objects.filter(pk=self.post_a.pk).update(
+            attachment_paths=[{'path': file_key, 'name': 'doc.pdf'}]
+        )
+        self._auth(self.member_b)
+        res = self.client.get(reverse('post-attachment-download',
+                                      kwargs={'post_id': self.post_a.id, 'index': 0}))
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)

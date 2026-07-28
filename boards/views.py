@@ -34,7 +34,7 @@ OG_DEFAULT_DESCRIPTION = 'Data are profoundly dumb.'
 OG_DEFAULT_IMAGE = 'https://jbig.co.kr/JBIG-logo-1200x630.png'
 
 
-from .models import Board, Post, Comment, Category, Notification, Draft, readable_board_read_permissions
+from .models import Board, Post, Comment, Category, Notification, Draft
 from .serializers import (
     BoardSerializer, PostListSerializer, PostSummarySerializer, PhotoPostSummarySerializer,
     PostDetailSerializer, PostCreateUpdateSerializer,
@@ -416,11 +416,10 @@ class PostSearchView(generics.ListAPIView):
             base_queryset = Post.objects.filter(board_id=board_id)
         else:
             base_queryset = Post.objects.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
-            base_queryset = base_queryset.filter(
-                board__read_permission__in=readable_board_read_permissions(user)
-            )
 
-        queryset = base_queryset.visible_for_user(user)
+        # readable_for_user가 게시판 read_permission('author' 글 단위 필터 포함)과
+        # 글 단위 가시성을 함께 적용한다.
+        queryset = base_queryset.readable_for_user(user)
 
         # URL/링크를 제거하는 정규식 패턴
         url_pattern = r'!\[.*?\]\(.*?\)|\[.*?\]\(.*?\)|https?://[^\s]+|www\.[^\s]+'
@@ -470,10 +469,7 @@ class AllPostSearchView(PostSearchView):
 )
 class BoardListViewSet(viewsets.ViewSet):
     def list(self, request, *args, **kwargs):
-        latest_visible_posts = Post.objects.visible_for_user(request.user)
-        latest_visible_posts = latest_visible_posts.filter(
-            board__read_permission__in=readable_board_read_permissions(request.user)
-        )
+        latest_visible_posts = Post.objects.readable_for_user(request.user)
         total_post_count = latest_visible_posts.count()
 
         boards = Board.objects.annotate(
@@ -599,7 +595,9 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         board_id = self.kwargs.get('board_id')
-        qs = Post.objects.filter(board_id=board_id).visible_for_user(self.request.user)
+        # readable_for_user: 글 단위 가시성 + 게시판 read_permission('author' 포함)을
+        # 한 곳에서 적용한다. 게시판 진입 자체는 IsBoardReadable이 이미 게이트한다.
+        qs = Post.objects.filter(board_id=board_id).readable_for_user(self.request.user)
         # tag 필터링
         tag = self.request.query_params.get('tag')
         if tag:
@@ -650,7 +648,11 @@ class PostListCreateAPIView(generics.ListCreateAPIView):
         self.check_object_permissions(self.request, board)
         
         post_type = Post.PostType.DEFAULT # Default to DEFAULT
-        if board.board_type == Board.BoardType.JUSTIFICATION_LETTER:
+        # 사유서형 게시판(개인정보 폼)은 항상, 그 외에는 조회 범위가 '본인+스태프(author)'인
+        # 동안 작성된 글에 글 단위 잠금을 스탬프한다. 스탬프는 글에 남으므로 이후 게시판
+        # 범위를 완화해도 기존 글은 계속 본인+스태프만 볼 수 있다(프라이버시 보존).
+        if (board.board_type == Board.BoardType.JUSTIFICATION_LETTER
+                or board.read_permission == 'author'):
             post_type = Post.PostType.JUSTIFICATION_LETTER
         
         is_anonymous = serializer.validated_data.get('is_anonymous', True)
@@ -932,12 +934,7 @@ class AllPostListAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = Post.objects.visible_for_user(user)
-
-        queryset = queryset.filter(
-            board__read_permission__in=readable_board_read_permissions(user)
-        )
-
+        queryset = Post.objects.readable_for_user(user)
         queryset = queryset.exclude(board__board_type=Board.BoardType.PHOTO_ALBUM)
 
         return _with_post_list_summary(queryset).order_by('-created_at')
@@ -1216,15 +1213,9 @@ class PostAttachmentDownloadView(APIView):
     def get(self, request, post_id, index):
         post = get_object_or_404(Post.objects.select_related('board'), pk=post_id)
 
-        # 글 단위 가시성(사유서/스태프전용 글)과 게시판 read_permission을 모두 확인.
-        # 사유서는 IsBoardReadable과 동일하게 게시판 검사를 우회한다
-        # (글 단위 검사가 이미 작성자/스태프로 제한하므로).
-        is_visible = Post.objects.visible_for_user(request.user).filter(pk=post_id).exists()
-        board_ok = (
-            post.post_type == Post.PostType.JUSTIFICATION_LETTER
-            or board_read_allowed(post.board, request.user)
-        )
-        if not is_visible or not board_ok:
+        # 글 단위 가시성(사유서/스태프전용 글)과 게시판 read_permission('author' 포함)을
+        # readable_for_user 한 곳에서 판정한다. 사유서 글의 게시판 검사 우회도 동일 규칙.
+        if not Post.objects.readable_for_user(request.user).filter(pk=post_id).exists():
             return Response({'detail': '접근 권한이 없습니다.'}, status=status.HTTP_403_FORBIDDEN)
 
         attachments = post.attachment_paths if isinstance(post.attachment_paths, list) else []

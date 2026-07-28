@@ -145,8 +145,8 @@ class BoardSerializer(serializers.ModelSerializer):
     comment_permission = serializers.SerializerMethodField()
     available_tags = serializers.JSONField(read_only=True)
 
-    # read_permission은 하위호환을 위해 "현재 사용자가 읽을 수 있는가"(bool)를 유지하고,
-    # read_scope는 원본 공개범위 값('all'/'member'/'staff')을 그대로 노출한다.
+    # read_permission은 하위호환을 위해 "현재 사용자가 게시판에 들어갈 수 있는가"(bool)를
+    # 유지하고, read_scope는 원본 공개범위 값('all'/'member'/'author'/'staff')을 노출한다.
     read_scope = serializers.CharField(source='read_permission', read_only=True)
 
     class Meta:
@@ -158,7 +158,8 @@ class BoardSerializer(serializers.ModelSerializer):
         perm = getattr(instance, 'read_permission', 'staff')
         if perm == 'all':
             return True
-        if perm == 'member':
+        # 'author' 게시판은 진입은 회원 전체에게 열린다(글은 본인 것만 보인다).
+        if perm in ('member', 'author'):
             return user.is_authenticated
         return user.is_authenticated and user.is_staff
 
@@ -181,7 +182,7 @@ class BoardSerializer(serializers.ModelSerializer):
         return user.is_staff
 
 class BoardAdminSerializer(serializers.ModelSerializer):
-    """관리자 게시판 관리 화면용. read_permission(공개범위)만 편집 가능하다."""
+    """관리자 게시판 관리 화면용. 조회/작성/댓글 권한 3축을 편집한다."""
     category_name = serializers.CharField(source='category.name', read_only=True)
 
     class Meta:
@@ -192,7 +193,6 @@ class BoardAdminSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'name', 'category', 'category_name', 'board_type', 'form_type',
-            'post_permission', 'comment_permission',
         ]
 
     def validate_read_permission(self, value):
@@ -203,7 +203,29 @@ class BoardAdminSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 '사진첩 게시판은 이미지 렌더링 특성상 전체공개만 지원합니다.'
             )
+        # 사유서·에러/피드백 제보는 개인정보 폼이라 글 단위 잠금(본인+스태프)이 전제다.
+        # 조회 범위는 그 사실을 그대로 나타내는 'author'로 고정한다.
+        # ('staff'는 회원의 제출 진입을 막고, 'member'/'all'은 잠금과 표시가 어긋난다)
+        if board and board.board_type == Board.BoardType.JUSTIFICATION_LETTER and value != 'author':
+            raise serializers.ValidationError(
+                '사유서형 게시판의 조회 범위는 본인+스태프(author)로 고정됩니다.'
+            )
         return value
+
+    def _validate_two_level(self, value, label):
+        # post/comment 권한은 all/staff 2단계만 지원한다. 'member'는 인증 필수인
+        # 작성/댓글 특성상 'all'과 사실상 같아 혼란만 주므로 거부한다.
+        if value not in ('all', 'staff'):
+            raise serializers.ValidationError(
+                f'{label} 권한은 all(회원) 또는 staff(스태프)만 지원합니다.'
+            )
+        return value
+
+    def validate_post_permission(self, value):
+        return self._validate_two_level(value, '작성')
+
+    def validate_comment_permission(self, value):
+        return self._validate_two_level(value, '댓글')
 
 
 class BoardIdNameSerializer(serializers.ModelSerializer):
