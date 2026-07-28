@@ -52,6 +52,9 @@ class RecruitmentListAPIView(generics.ListAPIView):
         if board_id:
             qs = qs.filter(post__board_id=board_id)
 
+        # 게시판 조회 권한(read_permission)이 없는 글의 모집 정보는 목록에서 제외한다.
+        qs = qs.filter(post__in=Post.objects.readable_for_user(self.request.user))
+
         return qs.order_by('-post__created_at')
 
 
@@ -60,8 +63,11 @@ class RecruitmentDetailAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, post_id):
+        # 글을 읽을 수 없는 사용자에게는 모집 정보도 숨긴다(존재 확인 차단 포함).
         recruitment = get_object_or_404(
-            Recruitment.objects.select_related('post', 'post__author'),
+            Recruitment.objects.select_related('post', 'post__author').filter(
+                post__in=Post.objects.readable_for_user(request.user)
+            ),
             post_id=post_id
         )
         recruitment.check_and_close_if_expired()
@@ -167,8 +173,11 @@ class ApplyAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, post_id):
+        # 글을 읽을 수 없는 게시판의 모집에는 지원할 수 없다(존재 확인 차단 포함).
         recruitment = get_object_or_404(
-            Recruitment.objects.select_related('post', 'post__author'),
+            Recruitment.objects.select_related('post', 'post__author').filter(
+                post__in=Post.objects.readable_for_user(request.user)
+            ),
             post_id=post_id
         )
         recruitment.check_and_close_if_expired()
