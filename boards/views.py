@@ -16,6 +16,7 @@ from urllib.parse import quote
 from django.db.models import (
     F, Q, Count, Value, CharField, DateTimeField, Func, OuterRef, Prefetch, Subquery
 )
+from django.db.utils import NotSupportedError
 from django.views.decorators.http import require_GET
 
 from rest_framework import generics, status, viewsets
@@ -64,6 +65,42 @@ def _with_post_list_summary(queryset):
     return queryset.select_related('author', 'board', 'recruitment').annotate(
         likes_count=Count('likes', distinct=True),
         comment_count=Count('comments', distinct=True),
+    )
+
+
+def _is_upload_owned_by(file_key, owner_id):
+    if not isinstance(file_key, str) or not file_key.startswith('uploads/'):
+        return False
+    parts = file_key.split('/')
+    if '..' in parts or len(parts) < 6:
+        return False
+    try:
+        return int(parts[4]) == owner_id
+    except (TypeError, ValueError):
+        return False
+
+
+def _json_paths_reference(model, field_name, file_key):
+    try:
+        return model.objects.filter(
+            **{f'{field_name}__contains': [{'path': file_key}]}
+        ).exists()
+    except NotSupportedError:
+        paths_lists = model.objects.values_list(field_name, flat=True).iterator()
+        return any(
+            isinstance(item, dict) and item.get('path') == file_key
+            for paths in paths_lists if isinstance(paths, list)
+            for item in paths
+        )
+
+
+def _is_upload_referenced(file_key):
+    marker = f'media-key://{file_key}'
+    return (
+        Post.objects.filter(content_md__contains=marker).exists()
+        or Draft.objects.filter(content_md__contains=marker).exists()
+        or _json_paths_reference(Post, 'attachment_paths', file_key)
+        or _json_paths_reference(Draft, 'uploaded_paths', file_key)
     )
 
 
@@ -762,7 +799,12 @@ class PostRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
             new_content_keys = set(re.findall(r'media-key://(uploads/[^\s\)]+)', instance.content_md))
 
         # 삭제할 파일 키 계산 (기존에 있었지만 새로운 버전에 없는 것)
-        keys_to_delete = (old_attachment_keys - new_attachment_keys) | (old_content_keys - new_content_keys)
+        removed_keys = (old_attachment_keys - new_attachment_keys) | (old_content_keys - new_content_keys)
+        author_id = getattr(instance.author, 'id', None)
+        keys_to_delete = {
+            key for key in removed_keys
+            if _is_upload_owned_by(key, author_id) and not _is_upload_referenced(key)
+        }
 
         # 삭제된 파일 제거 (스토리지 또는 로컬)
         if keys_to_delete:

@@ -595,6 +595,26 @@ class PostCreateUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError('본인이 업로드한 파일만 첨부할 수 있습니다.')
         return value
 
+    def validate_content_md(self, value):
+        normalized = normalize_media_urls(value)
+        request = self.context.get('request')
+        user_id = getattr(getattr(request, 'user', None), 'id', None)
+        if user_id is None:
+            raise serializers.ValidationError('인증이 필요합니다.')
+
+        media_keys = re.findall(r'media-key://(uploads/[^\s\)]+)', normalized)
+        for file_key in media_keys:
+            parts = file_key.split('/')
+            if '..' in parts or len(parts) < 6:
+                raise serializers.ValidationError('잘못된 본문 미디어 경로입니다.')
+            try:
+                owner_id = int(parts[4])
+            except (TypeError, ValueError):
+                raise serializers.ValidationError('잘못된 본문 미디어 경로입니다.')
+            if owner_id != user_id:
+                raise serializers.ValidationError('본인이 업로드한 파일만 본문에 사용할 수 있습니다.')
+        return normalized
+
 
     def _resolve_board(self, validated_data):
         board_id = validated_data.get('board_id')

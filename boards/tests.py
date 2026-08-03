@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import User
-from .models import Board, Post, Category, Comment, Notification
+from .models import Board, Post, Category, Comment, Notification, Draft
 
 
 class PostAPITestCase(APITestCase):
@@ -380,6 +380,114 @@ class PostVisibilityHardeningTest(APITestCase):
             'attachment_paths': [{'path': own_path, 'name': 'abc.png'}],
         }, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_markdown_media_must_be_owned_by_requester(self):
+        self._auth(self.attacker)
+        url = reverse('post-list-create', kwargs={'board_id': self.board.id})
+        victim_path = f"uploads/2025/01/01/{self.user.id}/victim.png"
+
+        for content_md in (
+            f'![victim](media-key://{victim_path})',
+            f'![victim](https://cdn.example.com/{victim_path}?version=1)',
+        ):
+            with self.subTest(content_md=content_md):
+                res = self.client.post(url, {
+                    'title': 'x',
+                    'content_md': content_md,
+                    'board_id': self.board.id,
+                }, format='json')
+                self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch('boards.views.delete_files')
+    def test_removed_foreign_markdown_media_is_not_deleted(self, delete_files):
+        victim_path = f"uploads/2025/01/01/{self.user.id}/victim.png"
+        poisoned_post = Post.objects.create(
+            author=self.attacker,
+            board=self.board,
+            title='poisoned',
+            content_md=f'![victim](media-key://{victim_path})',
+        )
+        self._auth(self.attacker)
+
+        res = self.client.patch(
+            reverse('post-detail-update-destroy', kwargs={'post_id': poisoned_post.id}),
+            {'content_md': 'clean'},
+            format='json',
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        delete_files.assert_not_called()
+
+    @patch('boards.views.delete_files')
+    def test_unreferenced_own_markdown_media_is_deleted(self, delete_files):
+        own_path = f"uploads/2025/01/01/{self.user.id}/own.png"
+        post = Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='own media',
+            content_md=f'![own](media-key://{own_path})',
+        )
+        self._auth(self.user)
+
+        res = self.client.patch(
+            reverse('post-detail-update-destroy', kwargs={'post_id': post.id}),
+            {'content_md': 'clean'},
+            format='json',
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        delete_files.assert_called_once_with({own_path})
+
+    @patch('boards.views.delete_files')
+    def test_referenced_own_markdown_media_is_not_deleted(self, delete_files):
+        own_path = f"uploads/2025/01/01/{self.user.id}/shared.png"
+        post = Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='first reference',
+            content_md=f'![own](media-key://{own_path})',
+        )
+        Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='second reference',
+            content_md=f'![own](media-key://{own_path})',
+        )
+        self._auth(self.user)
+
+        res = self.client.patch(
+            reverse('post-detail-update-destroy', kwargs={'post_id': post.id}),
+            {'content_md': 'clean'},
+            format='json',
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        delete_files.assert_not_called()
+
+    @patch('boards.views.delete_files')
+    def test_draft_referenced_own_markdown_media_is_not_deleted(self, delete_files):
+        own_path = f"uploads/2025/01/01/{self.user.id}/draft.png"
+        post = Post.objects.create(
+            author=self.user,
+            board=self.board,
+            title='published reference',
+            content_md=f'![own](media-key://{own_path})',
+        )
+        Draft.objects.create(
+            author=self.user,
+            board=self.board,
+            content_md=f'![own](media-key://{own_path})',
+        )
+        self._auth(self.user)
+
+        res = self.client.patch(
+            reverse('post-detail-update-destroy', kwargs={'post_id': post.id}),
+            {'content_md': 'clean'},
+            format='json',
+        )
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        delete_files.assert_not_called()
 
 
 class CategoryLatestPostTest(APITestCase):
