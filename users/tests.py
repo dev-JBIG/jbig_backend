@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from unittest.mock import patch
+from smtplib import SMTPException
 
 from boards.models import Board, Category, Comment, Post
 from users.models import EmailVerificationCode, PasswordResetToken, User
@@ -15,6 +16,186 @@ from users.password_reset_token import (
     _hash,
     issue_reset_token,
 )
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+class EmailRecoveryTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = APIClient()
+        self.data = dict(email='recovery@jbnu.ac.kr', username='recovery',
+                         password='Password!1x', semester=1)
+
+    def post(self, name, data):
+        return self.client.post(reverse(name), data, format='json')
+
+    def pending_user(self):
+        return User.objects.create_user(**self.data)
+
+    def verify(self, code):
+        return self.post('email-verify', dict(email=self.data['email'], verifyCode=code))
+
+    def resend(self):
+        return self.post('resend-verify-email', dict(email=self.data['email']))
+
+    def assert_no_tokens(self, response):
+        self.assertNotIn('access', response.data)
+        self.assertNotIn('refresh', response.data)
+
+    def test_signup_mail_failures_rollback_and_allow_retry(self):
+        for failure in (SMTPException('unavailable'), ConnectionError('offline'),
+                        TimeoutError('timeout'), OSError('network unreachable'), 0):
+            with self.subTest(failure=failure):
+                with patch('users.serializers.send_mail') as send:
+                    if isinstance(failure, Exception):
+                        send.side_effect = failure
+                    else:
+                        send.return_value = failure
+                    response = self.post('signup', self.data)
+                self.assertEqual(response.status_code, 503)
+                self.assertIn('다시', response.data['message'])
+                self.assertFalse(User.objects.exists())
+                self.assertFalse(EmailVerificationCode.objects.exists())
+                with patch('users.serializers.send_mail', return_value=1):
+                    self.assertEqual(self.post('signup', self.data).status_code, 201)
+                User.objects.all().delete()
+
+    def test_resend_failures_preserve_code_timestamp_and_attempts(self):
+        user = self.pending_user()
+        original = EmailVerificationCode.objects.create(
+            user=user, code=make_password('123456'), attempt_count=3)
+        EmailVerificationCode.objects.filter(pk=original.pk).update(
+            created_at=timezone.now() - timedelta(minutes=2))
+        original.refresh_from_db()
+        for failure in (SMTPException('unavailable'), ConnectionError('offline'),
+                        OSError('network unreachable'), 0):
+            with self.subTest(failure=failure):
+                with patch('users.views.send_mail') as send:
+                    if isinstance(failure, Exception):
+                        send.side_effect = failure
+                    else:
+                        send.return_value = failure
+                    response = self.resend()
+                self.assertEqual(response.status_code, 503)
+                current = EmailVerificationCode.objects.get(user=user)
+                self.assertEqual((current.code, current.created_at, current.attempt_count),
+                                 (original.code, original.created_at, original.attempt_count))
+
+    def test_resend_failure_without_code_leaves_no_code(self):
+        self.pending_user()
+        with patch('users.views.send_mail', return_value=0):
+            self.assertEqual(self.resend().status_code, 503)
+        self.assertFalse(EmailVerificationCode.objects.exists())
+
+    def test_programming_errors_are_not_hidden(self):
+        with patch('users.serializers.send_mail', side_effect=TypeError('bug')):
+            with self.assertRaises(TypeError):
+                self.post('signup', self.data)
+        self.assertFalse(User.objects.exists())
+
+    def test_signup_wrong_code_then_correct_and_login(self):
+        with patch('users.serializers.send_mail', return_value=1) as send:
+            response = self.post('signup', self.data)
+        self.assertEqual(response.status_code, 201)
+        self.assert_no_tokens(response)
+        code = send.call_args.args[1].split()[-1]
+        user = User.objects.get(email=self.data['email'])
+        self.assertNotEqual(user.verification_code.code, code)
+        self.assertEqual(self.verify('wrong').status_code, 400)
+        user.verification_code.refresh_from_db()
+        self.assertEqual(user.verification_code.attempt_count, 1)
+        response = self.verify(code)
+        self.assertEqual(response.status_code, 200)
+        self.assert_no_tokens(response)
+        self.assertFalse(EmailVerificationCode.objects.exists())
+        response = self.post('signin', self.data)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('access', response.data)
+
+    def test_expired_missing_and_locked_codes_recover(self):
+        for state in ('expired', 'missing', 'locked'):
+            with self.subTest(state=state):
+                user = self.pending_user()
+                if state != 'missing':
+                    obj = EmailVerificationCode.objects.create(user=user, code=make_password('123456'))
+                    if state == 'expired':
+                        EmailVerificationCode.objects.filter(pk=obj.pk).update(
+                            created_at=timezone.now() - timedelta(minutes=6))
+                        self.assertEqual(self.verify('123456').status_code, 400)
+                    else:
+                        for _ in range(5):
+                            self.assertEqual(self.verify('wrong').status_code, 400)
+                    self.assertFalse(EmailVerificationCode.objects.exists())
+                response = self.post('signin', self.data)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.data['errorCode'], 'ACCOUNT_NOT_VERIFIED')
+                self.assert_no_tokens(response)
+                with patch('users.views.send_mail', return_value=1) as send:
+                    self.assertEqual(self.resend().status_code, 200)
+                new_code = send.call_args.args[1].split()[-1]
+                self.assertEqual(EmailVerificationCode.objects.get(user=user).attempt_count, 0)
+                self.assertEqual(self.verify(new_code).status_code, 200)
+                User.objects.all().delete()
+
+    def test_wrong_credentials_and_verified_inactive_remain_blocked(self):
+        user = self.pending_user()
+        wrong = self.post('signin', {**self.data, 'password': 'Wrong!123'})
+        unknown = self.post('signin', {**self.data, 'email': 'unknown@jbnu.ac.kr'})
+        self.assertEqual(wrong.status_code, 401)
+        self.assertEqual(wrong.data, unknown.data)
+        self.assertEqual(wrong.data['errorCode'], 'INVALID_CREDENTIALS')
+        self.assert_no_tokens(wrong)
+        user.is_verified = True
+        user.save()
+        self.assertEqual(self.verify('123456').status_code, 200)
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+        response = self.post('signin', self.data)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data['errorCode'], 'ACCOUNT_INACTIVE')
+        self.assert_no_tokens(response)
+
+    def test_pending_login_keeps_expired_code_until_explicit_resend(self):
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+        user = self.pending_user()
+        obj = EmailVerificationCode.objects.create(user=user, code=make_password('123456'))
+        EmailVerificationCode.objects.filter(pk=obj.pk).update(
+            created_at=timezone.now() - timedelta(minutes=6))
+        with patch('users.views.send_mail', return_value=1) as send:
+            response = self.post('signin', self.data)
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.data['errorCode'], 'ACCOUNT_NOT_VERIFIED')
+            send.assert_not_called()
+            self.assertTrue(EmailVerificationCode.objects.filter(pk=obj.pk).exists())
+            self.assertFalse(OutstandingToken.objects.exists())
+            with patch('users.views.random.choices', return_value=list('654321')):
+                self.assertEqual(self.resend().status_code, 200)
+        self.assertEqual(self.verify('123456').status_code, 400)
+        self.assertEqual(self.verify('654321').status_code, 200)
+
+    def test_duplicate_signup_preserves_existing_identity(self):
+        user = self.pending_user()
+        old_password = user.password
+        response = self.post('signup', {**self.data, 'username': 'changed',
+                                       'semester': 2, 'password': 'Other!123'})
+        self.assertEqual(response.status_code, 400)
+        user.refresh_from_db()
+        self.assertEqual((user.username, user.semester, user.password),
+                         (self.data['username'], 1, old_password))
+
+    def test_resend_public_response_does_not_distinguish_accounts(self):
+        unknown = self.resend()
+        user = self.pending_user()
+        with patch('users.views.send_mail', return_value=1):
+            pending = self.resend()
+        user.is_verified = True
+        user.save()
+        with patch('users.views.send_mail') as send:
+            verified = self.resend()
+        send.assert_not_called()
+        self.assertEqual((unknown.status_code, unknown.data), (pending.status_code, pending.data))
+        self.assertEqual((verified.status_code, verified.data), (pending.status_code, pending.data))
 
 
 # 테스트 동안 DRF throttle로 인한 429 응답을 막기 위해 매우 넉넉한 rate 를 주입한다.

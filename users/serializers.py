@@ -1,5 +1,7 @@
 import random
 import string
+from smtplib import SMTPException
+from django.db import transaction
 from django.core.mail import send_mail
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
@@ -91,6 +93,7 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
         return data
 
 ALLOWED_SIGNUP_EMAIL_DOMAIN = '@jbnu.ac.kr'
+MAIL_DELIVERY_ERRORS = (SMTPException, OSError)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -125,6 +128,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             })
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         user = User.objects.create_user(
             email=validated_data['email'],
@@ -140,7 +144,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
         # 인증 코드 이메일 발송
         subject = '[JBIG] 회원가입 인증 코드'
         message = f'회원가입을 완료하려면 다음 인증 코드를 입력하세요: {code}'
-        send_mail(subject, message, None, [user.email])
+        # SMTP 접수 후 응답 유실은 롤백으로 취소할 수 없다. 재시도/로그인 인증 재개로 복구한다.
+        if send_mail(subject, message, None, [user.email]) == 0:
+            raise SMTPException('Verification email was not accepted')
 
         return user
 

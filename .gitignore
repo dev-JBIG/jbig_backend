@@ -28,3 +28,6 @@ media/
 .venv/
 .idea/
 .idea/
+/templates
+/boards
+.DS_Store

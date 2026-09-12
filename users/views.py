@@ -1,5 +1,6 @@
 
-from django.db import models
+from django.db import models, transaction
+from smtplib import SMTPException
 from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework import generics, status
@@ -10,6 +11,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiParameter
 from .serializers import (
     UserCreateSerializer,
+    MAIL_DELIVERY_ERRORS,
     EmailVerificationSerializer,
     EmailResendSerializer,
     CustomTokenObtainPairSerializer,
@@ -190,7 +192,14 @@ class SignUpView(generics.CreateAPIView):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        try:
+            self.perform_create(serializer)
+        except MAIL_DELIVERY_ERRORS:
+            # serializer의 atomic 블록을 빠져나와 롤백된 뒤에만 응답한다.
+            return Response({
+                "isSuccess": False,
+                "message": "인증 메일을 보내지 못했습니다. 잠시 후 같은 정보로 다시 가입해주세요."
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         headers = self.get_success_headers(serializer.data)
         
         return Response({
@@ -483,14 +492,21 @@ class ResendVerificationEmailView(APIView):
         code = ''.join(random.choices(string.digits, k=6))
         hashed_code = make_password(code)
 
-        EmailVerificationCode.objects.update_or_create(
-            user=user,
-            defaults={'code': hashed_code, 'created_at': timezone.now(), 'attempt_count': 0},
-        )
+        try:
+            with transaction.atomic():
+                EmailVerificationCode.objects.update_or_create(
+                    user=user,
+                    defaults={'code': hashed_code, 'created_at': timezone.now(), 'attempt_count': 0},
+                )
 
-        subject = '[JBIG] Your New Verification Code'
-        message = f'Your new verification code is: {code}'
-        send_mail(subject, message, None, [user.email])
+                subject = '[JBIG] Your New Verification Code'
+                message = f'Your new verification code is: {code}'
+                if send_mail(subject, message, None, [user.email]) == 0:
+                    raise SMTPException('Verification email was not accepted')
+        except MAIL_DELIVERY_ERRORS:
+            return Response({
+                "message": "인증 메일을 보내지 못했습니다. 잠시 후 다시 재전송해주세요."
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         return generic_response
 
