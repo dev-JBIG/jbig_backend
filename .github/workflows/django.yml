@@ -21,6 +21,7 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
+          python -m pip install --upgrade 'pip>=26.2.2'
           pip install -r requirements.txt
 
       - name: Verify gunicorn runtime
@@ -98,6 +99,7 @@ jobs:
             cd "$NEW_RELEASE"
             [ -d .venv ] || python3 -m venv .venv
             source .venv/bin/activate
+            python -m pip install --upgrade 'pip>=26.2.2'
             pip install -r requirements.txt --no-cache-dir -q
             python -c "import gunicorn; print('gunicorn', gunicorn.__version__)"
 
