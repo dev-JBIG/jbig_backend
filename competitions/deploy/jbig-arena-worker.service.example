@@ -1,0 +1,23 @@
+[Unit]
+Description=JBIG Big Data Arena private grader
+After=network.target
+
+[Service]
+Type=simple
+User=jbig-grader
+Group=jbig-arena
+# Replace these paths with the existing backend current-release path.
+WorkingDirectory=/srv/jbig-backend/current
+EnvironmentFile=/etc/jbig-arena-grader.env
+ExecStart=/srv/jbig-backend/current/.venv/bin/python manage.py arena_worker
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/jbig-arena/submissions
+
+[Install]
+WantedBy=multi-user.target
