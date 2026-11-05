@@ -110,6 +110,9 @@ jobs:
 
             # 서비스 재시작
             sudo systemctl restart gunicorn-jbig || echo "Gunicorn restart failed"
+            if systemctl cat jbig-arena-worker.service >/dev/null 2>&1; then
+              sudo systemctl restart jbig-arena-worker
+            fi
             sudo systemctl reload nginx || echo "Nginx reload failed"
 
             # 오래된 릴리즈 정리 (최근 5개만 유지)

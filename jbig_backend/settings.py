@@ -12,7 +12,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 _force_local = os.getenv('FORCE_LOCAL') == '1'
 _env_path = BASE_DIR / '.env'
 
-if not _force_local and _env_path.is_file():
+# A separate grading OS account can use EnvironmentFile without reading the web .env.
+if not _force_local and os.getenv('JBIG_ENV_ONLY') == '1':
+    IS_LOCAL = False
+elif not _force_local and _env_path.is_file():
     load_dotenv(_env_path)
     IS_LOCAL = False
 else:
@@ -141,6 +144,7 @@ INSTALLED_APPS = [
     'boards',
     'jbig_backend',
     'recruitments',
+    'competitions',
 ]
 
 MIDDLEWARE = [
@@ -241,7 +245,15 @@ CORS_ALLOW_HEADERS = [
     'Content-Language',
     'Content-Type',
     'Authorization',
+    'Idempotency-Key',
 ]
+
+# Arena files live outside every repository/release and are never served as media.
+_arena_local_root = BASE_DIR.parent / '.arena-private' if IS_LOCAL else None
+ARENA_PARTICIPANT_ROOT = os.getenv('ARENA_PARTICIPANT_ROOT', str(_arena_local_root / 'participant') if IS_LOCAL else '')
+ARENA_SUBMISSION_ROOT = os.getenv('ARENA_SUBMISSION_ROOT', str(_arena_local_root / 'submissions') if IS_LOCAL else '')
+# Supply this only to the grading worker in production, never to Gunicorn.
+ARENA_GRADING_ROOT = os.getenv('ARENA_GRADING_ROOT', str(_arena_local_root / 'grading') if IS_LOCAL else '')
 
 # CSRF trusted origins (comma-separated, e.g., https://example.com,https://www.example.com)
 CSRF_TRUSTED_ORIGINS = get_env_list('CSRF_TRUSTED_ORIGINS', [])

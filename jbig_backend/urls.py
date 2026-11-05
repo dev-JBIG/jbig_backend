@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('django-admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
+    path('api/arena/', include('competitions.urls')),
     path('api/', include('boards.urls')),
     path('api/', include('recruitments.urls')),
     path('api/quiz-url/', QuizUrlView.as_view(), name='quiz_url'),
