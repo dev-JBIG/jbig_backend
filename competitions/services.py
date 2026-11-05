@@ -93,7 +93,7 @@ def _accept(participant, dataset_id, content, content_hash, filename, request_ke
             )
             path = submission_path(submission)
             try:
-                write_private(path, content)
+                write_private(path, content, group_read=not participant.is_test)
                 written = path
             except OSError:
                 raise ArenaError('STORAGE_UNAVAILABLE', '파일을 안전하게 저장하지 못했습니다. 제출 횟수는 차감되지 않았습니다.', 503) from None

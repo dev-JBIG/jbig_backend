@@ -253,6 +253,20 @@ class ArenaAPITests(FixtureMixin, TestCase):
         self.assertFalse(Submission.objects.exists())
         self.assertFalse(DailyQuota.objects.exists())
 
+    def test_received_files_are_readable_only_by_owner_and_grader_group(self):
+        submission = self.submit()
+        path = submission_path(submission)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o640)
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o750)
+
+    def test_verification_files_stay_in_grading_storage_with_owner_only_access(self):
+        Participant.objects.filter(pk=self.participant.pk).update(is_test=True)
+        submission = self.submit()
+        path = submission_path(submission)
+        self.assertTrue(path.is_relative_to((Path(self.directory.name) / 'grading').resolve()))
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+
     def test_worker_error_recovery_does_not_charge_again(self):
         submission = self.submit()
         self.labels_path.write_bytes(b'corrupted server data')
