@@ -43,12 +43,14 @@ def read_expected_ids(dataset):
 
 
 def submission_path(submission):
+    if submission.participant.is_test:
+        return private_root('ARENA_GRADING_ROOT') / submission.dataset_id / 'verification' / str(submission.participant.user_id) / f'{submission.pk}.csv'
     return private_root('ARENA_SUBMISSION_ROOT') / str(submission.participant.user_id) / f'{submission.pk}.csv'
 
 
-def write_private(path, content):
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+def write_private(path, content, *, group_read=False):
+    path.parent.mkdir(mode=0o750 if group_read else 0o700, parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640 if group_read else 0o600)
     try:
         with os.fdopen(fd, 'wb') as stream:
             stream.write(content)

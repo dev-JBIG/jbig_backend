@@ -27,7 +27,9 @@ ARENA_GRADING_ROOT=/srv/jbig-arena/grading
 
 기존 nginx API proxy 경로에서 CSV 5,000,000 bytes와 multipart 부가 정보를 수신할 수 있도록 요청 본문 상한은 예를 들어 `client_max_body_size 6m;`로 둔다. 실제 파일의 정확한 5MB 제한은 애플리케이션이 적용한다. 비공개 디렉터리에 nginx alias나 공개 CDN을 연결하지 않는다.
 
-운영에서는 웹 계정과 `jbig-grader` 계정을 분리해야 한다. `grading` 디렉터리와 파일은 grader 소유 0700/0600, 웹 계정은 접근 불가로 둔다. `participant`는 웹·등록 명령이 읽을 수 있어야 하고, `submissions`는 웹 쓰기·grader 읽기만 허용하는 전용 그룹/ACL로 설정한다. 관리 명령의 안전한 기본 생성 모드는 파일 0600이므로 **서로 다른 운영 계정 사이의 필요한 읽기 권한은 운영자가 명시적으로 부여**한다. grader에 웹 `.env` 읽기 권한을 추가하지 말고 전용 EnvironmentFile을 사용한다.
+운영에서는 웹 계정과 `jbig-grader` 계정을 분리해야 한다. `grading` 디렉터리와 파일은 grader 소유 0700/0600, 웹 계정은 접근 불가로 둔다. `participant`는 웹·등록 명령이 읽을 수 있어야 한다. 일반 제출은 디렉터리 0750·파일 0640으로 만들고 웹·grader만 속한 전용 그룹으로 공유한다. 웹 서비스의 primary group과 submissions 루트의 setgid 그룹을 이 전용 그룹으로 설정하고 UMask는 0027로 둔다. 원본 데이터 등록 파일의 기본 모드는 0600이므로 참가자 배포 파일에만 운영자가 그룹 읽기를 부여한다. grader에 웹 `.env` 읽기 권한을 추가하지 말고 전용 EnvironmentFile을 사용한다.
+
+실제 정답으로 만든 서버 검증 제출은 `grading/<version>/verification/` 아래에 0700/0600으로 보관한다. 일반 제출 공유 경로에 정답 검증 CSV를 넣지 않는다.
 
 grader EnvironmentFile에는 기존 DB 접속 변수, `SECRET_KEY`, 세 Arena 경로와 `JBIG_ENV_ONLY=1`을 둔다. 이 모드는 `.env` 읽기를 생략하고 제공된 환경 변수로 서버 모드를 사용한다. 실제 DB 엔진·주소·계정·비밀번호·배포 경로는 운영 환경에 맞춘다. 로컬 SQLite 검토용 프로세스에는 `FORCE_LOCAL=1`을 쓴다. 운영 다중 프로세스 동시성은 운영 DB 엔진에서도 별도로 검증한다.
 
