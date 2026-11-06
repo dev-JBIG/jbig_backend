@@ -128,7 +128,7 @@ def public_leaderboard(competition):
     rows, seen = [], set()
     submissions = Submission.objects.filter(
         participant__competition=competition, participant__is_test=False, status=Submission.Status.SCORED,
-    ).select_related('participant').order_by('public_rmse', 'accepted_at', 'id')
+    ).select_related('participant__user').order_by('public_rmse', 'accepted_at', 'id')
     for submission in submissions:
         if submission.participant_id not in seen:
             seen.add(submission.participant_id)
@@ -147,7 +147,7 @@ def finalize():
         if eligible.exclude(status=Submission.Status.SCORED).exists():
             raise ArenaError('SCORING_PENDING', '미완료 채점이 있습니다. 서버 오류를 복구하고 모든 채점을 마친 뒤 다시 실행하세요.', 409)
         chosen = []
-        for participant in Participant.objects.filter(competition=competition, is_test=False).select_related('selected_submission'):
+        for participant in Participant.objects.filter(competition=competition, is_test=False).select_related('selected_submission', 'user'):
             submission = participant.selected_submission
             reason = 'manual'
             if submission is None:
