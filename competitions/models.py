@@ -79,7 +79,7 @@ class Participant(models.Model):
 
     @property
     def public_name(self):
-        return f'참가자 {self.pk:04d}'
+        return self.user.username
 
     def __str__(self):
         return self.public_name
@@ -126,7 +126,7 @@ class FinalResult(models.Model):
     participant = models.OneToOneField(Participant, on_delete=models.PROTECT)
     submission = models.OneToOneField(Submission, on_delete=models.PROTECT)
     rank = models.PositiveIntegerField(unique=True)
-    public_name = models.CharField(max_length=40)
+    public_name = models.CharField(max_length=150)
     private_rmse = models.FloatField()
     selection_reason = models.CharField(max_length=12, choices=[('manual', '본인 선택'), ('automatic', '자동 선택')])
 

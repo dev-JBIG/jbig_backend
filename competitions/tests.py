@@ -144,7 +144,7 @@ class ArenaAPITests(FixtureMixin, TestCase):
         overview = self.client.get('/api/arena/').data
         self.assertTrue(overview['eligible'])
         self.assertEqual(overview['remaining_today'], 5)
-        self.assertNotIn(self.user.username, overview['public_name'])
+        self.assertEqual(overview['public_name'], self.user.username)
         for kind in ['train', 'test', 'sample']:
             response = self.client.get(f'/api/arena/downloads/{kind}/')
             self.assertEqual(response.status_code, 200)
@@ -158,6 +158,7 @@ class ArenaAPITests(FixtureMixin, TestCase):
         self.assertEqual(len(board['results']), 1)
         self.assertEqual(board['results'][0]['score'], 0)
         self.assertTrue(board['results'][0]['is_me'])
+        self.assertEqual(board['results'][0]['public_name'], self.user.username)
         detail = self.client.get(f'/api/arena/submissions/{response.data["submission"]["id"]}/').data
         self.assertEqual(detail['status'], 'scored')
         self.assertIsNone(detail['private_rmse'])
@@ -341,11 +342,14 @@ class ArenaAPITests(FixtureMixin, TestCase):
         first, second = self.submit(), self.submit()
         other = get_user_model().objects.create_user('old@jbnu.ac.kr', '졸업 회원', semester=1, is_active=True, is_verified=True)
         third = self.submit(user=other)
+        other.username = '가' * 150
+        other.save(update_fields=['username'])
         for row, public, private in [(first, 1.000049, 8), (second, 2, 2), (third, 1.000041, 2)]:
             Submission.objects.filter(pk=row.pk).update(status='scored', public_rmse=public, private_rmse=private)
         board = self.client.get('/api/arena/leaderboard/').data['results']
         self.assertFalse(board[0]['is_me'])
         self.assertEqual(len(board), 2)
+        self.assertEqual(board[0]['public_name'], other.username)
         select_final(self.participant, second.pk)
         Competition.objects.filter(pk=1).update(state='closed')
         self.assertEqual(finalize(), 2)
@@ -358,7 +362,9 @@ class ArenaAPITests(FixtureMixin, TestCase):
         selected_detail = self.client.get(f'/api/arena/submissions/{second.pk}/').data
         self.assertEqual(selected_detail['private_rmse'], 2)
         self.assertIsNone(self.client.get(f'/api/arena/submissions/{first.pk}/').data['private_rmse'])
-        self.assertEqual(self.client.get('/api/arena/leaderboard/').data['metric'], 'private_rmse')
+        final_board = self.client.get('/api/arena/leaderboard/').data
+        self.assertEqual(final_board['metric'], 'private_rmse')
+        self.assertEqual([row['public_name'] for row in final_board['results']], [self.user.username, other.username])
 
     def test_server_verification_accounts_are_excluded(self):
         Participant.objects.filter(pk=self.participant.pk).update(is_test=True)
